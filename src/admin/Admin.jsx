@@ -86,7 +86,7 @@ function Img({ value, onChange, folder, say, onBusy }) {
 export default function Admin() {
   const [st, setSt] = useState('loading'), [user, setUser] = useState(null)
   useEffect(() => {
-    document.title = 'MyShyld Admin'
+    document.title = 'Pinkish Admin'
     const m = document.createElement('meta'); m.name = 'robots'; m.content = 'noindex,nofollow'; document.head.appendChild(m)
     const vp = document.querySelector('meta[name="viewport"]'), old = vp?.content
     if (vp && !/viewport-fit/.test(old)) vp.content = old + ',viewport-fit=cover'
@@ -121,7 +121,7 @@ function Login() {
     setBusy(false)
     if (error) { if (++fails.current >= 5) { lock.current = Date.now() + 60000; fails.current = 0 } setErr('Email or password is incorrect.') }
   }
-  return <div className="adm"><div className="ctr"><form className="lg" onSubmit={go}><div className="lgo"><img src="/logo-full.webp?v=2" width="150" height="129" alt="MyShyld" decoding="async" /><small>Admin</small></div><h1>Sign in</h1>
+  return <div className="adm"><div className="ctr"><form className="lg" onSubmit={go}><div className="lgo"><img className="bmk" src="/logo-mark.webp?v=2" width="150" height="129" alt="Pinkish" decoding="async" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span><small>Admin</small></div><h1>Sign in</h1>
     <F l="Email"><input className="in" type="email" autoComplete="username" required value={f.e} onChange={e => setF({ ...f, e: e.target.value })} /></F>
     <F l="Password"><input className="in" type="password" autoComplete="current-password" required value={f.p} onChange={e => setF({ ...f, p: e.target.value })} /></F>
     {err && <p className="er" role="alert">{err}</p>}<button className="bt" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></div></div>
@@ -129,15 +129,15 @@ function Login() {
 
 const first = o => (o.address?.name || 'there').trim().split(/\s+/)[0]
 const WA = [
-  ['Confirm', 'check', o => `Hi ${first(o)}, thank you for shopping with MyShyld! 💗 Your order #${o.order_no} (${taka(o.total)}) is confirmed. We'll pack it discreetly and keep you updated.`],
+  ['Confirm', 'check', o => `Hi ${first(o)}, thank you for shopping with Pinkish! 💗 Your order #${o.order_no} (${taka(o.total)}) is confirmed. We'll pack it discreetly and keep you updated.`],
   ['Payment', 'rev', o => `Hi ${first(o)}, to confirm order #${o.order_no} please send ${taka(o.total)} via bKash and reply with the Transaction ID. Thank you!`],
-  ['On the way', 'truck', o => `Hi ${first(o)}, your MyShyld order #${o.order_no} is out for delivery 🚚 ${o.payment_status === 'paid' ? 'Our rider will call you when nearby.' : 'Please keep ' + taka(o.total) + ' ready. Our rider will call you.'}`],
-  ['Delivered', 'check', o => `Hi ${first(o)}, your order #${o.order_no} has been delivered. Thank you for choosing MyShyld! 💗 We'd love to hear your feedback.`],
+  ['On the way', 'truck', o => `Hi ${first(o)}, your Pinkish order #${o.order_no} is out for delivery 🚚 ${o.payment_status === 'paid' ? 'Our rider will call you when nearby.' : 'Please keep ' + taka(o.total) + ' ready. Our rider will call you.'}`],
+  ['Delivered', 'check', o => `Hi ${first(o)}, your order #${o.order_no} has been delivered. Thank you for choosing Pinkish! 💗 We'd love to hear your feedback.`],
   ['Address', 'pin', o => `Hi ${first(o)}, we're about to dispatch order #${o.order_no}. Could you please confirm your delivery address: ${o.address?.address || ''}`]
 ]
 const defTpl = o => { const s = o.status || 0; return o.payment === 'bKash' && o.payment_status !== 'paid' && s === 0 ? 1 : [0, 0, 2, 3][s] }
 const payLabel = o => o.payment_status === 'paid' ? 'Paid' : o.payment_status === 'verifying' ? 'Verifying' : 'Unpaid'
-const invText = o => `🧾 MyShyld invoice #${o.order_no}\n${fmt(o.created_at)}\n\n` + (o.items || []).map(i => `• ${i.name}${i.variant ? ' (' + i.variant + ')' : ''} ×${i.qty} — ${taka(i.price * i.qty)}`).join('\n') + `${o.delivery_fee != null ? `\nDelivery: ${taka(o.delivery_fee)}` : ''}\n\nTotal: ${taka(o.total)}\nPayment: ${o.payment || '—'} (${payLabel(o)})\nThank you! 💗`
+const invText = o => `🧾 Pinkish invoice #${o.order_no}\n${fmt(o.created_at)}\n\n` + (o.items || []).map(i => `• ${i.name}${i.variant ? ' (' + i.variant + ')' : ''} ×${i.qty} — ${taka(i.price * i.qty)}`).join('\n') + `${o.delivery_fee != null ? `\nDelivery: ${taka(o.delivery_fee)}` : ''}\n\nTotal: ${taka(o.total)}\nPayment: ${o.payment || '—'} (${payLabel(o)})\nThank you! 💗`
 
 function Invoice({ o, onClose }) {
   const its = o.items || [], sub = its.reduce((a, i) => a + i.price * i.qty, 0), fee = o.delivery_fee == null ? null : +o.delivery_fee, disc = Math.max(0, sub + (fee || 0) - o.total), paid = o.payment_status === 'paid', trx = o.payment_ref || o.bkash_trx
@@ -150,12 +150,12 @@ function Invoice({ o, onClose }) {
     <div className="invp-bar"><button className="invp-b" onClick={onClose}>← Back</button><div>{o.address?.phone && <a className="invp-b wa" href={wa(o.address.phone, invText(o))} target="_blank" rel="noopener noreferrer">WhatsApp</a>}<button className="invp-b pr" onClick={() => window.print()}>Print / Save PDF</button></div></div>
     <div className="invp-scroll"><article className="invp-sheet">
       {paid && <span className="stp">PAID</span>}
-      <header className="ih"><div><img src="/logo-full.webp?v=2" width="104" height="90" alt="MyShyld" decoding="async" /><small>Discreet delivery across Chattogram</small></div><div className="it"><h2>INVOICE</h2><b>#{o.order_no}</b></div></header>
+      <header className="ih"><div><div className="lk" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="44" height="44" alt="" decoding="async" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div><small>Discreet delivery across Chattogram</small></div><div className="it"><h2>INVOICE</h2><b>#{o.order_no}</b></div></header>
       <div className="im"><div><span>Date</span><b>{fmt(o.created_at)}</b></div><div><span>Order status</span><b>{STEPS[o.status || 0]}</b></div><div><span>Payment method</span><b>{o.payment || '—'}</b></div><div><span>Payment status</span><b className={'bg ' + (paid ? 'ok' : o.payment_status === 'verifying' ? 'w' : '')}>{payLabel(o)}</b></div>{trx && o.payment === 'bKash' && <div><span>bKash TrxID</span><b>{trx}</b></div>}</div>
       <div className="bd"><span className="bl">Bill to</span><p><b>{o.address?.name || 'Customer'}</b></p>{o.address?.phone && <p>{o.address.phone}</p>}<p>{o.address?.address || '—'}</p>{o.address?.note && <p className="nt2">Note: {o.address.note}</p>}</div>
       <table><thead><tr><th>Item</th><th className="r">Qty</th><th className="r">Amount</th></tr></thead><tbody>{its.map((i, ix) => <tr key={i.key || ix}><td>{i.name}<small>{i.variant ? i.variant + ' · ' : ''}{taka(i.price)} each</small></td><td className="r">{i.qty}</td><td className="r">{taka(i.price * i.qty)}</td></tr>)}</tbody></table>
       <div className="tot"><div><span>Subtotal</span><span>{taka(sub)}</span></div>{disc > 0.5 && <div><span>Discount</span><span>−{taka(disc)}</span></div>}{fee != null && <div><span>Delivery</span><span>{taka(fee)}</span></div>}<div className="g"><span>Total</span><span>{taka(o.total)}</span></div></div>
-      <footer className="ft">Thank you for shopping with MyShyld 💗<br />Your order is packed discreetly.</footer>
+      <footer className="ft">Thank you for shopping with Pinkish 💗<br />Your order is packed discreetly.</footer>
     </article></div></div>, document.body)
 }
 
@@ -217,7 +217,7 @@ function Shell({ user }) {
   const pend = d.orders.filter(o => !o.status).length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
   const nm = user.user_metadata?.full_name || (user.email || 'admin').split('@')[0]
   const p = { d, reload: load, say, go, focus, clearFocus }
-  return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span>My<b>Shyld</b></div>
+  return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
     <div className="me"><span className="mav" aria-hidden="true">{ini(nm)}</span><b>{nm}</b><small>Store admin</small></div>
     <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}</button>)}</div>
     <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
