@@ -1,5 +1,5 @@
 /* =========================================================
-   MyShyld — Liquid Glass theme (drop-in replacement)
+   Pinkish — Liquid Glass theme (drop-in replacement)
    Perf notes: backdrop-filter only on a few large static
    surfaces (nav, header, toast, login card). Cards use cheap
    translucent gradients. Animations are transform/opacity only.
@@ -419,7 +419,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 }
 
 /* =========================================================
-   LOGIN v3: bright card on the MyShyld purple, brand logo on top
+   LOGIN v3: bright card on the Pinkish purple, brand logo on top
    ========================================================= */
 .auth{background:radial-gradient(120% 60% at 50% -8%,#8e2a8c 0,#4a1668 48%,#2d0b4a 100%)}
 .auth .blobs::after{content:'';position:absolute;inset:0;background-image:radial-gradient(#ffffff2e 1.2px,#0000 1.6px);background-size:24px 24px;-webkit-mask-image:linear-gradient(#000,#0000 55%);mask-image:linear-gradient(#000,#0000 55%)}
@@ -563,3 +563,21 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .dl-card em{font-style:normal;font-weight:800;font-size:16px;color:#1f7a4d;flex:none}
 .dl-card.bad{background:#fff0f3cc;border-color:#f4c3cd}
 .dl-card.bad em{color:#c62d4a;font-size:13px}
+/* Pinkish wordmark: "Pink" in brand pink, "ish" in black */
+.bp{color:#e0457b}.bi{color:#000}
+.abar h1 .bn{display:inline-block;background:#fff;padding:3px 12px 4px;border-radius:999px;text-shadow:none}
+
+/* Pinkish text wordmark (replaces the old logo image that had the old name baked in) */
+.wm{font-weight:800;letter-spacing:-.5px;line-height:1;white-space:nowrap}
+.lk{display:flex;align-items:center;gap:10px}
+.lk .bmk{display:block;width:34px;height:auto;object-fit:contain}
+.lk .wm{font-size:26px}
+.nv-brand .lk .bmk{width:34px}
+.lk.col{flex-direction:column;gap:6px}
+.lgcard .lk .bmk{width:auto;height:84px}
+.lgcard .lk .wm{font-size:34px}
+
+/* sidebar wordmark: undo the grey/faded emoji style that `.nav span` applies to every span */
+.nav .nv-brand .wm{filter:none!important;opacity:1!important;font-size:26px;transform:none!important}
+.nav .nv-brand .wm span{filter:none!important;opacity:1!important;font-size:inherit!important;transform:none!important}
+.nav .nv-brand .wm .bp{color:#e0457b!important}.nav .nv-brand .wm .bi{color:#000!important}
