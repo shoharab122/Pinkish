@@ -9,6 +9,6 @@ try { fromSeller = sessionStorage.getItem('pk_seller') === '1' } catch { /* stor
 if (fromSeller && !path.startsWith('/merchant') && !path.startsWith('/admin') && /access_token=|[?&]code=|error_description=/.test(location.hash + location.search)) {
   location.replace('/merchant' + location.search + location.hash)
 } else
-if (path.startsWith('/admin')) import('./admin/Admin.jsx').then(m => root.render(<m.default />))
+if (path.startsWith('/adminmainpath')) import('./admin/Admin.jsx').then(m => root.render(<m.default />))
 else if (path.startsWith('/merchant')) import('./seller/Seller.jsx').then(m => root.render(<m.default />))
 else Promise.all([import('./App.jsx'), import('./styles.css')]).then(([m]) => root.render(<m.default />))
