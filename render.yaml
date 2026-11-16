@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: myshield
+    name: Pinkish 
     runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: dist
