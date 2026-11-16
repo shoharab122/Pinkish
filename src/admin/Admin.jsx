@@ -24,6 +24,11 @@ const ICN = {
   hero: <><rect x="3" y="4" width="18" height="16" rx="3.5" /><circle cx="9" cy="9.8" r="1.7" /><path d="M21 16l-4.8-4.8L7 20" /></>,
   bell: <><path d="M6.2 9.4a5.8 5.8 0 0 1 11.6 0c0 4.4 1.9 5.9 1.9 5.9H4.3s1.9-1.5 1.9-5.9z" /><path d="M10 19a2.1 2.1 0 0 0 4 0" /></>,
   refresh: <><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20 4.5V9h-4.5" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M4 8l8 6 8-6" /></>,
+  lock: <><rect x="5" y="10.5" width="14" height="10" rx="3" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 15v2" /></>,
+  eye: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></>,
+  eyeoff: <><path d="M3 3l18 18M10.6 5.7A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-3.2 4M6.5 7.6A16 16 0 0 0 2.5 12S6 18.5 12 18.5c1.5 0 2.8-.4 4-1M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>,
+  shield: <><path d="M12 3l7.5 3v5.5c0 4.6-3.1 8.2-7.5 9.5-4.4-1.3-7.5-4.9-7.5-9.5V6z" /><path d="M9 12l2.2 2.2L15.5 10" /></>,
   out: <><path d="M9.5 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h3" /><path d="M15.5 8l4 4-4 4M19.5 12H9.5" /></>,
   rev: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a1 1 0 0 1 1 1v2" /><path d="M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5.5A2.5 2.5 0 0 1 3 7.5z" /><circle cx="16.5" cy="13.5" r="1.2" /></>,
   avg: <path d="M4 20V11M10 20V4M16 20v-6M21 20H3" />,
@@ -116,7 +121,12 @@ export default function Admin() {
 }
 
 function Login() {
-  const [f, setF] = useState({ e: '', p: '' }), [err, setErr] = useState(''), [busy, setBusy] = useState(false), fails = useRef(0), lock = useRef(0)
+  const [f, setF] = useState({ e: '', p: '' }), [err, setErr] = useState(''), [busy, setBusy] = useState(false), [show, setShow] = useState(false), [caps, setCaps] = useState(false), fails = useRef(0), lock = useRef(0)
+  useEffect(() => {
+    const t = document.querySelector('meta[name="theme-color"]'), old = t?.content
+    if (t) t.content = '#4a1668'
+    return () => { if (t && old != null) t.content = old }
+  }, [])
   const go = async e => {
     e.preventDefault()
     if (Date.now() < lock.current) return setErr('Too many attempts. Wait a minute and try again.')
@@ -125,10 +135,29 @@ function Login() {
     setBusy(false)
     if (error) { if (++fails.current >= 5) { lock.current = Date.now() + 60000; fails.current = 0 } setErr('Email or password is incorrect.') }
   }
-  return <div className="adm"><div className="ctr"><form className="lg" onSubmit={go}><div className="lgo"><img className="bmk" src="/logo-mark.webp?v=2" width="150" height="129" alt="Pinkish" decoding="async" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span><small>Admin</small></div><h1>Sign in</h1>
-    <F l="Email"><input className="in" type="email" autoComplete="username" required value={f.e} onChange={e => setF({ ...f, e: e.target.value })} /></F>
-    <F l="Password"><input className="in" type="password" autoComplete="current-password" required value={f.p} onChange={e => setF({ ...f, p: e.target.value })} /></F>
-    {err && <p className="er" role="alert">{err}</p>}<button className="bt" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></div></div>
+  const ck = e => setCaps(!!e.getModifierState?.('CapsLock'))
+  return <div className="adm"><div className="al">
+    <aside className="al-hero">
+      <div className="al-brand"><span className="al-lg"><img className="bmk" src="/logo-mark.webp?v=2" width="30" height="26" alt="" decoding="async" /></span>Pinkish <span>Admin</span></div>
+      <h1>Run your store from one place</h1>
+      <p>Orders, merchants and your catalogue, all in one private dashboard.</p>
+      <ul>
+        <li><i><Ic n="orders" s={22} /></i><span><b>Every order, live</b>Confirm, pack and deliver with one tap.</span></li>
+        <li><i><Ic n="shops" s={22} /></i><span><b>Verify merchants</b>Review NID documents and approve shops.</span></li>
+        <li><i><Ic n="products" s={22} /></i><span><b>Control the catalogue</b>Products, categories and the home banner.</span></li>
+      </ul>
+    </aside>
+    <main className="al-main"><form className="al-card" onSubmit={go}>
+      <span className="al-pill"><Ic n="shield" s={15} />Admin sign-in</span>
+      <h2>Welcome back</h2>
+      <p className="al-mut">Sign in to manage your store.</p>
+      <label className="al-f"><span>Email</span><input type="email" inputMode="email" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" enterKeyHint="next" placeholder="you@example.com" required value={f.e} onChange={e => setF({ ...f, e: e.target.value })} /></label>
+      <label className="al-f"><span>Password</span><span className="al-pw"><input type={show ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck="false" enterKeyHint="go" placeholder="Your password" required value={f.p} onChange={e => setF({ ...f, p: e.target.value })} onKeyUp={ck} onKeyDown={ck} onBlur={() => setCaps(false)} /><button type="button" aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show} onClick={() => setShow(v => !v)}>{show ? 'Hide' : 'Show'}</button></span>{caps && <em className="al-caps">Caps Lock is on</em>}</label>
+      {err && <div className="al-err" role="alert">{err}</div>}
+      <button className="bt al-go" disabled={busy}>{busy ? <><i className="spin sm" aria-hidden="true" />Signing in…</> : 'Sign in'}</button>
+      <p className="al-note"><Ic n="lock" s={15} />Private admin area. You are signed out after 20 minutes idle.</p>
+    </form></main>
+  </div></div>
 }
 
 const first = o => (o.address?.name || 'there').trim().split(/\s+/)[0]
