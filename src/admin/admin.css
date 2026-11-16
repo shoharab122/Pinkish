@@ -589,3 +589,95 @@ html.adm-on body{position:fixed;inset:0;width:100%}
   .sd-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sc-main{padding:12px}
 }
+/* =========================================================
+   Admin sign-in polish (scoped to .lgf — nothing else affected)
+   ========================================================= */
+.adm:has(.lgf){background:radial-gradient(90% 55% at 50% -10%,#a1319d 0,#4a1668 50%,#25093f 100%)}
+.adm:has(.lgf)::before{opacity:.45}
+.ctr:has(.lgf){min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;align-items:safe center;justify-items:center;
+  padding:calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom))}
+.lgf{max-width:420px;gap:16px;padding:26px 22px 20px;border-radius:32px}
+.lgf .lgo{gap:10px;margin-bottom:0}
+.lgf .lgo img{width:92px;border-radius:26px;padding:10px 12px}
+.lgf .lgo .wm{font-size:1.7rem}
+.lgf .lgo small{font-size:.68rem;padding:3px 12px;border-radius:99px;background:#8e2a8c14;letter-spacing:.2em}
+.lgh{text-align:center;display:grid;gap:2px}
+.lgf h1{font-size:1.75rem;letter-spacing:-.4px}
+.lgh p{margin:0;font-size:.92rem}
+.lf{display:grid;gap:7px;font-size:.8rem;font-weight:700;color:var(--p1);letter-spacing:.02em}
+.lw{position:relative;display:block}
+.lw>i{position:absolute;left:15px;top:50%;transform:translateY(-50%);display:grid;place-items:center;color:#a58db8;pointer-events:none;transition:color .2s}
+.lw:focus-within>i{color:var(--p2)}
+.lf .in{min-height:54px;padding:0 16px 0 46px;border-radius:18px;font-size:16px;font-weight:500;border:1.5px solid #ece1f4;background:#ffffffd9}
+.lf .lw:has(.lv) .in{padding-right:52px}
+.lv{all:unset;box-sizing:border-box;cursor:pointer;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:42px;height:42px;display:grid;place-items:center;border-radius:14px;color:#8b8197;transition:background .2s,color .2s,transform .2s}
+.lv:active{transform:translateY(-50%) scale(.92)}
+.lv[aria-pressed=true]{color:var(--p2);background:#8e2a8c14}
+.lc{font-style:normal;font-size:.75rem;font-weight:600;color:var(--wn)}
+.lge{margin:0;padding:11px 14px;border-radius:14px;background:#fff0f3;border:1px solid #f5c9d4;font-size:.86rem;font-weight:600;animation:lgsh .4s var(--ease)}
+@keyframes lgsh{20%{transform:translateX(-6px)}45%{transform:translateX(5px)}70%{transform:translateX(-3px)}}
+.lgb{min-height:56px;font-size:1.02rem;font-weight:800;letter-spacing:.01em;width:100%;margin-top:2px}
+.lgb .spin.sm{width:18px;height:18px;border-width:2.5px}
+.lgs{display:flex;align-items:center;justify-content:center;gap:6px;margin:0;font-size:.74rem;font-weight:600;color:var(--mut);text-align:center}
+.lgs svg{flex:none;color:var(--ok)}
+@media(max-width:420px){
+  .lgf{padding:22px 18px 18px;border-radius:28px;gap:14px}
+  .lgf h1{font-size:1.55rem}
+}
+@media(max-height:700px){
+  .lgf{gap:12px;padding-top:18px}.lgf .lgo img{width:64px;border-radius:20px;padding:8px 10px}.lgh p{display:none}.lf .in{min-height:50px}.lgb{min-height:52px}
+}
+@media(prefers-reduced-motion:reduce){.lge{animation:none}}
+
+/* =========================================================
+   Admin sign-in — split layout matching the Seller Centre
+   (scoped to .al, nothing else is affected)
+   ========================================================= */
+.adm:has(.al){display:block;height:100dvh;overflow:hidden}
+.al{height:100dvh;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
+.al-hero{position:relative;overflow:hidden;color:#fff;padding:56px 48px;display:flex;flex-direction:column;justify-content:center;gap:14px;background:radial-gradient(120% 60% at 50% -8%,#8e2a8c 0,#4a1668 48%,#2d0b4a 100%)}
+.al-hero::before{content:'';position:absolute;inset:-20%;background:radial-gradient(35% 30% at 20% 20%,#e0457b88,#0000 70%),radial-gradient(30% 30% at 90% 80%,#b9a0f566,#0000 70%);animation:adrift 24s ease-in-out infinite alternate;pointer-events:none}
+.al-hero::after{content:'';position:absolute;inset:0;background-image:radial-gradient(#ffffff2e 1.2px,transparent 1.6px);background-size:24px 24px;-webkit-mask-image:linear-gradient(#000,transparent 60%);mask-image:linear-gradient(#000,transparent 60%);pointer-events:none}
+.al-hero>*{position:relative;z-index:1}
+.al-brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.2rem}.al-brand span{font-weight:600;opacity:.8}
+.al-lg{width:44px;height:44px;border-radius:14px;background:#fff;display:grid;place-items:center;box-shadow:0 10px 22px -8px #0006;flex:none}
+.al-lg .bmk{display:block;width:30px;height:auto;object-fit:contain}
+.al .al-hero h1{font:700 clamp(1.9rem,3.4vw,2.8rem)/1.1 var(--serif);color:#fff;margin:14px 0 0;letter-spacing:-.4px}
+.al-hero>p{margin:0;font-size:1rem;opacity:.9;max-width:440px}
+.al-hero ul{list-style:none;margin:22px 0 0;padding:0;display:grid;gap:12px;max-width:440px}
+.al-hero li{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:20px;background:#ffffff1c;border:1px solid #ffffff33;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.al-hero li i{font-style:normal;width:40px;height:40px;border-radius:13px;display:grid;place-items:center;flex:none;background:#ffffff26;box-shadow:inset 0 1px 0 #ffffff55}
+.al-hero li b{display:block;font-size:.95rem}.al-hero li span{font-size:.85rem;opacity:.92}
+.al-main{display:grid;place-items:center;padding:32px 20px;min-width:0}
+.al-card{width:100%;max-width:460px;display:block;border-radius:30px;padding:26px 24px;border:1px solid #ffffffd9;
+  background:radial-gradient(60% 45% at 12% 8%,#ffd3e6cc,#fff0 70%),radial-gradient(55% 45% at 92% 22%,#e2d2ffcc,#fff0 70%),linear-gradient(160deg,#fff,#fbf6ff 55%,#fff4f8);
+  box-shadow:0 30px 70px -26px #4a1668aa,0 0 0 6px #ffffff40,inset 0 2px 0 #fff;animation:aup .55s var(--ease) both}
+.al-pill{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:99px;background:#f4ecf8;color:var(--p1);font-size:.8rem;font-weight:700}
+.al-pill svg{color:var(--p2)}
+.al .al-card h2{font:700 1.5rem/1.2 var(--serif);margin:16px 0 4px;color:var(--ink)}
+.al-mut{margin:0 0 18px;color:var(--mut);font-size:.88rem}
+.al-f{display:grid;gap:6px;margin-bottom:14px;font-size:.82rem;font-weight:600;color:#5b4b6b}
+.al-f>span:first-child{display:block}
+.al-f input{width:100%;font:inherit;font-size:16px;font-weight:400;color:var(--ink);background:#ffffffb8;border:1.5px solid #fff;border-radius:16px;padding:11px 14px;min-height:50px;box-shadow:0 6px 16px -12px #4a166866,inset 0 1px 2px #4a16680f;outline:none;transition:background .2s,border-color .2s,box-shadow .2s}
+.al-f input::placeholder{color:#a79bb5}
+.al-f input:focus{background:#fff;border-color:var(--p2);box-shadow:0 0 0 4px #8e2a8c1f}
+.al-pw{display:block;position:relative;margin:0;font-weight:400}
+.al-pw input{padding-right:76px;display:block}
+.al-pw button{all:unset;box-sizing:border-box;cursor:pointer;position:absolute;right:8px;top:50%;transform:translateY(-50%);min-width:52px;min-height:34px;display:grid;place-items:center;text-align:center;background:#f4ecf8;color:var(--p2);font-size:.75rem;font-weight:700;border-radius:99px;padding:0 12px}
+.al-pw button:focus-visible,.al-go:focus-visible{outline:3px solid #8e2a8c55;outline-offset:2px}
+.al-caps{font-style:normal;font-size:.75rem;font-weight:600;color:var(--wn)}
+.al-err{padding:11px 14px;border-radius:16px;background:#fdecf2;color:var(--er);border:1px solid #f5c9d4;font-size:.9rem;font-weight:600;line-height:1.45;margin-bottom:12px;animation:lgsh .4s var(--ease)}
+.al .al-go{width:100%;min-height:52px;font-size:1rem}
+.al-note{display:flex;align-items:center;justify-content:center;gap:6px;margin:14px 0 0;font-size:.76rem;font-weight:600;color:var(--mut);text-align:center}
+.al-note svg{flex:none;color:var(--ok)}
+@media(max-width:899px){
+  .al{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .al-hero::before{animation:none}
+  .al-hero{padding:calc(26px + env(safe-area-inset-top)) 20px 60px;gap:8px}
+  .al-hero ul,.al-hero>p{display:none}
+  .al .al-hero h1{font-size:1.6rem;margin-top:6px}
+  .al-main{align-items:start;padding:0 14px calc(28px + env(safe-area-inset-bottom));margin-top:-34px;position:relative;z-index:2}
+  .al-card{padding:20px;border-radius:26px}
+}
+@media(max-height:560px) and (max-width:899px){.al-hero h1{display:none}.al-hero{padding-bottom:50px}}
+@media(prefers-reduced-motion:reduce){.al-hero::before,.al-card,.al-err{animation:none}}
