@@ -580,4 +580,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 /* sidebar wordmark: undo the grey/faded emoji style that `.nav span` applies to every span */
 .nav .nv-brand .wm{filter:none!important;opacity:1!important;font-size:26px;transform:none!important}
 .nav .nv-brand .wm span{filter:none!important;opacity:1!important;font-size:inherit!important;transform:none!important}
+<<<<<<< HEAD
 .nav .nv-brand .wm .bp{color:#e0457b!important}.nav .nv-brand .wm .bi{color:#000!important}
+=======
+.nav .nv-brand .wm .bp{color:#e0457b!important}.nav .nv-brand .wm .bi{color:#000!important}
+>>>>>>> f25f895 (Add seller module and update admin)

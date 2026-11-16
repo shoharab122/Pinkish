@@ -12,7 +12,11 @@ const STEPS = ['Placed', 'Processing', 'Out for delivery', 'Delivered']
 const IDLE = 20 * 60 * 1000
 const fmt = d => new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 const wa = (p, t) => { const n = (p || '').replace(/\D/g, ''); return 'https://wa.me/' + (n.startsWith('0') ? '88' + n : n) + (t ? '?text=' + encodeURIComponent(t) : '') }
+<<<<<<< HEAD
 const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['wish', 'Wishlist'], ['products', 'Products'], ['cats', 'Categories'], ['hero', 'Hero']]
+=======
+const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['cats', 'Categories'], ['hero', 'Hero']]
+>>>>>>> f25f895 (Add seller module and update admin)
 
 const ICN = {
   dash: <><rect x="3" y="3" width="7.5" height="9" rx="2.2" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="2.2" /><rect x="13.5" y="12" width="7.5" height="9" rx="2.2" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="2.2" /></>,
@@ -41,7 +45,15 @@ const ICN = {
   trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />,
   close: <path d="M6 6l12 12M18 6L6 18" />, chev: <path d="M9 6l6 6-6 6" />,
   alert: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5M12 16.2v.1" /></>,
+<<<<<<< HEAD
   pin: <><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></>
+=======
+  pin: <><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></>,
+  shops: <><path d="M4 9.5L5.6 4h12.8L20 9.5" /><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0" /><path d="M5.5 12.5V20h13v-7.5" /><path d="M10 20v-4.5h4V20" /></>,
+  shield: <><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8-7.5 9.5-4.3-1.5-7.5-4.9-7.5-9.5V6z" /><path d="M8.7 12.2l2.2 2.2 4.4-4.6" /></>,
+  doc: <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4M10 12h5M10 16h5" /></>,
+  ban: <><circle cx="12" cy="12" r="9" /><path d="M5.7 5.7l12.6 12.6" /></>
+>>>>>>> f25f895 (Add seller module and update admin)
 }
 const Ic = ({ n, s = 22 }) => <svg viewBox="0 0 24 24" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{ICN[n]}</svg>
 
@@ -159,6 +171,7 @@ function Invoice({ o, onClose }) {
     </article></div></div>, document.body)
 }
 
+<<<<<<< HEAD
 const KIND = { order: ['bag', 'o'], pay: ['rev', 'p'], wish: ['wish', 'w'] }
 function Notifs({ orders, notes, onClose, onOrder, onWish, onRead, onClear }) {
   const [tab, setTab] = useState('act'), [snap] = useState(() => new Set(notes.filter(n => !n.read).map(n => n.id)))
@@ -169,11 +182,28 @@ function Notifs({ orders, notes, onClose, onOrder, onWish, onRead, onClear }) {
       <button role="tab" aria-selected={tab === 'act'} className={tab === 'act' ? 'on' : ''} onClick={() => setTab('act')}>Action needed{todo.length > 0 && <em>{todo.length}</em>}</button>
       <button role="tab" aria-selected={tab === 'log'} className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>Activity{notes.length > 0 && <em className="g">{notes.length}</em>}</button></div>
     {tab === 'act' ? (todo.length ? <div className="nl">{todo.map(o => { const v = o.payment_status === 'verifying'; return <button key={o.id} className="nr" onClick={() => onOrder(o.id)}>
+=======
+const KIND = { order: ['bag', 'o'], pay: ['rev', 'p'], wish: ['wish', 'w'], shop: ['shops', 'w'] }
+function Notifs({ orders, shops, onShop, notes, onClose, onOrder, onWish, onRead, onClear }) {
+  const [tab, setTab] = useState('act'), [snap] = useState(() => new Set(notes.filter(n => !n.read).map(n => n.id)))
+  useEffect(() => { onRead() }, [onRead])
+  const ptodo = useMemo(() => shops.filter(s => s.status === 'pending'), [shops])
+  const todo = useMemo(() => orders.filter(o => !o.status || o.payment_status === 'verifying').sort((a, b) => (b.payment_status === 'verifying') - (a.payment_status === 'verifying') || new Date(b.created_at) - new Date(a.created_at)), [orders])
+  return <Modal cls="np" title="Notifications" onClose={onClose} footer={tab === 'log' && notes.length > 0 ? <button className="bt g sm" onClick={onClear}>Clear activity</button> : null}>
+    <div className="seg nt" role="tablist" aria-label="Notification type">
+      <button role="tab" aria-selected={tab === 'act'} className={tab === 'act' ? 'on' : ''} onClick={() => setTab('act')}>Action needed{todo.length + ptodo.length > 0 && <em>{todo.length + ptodo.length}</em>}</button>
+      <button role="tab" aria-selected={tab === 'log'} className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>Activity{notes.length > 0 && <em className="g">{notes.length}</em>}</button></div>
+    {tab === 'act' ? (todo.length + ptodo.length ? <div className="nl">{ptodo.map(s => <button key={s.id} className="nr" onClick={onShop}><span className="nk w"><Ic n="shops" s={19} /></span><span className="g1"><b>Verify new merchant</b><small>{s.name} · {s.city || s.phone}</small></span><span className="tm"><small>{ago(s.created_at)}</small><Ic n="chev" s={16} /></span></button>)}{todo.map(o => { const v = o.payment_status === 'verifying'; return <button key={o.id} className="nr" onClick={() => onOrder(o.id)}>
+>>>>>>> f25f895 (Add seller module and update admin)
       <span className={'nk ' + (v ? 'p' : 'o')}><Ic n={v ? 'rev' : 'bag'} s={19} /></span>
       <span className="g1"><b>{v ? 'Verify bKash payment' : 'New order to process'}</b><small>#{o.order_no} · {o.address?.name || 'Customer'} · {taka(o.total)}</small></span>
       <span className="tm"><small>{ago(o.created_at)}</small><Ic n="chev" s={16} /></span></button> })}</div>
       : <div className="ne"><i><Ic n="check" s={28} /></i><b>You're all caught up</b><small>New orders and payments to verify show up here.</small></div>)
+<<<<<<< HEAD
       : (notes.length ? <div className="nl">{notes.map(n => { const [ic, c] = KIND[n.k] || KIND.order; return <button key={n.id} className="nr" onClick={() => n.oid ? onOrder(n.oid) : n.k === 'wish' ? onWish() : onClose()}>
+=======
+      : (notes.length ? <div className="nl">{notes.map(n => { const [ic, c] = KIND[n.k] || KIND.order; return <button key={n.id} className="nr" onClick={() => n.k === 'shop' ? onShop() : n.oid ? onOrder(n.oid) : n.k === 'wish' ? onWish() : onClose()}>
+>>>>>>> f25f895 (Add seller module and update admin)
         <span className={'nk ' + c}><Ic n={ic} s={19} /></span>
         <span className="g1"><b>{n.title}</b><small>{n.sub}</small></span>
         <span className="tm"><small>{ago(n.t)}</small>{snap.has(n.id) ? <i className="udot" aria-label="New" /> : <Ic n="chev" s={16} />}</span></button> })}</div>
@@ -185,7 +215,11 @@ const readNotes = () => { try { const a = JSON.parse(localStorage.getItem('adm-n
 const stab = (m, rows) => rows.map(r => { const s = JSON.stringify(r), h = m.get(r.id); if (h && h.s === s) return h.r; m.set(r.id, { s, r }); return r })
 
 function Shell({ user }) {
+<<<<<<< HEAD
   const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false }), [toast, setToast] = useState(''), [ld, setLd] = useState(true), [rf, setRf] = useState(false), tt = useRef(0), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({ o: new Map(), p: new Map() })
+=======
+  const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false, shops: [], shopsErr: false }), [toast, setToast] = useState(''), [ld, setLd] = useState(true), [rf, setRf] = useState(false), tt = useRef(0), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({ o: new Map(), p: new Map() })
+>>>>>>> f25f895 (Add seller module and update admin)
   const say = useCallback(m => { setToast(m); clearTimeout(tt.current); tt.current = setTimeout(() => setToast(''), 2400) }, [])
   const push = useCallback(n => { setNotes(a => [{ id: Date.now() + Math.random(), t: Date.now(), read: false, ...n }, ...a].slice(0, 40)); if (n.k !== 'wish') navigator.vibrate?.(60) }, [])
   const readAll = useCallback(() => setNotes(a => a.some(n => !n.read) ? a.map(n => n.read ? n : { ...n, read: true }) : a), [])
@@ -194,9 +228,15 @@ function Shell({ user }) {
   useEffect(() => { try { localStorage.setItem('adm-notes', JSON.stringify(notes)) } catch { /* storage unavailable */ } }, [notes])
   const go = t => { setTab(t); history.replaceState(null, '', '#' + t); document.querySelector('.scr')?.scrollTo?.(0, 0) }
   const load = useCallback(async () => {
+<<<<<<< HEAD
     const [o, p, c, w] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000)])
     const er = o.error || p.error || c.error; if (er) say(er.message)
     setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error }); setLd(false)
+=======
+    const [o, p, c, w, sp] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false })])
+    const er = o.error || p.error || c.error; if (er) say(er.message)
+    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error }); setLd(false)
+>>>>>>> f25f895 (Add seller module and update admin)
   }, [say])
   useEffect(() => {
     const later = () => { clearTimeout(lt.current); lt.current = setTimeout(load, 400) } // coalesce bursts of realtime events
@@ -205,6 +245,11 @@ function Shell({ user }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, p => { const r = p.new || {}; say('🛍️ New order #' + r.order_no); push({ k: 'order', title: 'New order #' + r.order_no, sub: (r.address?.name || 'Customer') + ' · ' + taka(r.total), oid: r.id }); later() })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, p => { const r = p.new || {}; if (r.payment_status === 'verifying' && p.old?.payment_status !== 'verifying') { say('💗 bKash payment to verify'); push({ k: 'pay', title: 'Verify bKash payment', sub: `#${r.order_no} · ${r.address?.name || 'Customer'} · ${taka(r.total)}`, oid: r.id }) } later() })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wishlists' }, p => { say('♡ Item added to a wishlist'); push({ k: 'wish', title: 'Saved to wishlist', sub: p.new?.product_name || 'A product' }); later() })
+<<<<<<< HEAD
+=======
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'shops' }, p => { const r = p.new || {}; say('🏪 New merchant: ' + (r.name || 'shop')); push({ k: 'shop', title: 'New merchant to verify', sub: (r.name || 'Shop') + (r.city ? ' · ' + r.city : '') }); later() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shops' }, later)
+>>>>>>> f25f895 (Add seller module and update admin)
       .subscribe()
     return () => { clearTimeout(lt.current); sb.removeChannel(ch) }
   }, [load, say, push])
@@ -214,17 +259,30 @@ function Shell({ user }) {
     ev.forEach(e => addEventListener(e, reset, { passive: true, capture: true })); reset()
     return () => { clearTimeout(t); ev.forEach(e => removeEventListener(e, reset, { capture: true })) }
   }, [])
+<<<<<<< HEAD
   const pend = d.orders.filter(o => !o.status).length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
+=======
+  const pend = d.orders.filter(o => !o.status).length, pshop = (d.shops || []).filter(s => s.status === 'pending').length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length + pshop, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
+>>>>>>> f25f895 (Add seller module and update admin)
   const nm = user.user_metadata?.full_name || (user.email || 'admin').split('@')[0]
   const p = { d, reload: load, say, go, focus, clearFocus }
   return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
     <div className="me"><span className="mav" aria-hidden="true">{ini(nm)}</span><b>{nm}</b><small>Store admin</small></div>
+<<<<<<< HEAD
     <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}</button>)}</div>
     <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
     <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => sb.auth.signOut()}><Ic n="out" s={20} /></button></div></header>
       <div className="scr">
       {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'hero' ? <Hero say={say} /> : <Dash {...p} />}</div></main></div>
     {nOpen && <Notifs orders={d.orders} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
+=======
+    <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}</button>)}</div>
+    <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
+    <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => sb.auth.signOut()}><Ic n="out" s={20} /></button></div></header>
+      <div className="scr">
+      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'hero' ? <Hero say={say} /> : <Dash {...p} />}</div></main></div>
+    {nOpen && <Notifs orders={d.orders} shops={d.shops || []} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
+>>>>>>> f25f895 (Add seller module and update admin)
     {toast && <div className="toast" role="status">{toast}</div>}</div>
 }
 
@@ -268,7 +326,11 @@ function Activity({ orders }) {
 }
 
 function Dash({ d, go }) {
+<<<<<<< HEAD
   const { orders, products } = d
+=======
+  const { orders, products } = d, pshops = (d.shops || []).filter(s => s.status === 'pending')
+>>>>>>> f25f895 (Add seller module and update admin)
   const S = useMemo(() => {
     const T = new Date().setHours(0, 0, 0, 0), D = 864e5, at = o => +new Date(o.created_at)
     const sum = (a, b) => orders.reduce((s, o) => at(o) >= a && at(o) < b ? s + (+o.total || 0) : s, 0), cnt = (a, b) => orders.filter(o => at(o) >= a && at(o) < b).length
@@ -284,6 +346,10 @@ function Dash({ d, go }) {
     <div className="kps">{K.map(([l, v, f, t, ic, tip], i) => <div className={'kpi k' + i} key={l}><div className="kl"><span className="ki"><Ic n={ic} s={19} /></span>{t != null && <i className={'tr ' + (t >= 0 ? 'up' : 'dn')} title={tip}>{t >= 0 ? '↑' : '↓'} {Math.abs(t)}%</i>}</div><b><Count to={v} f={f} /></b><span className="kn">{l}</span></div>)}</div>
     <div className="promo"><div><small>Needs attention</small><h2><em><Count to={pend} /></em> order{pend === 1 ? '' : 's'} waiting</h2><p>{pend ? 'Start processing to keep customers happy.' : 'You are all caught up. Nice work!'}</p><button className="bt sm" onClick={() => go('orders')}>{pend ? 'Review now' : 'View orders'}</button></div>
       <div className="ring" aria-hidden="true"><svg viewBox="0 0 130 100" fill="none" strokeLinecap="round"><path d="M10 96A55 55 0 0 1 65 41" stroke="#ffb3d5" strokeWidth="9" /><path d="M24 96A41 41 0 0 1 65 55" stroke="#8e2a8c" strokeWidth="9" /><path d="M38 96A27 27 0 0 1 65 69" stroke="#e0457b" strokeWidth="9" /><path d="M65 41A55 55 0 0 1 120 96" stroke="#c9b6f7" strokeWidth="9" /></svg><b><Count to={pend} /></b></div></div>
+<<<<<<< HEAD
+=======
+    {pshops.length > 0 && <button className="mq" onClick={() => go('shops')}><span className="mq-i"><Ic n="shops" s={22} /></span><span className="g1"><b>{pshops.length} merchant{pshops.length === 1 ? '' : 's'} waiting for verification</b><small>{pshops.slice(0, 2).map(s => s.name).join(', ')}{pshops.length > 2 ? ' +' + (pshops.length - 2) : ''}</small></span><Ic n="chev" s={18} /></button>}
+>>>>>>> f25f895 (Add seller module and update admin)
     <Activity orders={orders} />
     <section className="sec"><div className="sh"><h2>Top sellers</h2></div>
       <div className="tp">{S.best.length ? S.best.map(x => <div className="tpr" key={x.name}><span className="th">{x.img ? <img src={x.img} alt="" loading="lazy" /> : x.em || '🛍️'}</span><div className="g1"><b>{x.name}</b><small>{x.q} sold · {taka(x.v)}</small></div><b className="pc">{x.p}%</b></div>) : <p className="mut">Your best sellers will show up after the first orders.</p>}</div>
@@ -405,15 +471,111 @@ function Wish({ d: { wish, products, wishErr, orders } }) {
       <section className="cd"><h2>Recent activity</h2>{wish.slice(0, 20).map(w => <div className="ln" key={w.id}><span><b>{w.user_label || 'Guest'}</b> saved <b>{pm[w.product_id]?.name || w.product_name || 'a product'}</b></span><small>{ago(w.created_at)}</small></div>)}{!wish.length && <p className="mut">No activity yet.</p>}</section></div></div>
 }
 
+// ---------------- Merchants (marketplace sellers) ----------------
+const SHOP_TABS = [['pending', 'Pending', 'clock', 1], ['approved', 'Verified', 'shield', 3], ['rejected', 'Rejected', 'alert', 0], ['suspended', 'Suspended', 'ban', 2]]
+const SHOP_LBL = { pending: 'Pending review', approved: 'Verified', rejected: 'Rejected', suspended: 'Suspended' }
+const SHOP_PL = { pending: 's1', approved: 's3', rejected: '', suspended: 'bad' }
+const REASONS = ['ID photo is blurry', 'Name does not match ID', 'Invalid phone number', 'Address is incomplete']
+
+const ShopCard = memo(function ShopCard({ s, n, onOpen, onVerify }) {
+  return <article className={'sc ' + s.status}>
+    <button className="sc-main" onClick={() => onOpen(s.id)}>
+      <span className="sc-av">{s.logo_url ? <img src={s.logo_url} alt="" loading="lazy" decoding="async" /> : ini(s.name)}</span>
+      <span className="sc-t"><b>{s.name}</b><small>{[s.city, s.phone].filter(Boolean).join(' · ') || '—'}</small></span>
+      <span className={'pl ' + SHOP_PL[s.status]}>{SHOP_LBL[s.status]}</span>
+      <span className="sc-meta"><span>{n.p} product{n.p === 1 ? '' : 's'}</span><span>{n.sold} sold</span><span>Applied {ago(s.created_at)}</span></span>
+    </button>
+    {s.status === 'pending' && <div className="sc-act"><small>Check the ID, then verify</small><button className="bt sm" onClick={() => onVerify(s)}>✓ Verify</button></div>}
+  </article>
+})
+
+function Shops({ d: { shops = [], products, orders, shopsErr }, reload, say }) {
+  const [f, setF] = useState(() => shops.some(s => s.status === 'pending') ? 'pending' : ''), [q, setQ] = useState(''), [sel, setSel] = useState(null), [busy, setBusy] = useState(false), [rej, setRej] = useState(null), [doc, setDoc] = useState(null), bz = useRef(false)
+  const dq = useDeferredValue(q)
+  useEffect(() => { setRej(null); setDoc(null) }, [sel])
+  const stat = useMemo(() => {
+    const m = {}, pm = new Map()
+    shops.forEach(s => { m[s.id] = { p: 0, live: 0, sold: 0, rev: 0 } })
+    products.forEach(p => { if (p.shop_id && m[p.shop_id]) { m[p.shop_id].p++; if (p.is_active !== false) m[p.shop_id].live++; pm.set(String(p.id), p.shop_id) } })
+    orders.forEach(o => (o.items || []).forEach(i => { const e = m[pm.get(String(i.id))]; if (e) { e.sold += +i.qty || 0; e.rev += (+i.price || 0) * (+i.qty || 0) } }))
+    return m
+  }, [shops, products, orders])
+  const cnt = useMemo(() => { const c = { pending: 0, approved: 0, rejected: 0, suspended: 0 }; shops.forEach(s => { if (s.status in c) c[s.status]++ }); return c }, [shops])
+  const list = useMemo(() => { const k = dq.trim().toLowerCase(); return shops.filter(s => (!f || s.status === f) && (!k || `${s.name} ${s.phone} ${s.city || ''} ${s.address || ''}`.toLowerCase().includes(k))).sort((a, b) => (b.status === 'pending') - (a.status === 'pending') || new Date(b.created_at) - new Date(a.created_at)) }, [shops, f, dq])
+  const setStatus = useCallback(async (s, status, reason) => {
+    if (bz.current) return
+    bz.current = true; setBusy(true)
+    const patch = status === 'rejected' ? { status, reject_reason: reason } : { status }
+    const { data, error } = await sb.from('shops').update(patch).eq('id', s.id).select()
+    bz.current = false; setBusy(false)
+    if (error) return say(error.message)
+    if (!data?.length) return say('Not saved. Run supabasesellers.sql first and make sure this account is an admin.')
+    say(`${s.name} → ${SHOP_LBL[status]}`); setRej(null); reload()
+  }, [reload, say])
+  const verify = useCallback(s => setStatus(s, 'approved'), [setStatus])
+  const open = useCallback(id => setSel(id), [])
+  const cur = sel && shops.find(s => s.id === sel)
+  const n = cur ? stat[cur.id] || { p: 0, live: 0, sold: 0, rev: 0 } : null
+  const mine = useMemo(() => cur ? products.filter(p => p.shop_id === cur.id).slice(0, 5) : [], [cur, products])
+  const showDoc = async () => {
+    setDoc({ busy: true })
+    const { data, error } = await sb.storage.from('seller-docs').createSignedUrl(cur.id_doc_path, 300)
+    if (error || !data?.signedUrl) { setDoc(null); return say('Could not open the document') }
+    setDoc({ url: data.signedUrl, pdf: /\.pdf$/i.test(cur.id_doc_path) })
+  }
+  const askReject = () => { setRej(''); setTimeout(() => document.querySelector('.md .mc')?.scrollTo({ top: 0, behavior: 'smooth' }), 30) }
+  const doReject = () => { if (!rej.trim()) return say('Tell the merchant why, so they can fix it'); setStatus(cur, 'rejected', rej.trim()) }
+  const suspend = () => { if (window.confirm(`Suspend "${cur.name}"? All of its products disappear from the store until you reinstate it.`)) setStatus(cur, 'suspended') }
+  if (shopsErr) return <div className="cd"><h2>Merchants are not set up yet</h2><p className="mut">Run <b>supabasesellers.sql</b> in the Supabase SQL editor, then press Refresh.</p></div>
+  const ph = cur?.phone
+  const foot = !cur ? null : cur.status === 'pending' ? <><button className="bt" disabled={busy} onClick={() => verify(cur)}>✓ Verify merchant</button><button className="bt g" disabled={busy} onClick={askReject}>Reject</button></>
+    : cur.status === 'approved' ? <button className="bt d" disabled={busy} onClick={suspend}><Ic n="ban" s={17} />Suspend shop</button>
+    : cur.status === 'rejected' ? <><button className="bt" disabled={busy} onClick={() => verify(cur)}>✓ Verify anyway</button></>
+    : <button className="bt" disabled={busy} onClick={() => verify(cur)}>Reinstate shop</button>
+  return <div className="pg">
+    <div className="ob">{SHOP_TABS.map(([k, l, ic, s]) => <button key={k} className={'s' + s + (f === k ? ' on' : '')} aria-pressed={f === k} onClick={() => setF(f === k ? '' : k)}><span className="oi"><Ic n={ic} s={16} /></span><small>{l}</small><b><Count to={cnt[k]} /></b></button>)}</div>
+    <div className="tl"><label className="sr"><Ic n="search" s={18} /><input className="in" type="search" inputMode="search" enterKeyHint="search" placeholder="Search shop, phone, city" aria-label="Search merchants" value={q} onChange={e => setQ(e.target.value)} /></label></div>
+    <p className="sum"><b>{list.length}</b> merchant{list.length === 1 ? '' : 's'}{f && <> · <button className="lk" onClick={() => setF('')}>Show all ({shops.length})</button></>}</p>
+    <div className="sl">{list.map(s => <ShopCard key={s.id} s={s} n={stat[s.id] || { p: 0, sold: 0 }} onOpen={open} onVerify={verify} />)}
+      {!list.length && <p className="mut pad cd">{shops.length ? 'No merchants match.' : 'No merchants yet. When someone opens pinkish.shop/merchant and creates a shop, it appears here for verification.'}</p>}</div>
+    {cur && <Modal cls="pm" title="Merchant" onClose={() => setSel(null)} footer={foot}>
+      <div className="sd-h"><span className="sc-av lg">{cur.logo_url ? <img src={cur.logo_url} alt="" /> : ini(cur.name)}</span><span className="sc-t"><b>{cur.name}</b><small>{cur.city || 'No city'} · applied {ago(cur.created_at)}</small></span><span className={'pl ' + SHOP_PL[cur.status]}>{SHOP_LBL[cur.status]}</span></div>
+      {rej !== null && <div className="rsn"><b>Why are you rejecting this shop?</b><textarea className="in" rows="3" autoFocus placeholder="The merchant will see this and can resubmit" value={rej} onChange={e => setRej(e.target.value)} />
+        <div className="rq">{REASONS.map(r => <button key={r} type="button" onClick={() => setRej(r)}>{r}</button>)}</div>
+        <div className="acts"><button className="bt d sm" disabled={busy} onClick={doReject}>Confirm rejection</button><button className="bt g sm" onClick={() => setRej(null)}>Cancel</button></div></div>}
+      {cur.status === 'rejected' && cur.reject_reason && <div className="cd sd-note"><small>Rejection reason</small><p>{cur.reject_reason}</p></div>}
+      {ph && <div className="qa"><a className="bt g sm" href={'tel:' + ph}><Ic n="phone" s={16} />Call</a><a className="bt sm wa" href={wa(ph, `Hi, this is Pinkish about your shop "${cur.name}".`)} target="_blank" rel="noopener noreferrer"><Ic n="chat" s={16} />WhatsApp</a></div>}
+      <div className="sd-stats"><div><b>{n.p}</b><small>Products</small></div><div><b>{n.live}</b><small>Live</small></div><div><b>{n.sold}</b><small>Sold</small></div><div><b>{taka(n.rev)}</b><small>Sales</small></div></div>
+      <h3>Business details</h3>
+      <div className="cd sd-info"><div><span>Phone</span><b>{cur.phone || '—'}</b></div><div><span>City</span><b>{cur.city || '—'}</b></div><div><span>Address</span><b>{cur.address || '—'}</b></div><div><span>NID number</span><b>{cur.nid_number || '—'}</b></div><div><span>Applied</span><b>{fmt(cur.created_at)}</b></div>{cur.verified_at && <div><span>Verified</span><b>{fmt(cur.verified_at)}</b></div>}<div><span>Shop link</span><b>{cur.slug}</b></div></div>
+      {cur.description && <><h3>About</h3><div className="cd"><p>{cur.description}</p></div></>}
+      <h3>Verification document</h3>
+      <div className="cd sd-doc">{!cur.id_doc_path ? <p className="wn">No document was uploaded.</p> : !doc ? <button className="bt g sm" onClick={showDoc}><Ic n="doc" s={16} />View NID / licence</button>
+        : doc.busy ? <p className="mut">Opening…</p> : doc.pdf ? <a className="bt g sm" href={doc.url} target="_blank" rel="noopener noreferrer"><Ic n="doc" s={16} />Open PDF</a>
+        : <><img src={doc.url} alt="Verification document" /><a className="bt g sm" href={doc.url} target="_blank" rel="noopener noreferrer">Open full size</a></>}
+        <small>Private file. The link expires in 5 minutes.</small></div>
+      {mine.length > 0 && <><h3>Latest products</h3><div className="cd lst">{mine.map(p => <div className="rw" key={p.id}><span className="th">{p.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : p.emoji || '🛍️'}</span><span className="g1"><b>{p.name}</b><small>{taka(p.price)} · {stockTxt(p.stock)}</small></span><span className={'pl ' + (p.is_active !== false ? 's3' : 's1')}>{p.is_active !== false ? 'Live' : 'Hidden'}</span></div>)}</div></>}
+    </Modal>}
+  </div>
+}
+
 const blank = { name: '', brand: '', tag: '', category_id: '', price: '', stock: '', emoji: '', image_url: '', is_active: true, variants: [{ label: 'Standard', mult: 1 }], features: '100% original product\nDiscreet packaging' }
 const PRESET = ['1 pc', '3 pcs', '5 pcs', '10 pcs', '20 pcs']
 const stockTxt = s => s == null || s === '' ? 'Unlimited' : s + ' in stock'
 
+<<<<<<< HEAD
 const ProdRow = memo(function ProdRow({ p, cat, onToggle, onEdit, onDup, onDel }) {
   const low = p.stock != null && p.stock <= 5, on = p.is_active !== false
   return <div className={'rw pw' + (on ? '' : ' off')}>
     <span className="th">{p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" /> : p.emoji || '🛍️'}</span>
     <span className="g1"><b>{p.name}</b><small>{[p.brand, cat].filter(Boolean).join(' · ') || '—'}</small></span>
+=======
+const ProdRow = memo(function ProdRow({ p, cat, shop, onToggle, onEdit, onDup, onDel }) {
+  const low = p.stock != null && p.stock <= 5, on = p.is_active !== false
+  return <div className={'rw pw' + (on ? '' : ' off')}>
+    <span className="th">{p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" /> : p.emoji || '🛍️'}</span>
+    <span className="g1"><b>{p.name}</b><small>{[p.brand, cat].filter(Boolean).join(' · ') || '—'}</small><small className="shn"><Ic n="shops" s={12} />{shop}</small></span>
+>>>>>>> f25f895 (Add seller module and update admin)
     <span className="pr"><b>{taka(p.price)}</b><small className={low ? 'wn' : ''}>{stockTxt(p.stock)}</small></span>
     <span className="ra"><button className={'tg' + (on ? ' on' : '')} role="switch" aria-checked={on} aria-label={`${p.name} visible in store`} onClick={() => onToggle(p)}><i /></button><span className="tl2">{on ? 'Live' : 'Hidden'}</span>
       <span className="rb"><button className="ib3" aria-label={'Edit ' + p.name} onClick={() => onEdit(p)}><Ic n="edit" s={17} /></button><button className="ib3" aria-label={'Duplicate ' + p.name} onClick={() => onDup(p)}><Ic n="copy" s={17} /></button><button className="ib3 dg" aria-label={'Delete ' + p.name} onClick={() => onDel(p)}><Ic n="trash" s={17} /></button></span></span>
@@ -421,6 +583,7 @@ const ProdRow = memo(function ProdRow({ p, cat, onToggle, onEdit, onDup, onDel }
 })
 
 function Products({ d, reload, say }) {
+<<<<<<< HEAD
   const [q, setQ] = useState(''), [cf, setCf] = useState(''), [e, setE] = useState(null), [busy, setBusy] = useState(false), [up, setUp] = useState(false), [lim, setLim] = useState(PAGE), [er, setEr] = useState({}), orig = useRef('')
   const dq = useDeferredValue(q)
   const cn = useMemo(() => Object.fromEntries(d.cats.map(c => [c.id, c.name])), [d.cats])
@@ -428,6 +591,17 @@ function Products({ d, reload, say }) {
   const list = useMemo(() => { const k = dq.trim().toLowerCase(); return d.products.filter(p => (!cf || p.category_id === cf) && (!k || `${p.name} ${p.brand || ''}`.toLowerCase().includes(k))) }, [d.products, dq, cf])
   const stats = useMemo(() => ({ live: list.filter(p => p.is_active !== false).length, low: list.filter(p => p.stock != null && p.stock <= 5).length }), [list])
   useEffect(() => { setLim(PAGE) }, [cf, dq])
+=======
+  const [q, setQ] = useState(''), [cf, setCf] = useState(''), [sf, setSf] = useState(''), [e, setE] = useState(null), [busy, setBusy] = useState(false), [up, setUp] = useState(false), [lim, setLim] = useState(PAGE), [er, setEr] = useState({}), orig = useRef('')
+  const dq = useDeferredValue(q)
+  const cn = useMemo(() => Object.fromEntries(d.cats.map(c => [c.id, c.name])), [d.cats])
+  const sn = useMemo(() => Object.fromEntries((d.shops || []).map(s => [s.id, s.name])), [d.shops])
+  const shopOf = p => p.shop_id ? (sn[p.shop_id] || 'Merchant') : 'Pinkish'
+  const cc = useMemo(() => { const m = {}; d.products.forEach(p => { m[p.category_id] = (m[p.category_id] || 0) + 1 }); return m }, [d.products])
+  const list = useMemo(() => { const k = dq.trim().toLowerCase(); return d.products.filter(p => (!cf || p.category_id === cf) && (!sf || (sf === 'own' ? !p.shop_id : p.shop_id === sf)) && (!k || `${p.name} ${p.brand || ''}`.toLowerCase().includes(k))) }, [d.products, dq, cf, sf])
+  const stats = useMemo(() => ({ live: list.filter(p => p.is_active !== false).length, low: list.filter(p => p.stock != null && p.stock <= 5).length }), [list])
+  useEffect(() => { setLim(PAGE) }, [cf, dq, sf])
+>>>>>>> f25f895 (Add seller module and update admin)
   const dirty = !!e && JSON.stringify(e) !== orig.current
   const open = useCallback((p, dup) => {
     const v = p ? { ...blank, ...p, stock: p.stock ?? '', emoji: p.emoji || '', brand: p.brand || '', tag: p.tag || '', image_url: p.image_url || '', is_active: p.is_active !== false, variants: (p.variants?.length ? p.variants : blank.variants).map(x => ({ ...x })), features: (p.features || []).join('\n') } : { ...blank, variants: blank.variants.map(x => ({ ...x })), category_id: cf || d.cats[0]?.id || '' }
@@ -457,6 +631,7 @@ function Products({ d, reload, say }) {
   const preset = l => setE(x => x.variants.some(v => v.label === l) ? x : { ...x, variants: [...x.variants.filter(v => v.label.trim()), { label: l, mult: parseFloat(l) || 1 }] })
   return <div className="pg">
     <div className="tl"><label className="sr"><Ic n="search" s={18} /><input className="in" type="search" inputMode="search" enterKeyHint="search" placeholder="Search products or brand" aria-label="Search products" value={q} onChange={x => setQ(x.target.value)} /></label>
+<<<<<<< HEAD
       <button className="bt add" onClick={() => open()} disabled={!d.cats.length} title={d.cats.length ? '' : 'Add a category first'}><Ic n="plus" s={18} />Add product</button></div>
     <div className="chips"><button className={!cf ? 'on' : ''} onClick={() => setCf('')}>All ({d.products.length})</button>{d.cats.map(c => <button key={c.id} className={cf === c.id ? 'on' : ''} onClick={() => setCf(cf === c.id ? '' : c.id)}>{c.icon} {c.name} ({cc[c.id] || 0})</button>)}</div>
     <p className="sum"><b>{list.length}</b> product{list.length === 1 ? '' : 's'} · <b>{stats.live}</b> live · <b className={stats.low ? 'wn' : ''}>{stats.low}</b> low stock</p>
@@ -465,6 +640,17 @@ function Products({ d, reload, say }) {
     {!e && d.cats.length > 0 && <button className="fab" aria-label="Add product" onClick={() => open()}><Ic n="plus" s={26} /></button>}
     {e && <Modal cls="pm" title={e.id ? 'Edit product' : 'Add product'} onClose={close} footer={<><button className="bt" disabled={busy || up} onClick={save}>{busy ? 'Saving…' : up ? 'Uploading image…' : e.id ? 'Save changes' : 'Add product'}</button><button className="bt g" onClick={close}>Cancel</button></>}>
       <div className="pp"><span className="th lg">{e.image_url ? <img src={e.image_url} alt="" /> : e.emoji || '🛍️'}</span><span className="g1"><b>{e.name.trim() || 'New product'}</b><small>{cn[e.category_id] || 'No category'}{e.tag ? ' · ' + e.tag : ''}</small></span><span className="pr"><b>{+e.price > 0 ? taka(e.price) : '৳—'}</b><small>{stockTxt(e.stock)}</small></span></div>
+=======
+      {(d.shops || []).length > 0 && <select className="in rg" aria-label="Filter by shop" value={sf} onChange={x => setSf(x.target.value)}><option value="">All shops</option><option value="own">Pinkish (own)</option>{d.shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>}
+      <button className="bt add" onClick={() => open()} disabled={!d.cats.length} title={d.cats.length ? '' : 'Add a category first'}><Ic n="plus" s={18} />Add product</button></div>
+    <div className="chips"><button className={!cf ? 'on' : ''} onClick={() => setCf('')}>All ({d.products.length})</button>{d.cats.map(c => <button key={c.id} className={cf === c.id ? 'on' : ''} onClick={() => setCf(cf === c.id ? '' : c.id)}>{c.icon} {c.name} ({cc[c.id] || 0})</button>)}</div>
+    <p className="sum"><b>{list.length}</b> product{list.length === 1 ? '' : 's'} · <b>{stats.live}</b> live · <b className={stats.low ? 'wn' : ''}>{stats.low}</b> low stock</p>
+    <div className="cd lst">{list.slice(0, lim).map(p => <ProdRow key={p.id} p={p} cat={cn[p.category_id]} shop={shopOf(p)} onToggle={toggle} onEdit={edit} onDup={dup} onDel={del} />)}{!list.length && <p className="mut pad">{d.products.length ? 'No products match your search.' : 'No products yet. Add your first one.'}</p>}</div>
+    {list.length > lim && <button className="bt g more" onClick={() => setLim(l => l + PAGE)}>Show {Math.min(PAGE, list.length - lim)} more · {list.length - lim} left</button>}
+    {!e && d.cats.length > 0 && <button className="fab" aria-label="Add product" onClick={() => open()}><Ic n="plus" s={26} /></button>}
+    {e && <Modal cls="pm" title={e.id ? 'Edit product' : 'Add product'} onClose={close} footer={<><button className="bt" disabled={busy || up} onClick={save}>{busy ? 'Saving…' : up ? 'Uploading image…' : e.id ? 'Save changes' : 'Add product'}</button><button className="bt g" onClick={close}>Cancel</button></>}>
+      <div className="pp"><span className="th lg">{e.image_url ? <img src={e.image_url} alt="" /> : e.emoji || '🛍️'}</span><span className="g1"><b>{e.name.trim() || 'New product'}</b><small>{cn[e.category_id] || 'No category'}{e.tag ? ' · ' + e.tag : ''} · {shopOf(e)}</small></span><span className="pr"><b>{+e.price > 0 ? taka(e.price) : '৳—'}</b><small>{stockTxt(e.stock)}</small></span></div>
+>>>>>>> f25f895 (Add seller module and update admin)
       <section className="fs"><h3>Basics</h3>
         <F l="Name *" err={er.name}><input className="in" autoComplete="off" enterKeyHint="next" value={e.name} onChange={x => s('name', x.target.value)} /></F>
         <div className="fg"><F l="Category *" err={er.category_id}><select className="in" value={e.category_id} onChange={x => s('category_id', x.target.value)}><option value="" disabled>Choose…</option>{d.cats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></F>

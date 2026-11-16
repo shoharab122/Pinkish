@@ -531,3 +531,64 @@ html.adm-on body{position:fixed;inset:0;width:100%}
 .lgo .wm{font-size:1.9rem}
 .invp .ih .lk .bmk{width:44px;height:auto;display:block}
 .invp .ih .lk .wm{font-size:1.5rem}
+<<<<<<< HEAD
+=======
+/* =========================================================
+   Merchants (marketplace sellers): verification list + detail
+   ========================================================= */
+.pl.bad{background:#fbdce7;color:var(--er)}
+.shn{display:flex;align-items:center;gap:4px;color:var(--p2);font-weight:600}
+.shn svg{flex:none}
+
+.sl{display:grid;gap:10px}
+.sc{position:relative;overflow:hidden;border-radius:22px;background:var(--glass);border:1px solid var(--edge);border-left:5px solid var(--ln);box-shadow:var(--sh);animation:aup .4s var(--ease) both}
+.sc.pending{border-left-color:#e69500}.sc.approved{border-left-color:var(--ok)}.sc.rejected{border-left-color:var(--p3)}.sc.suspended{border-left-color:var(--er)}
+.sc-main{all:unset;cursor:pointer;box-sizing:border-box;width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px 12px;padding:14px}
+.sc-main:active{background:#ffffff80}
+.sc-t{min-width:0;display:grid;gap:1px}
+.sc-t b{font-size:1rem;color:var(--p1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-t small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-av{width:48px;height:48px;flex:none;border-radius:16px;overflow:hidden;display:grid;place-items:center;background:var(--grad);color:#fff;font-weight:800;font-size:.9rem;box-shadow:0 8px 16px -8px #8e2a8ccc,inset 0 1px 0 #ffffff66}
+.sc-av img{width:100%;height:100%;object-fit:cover}
+.sc-av.lg{width:58px;height:58px;border-radius:18px;font-size:1rem}
+.sc-meta{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.sc-meta span{font-size:.74rem;font-weight:600;color:#5b4b6b;background:#f4ecf8;border-radius:99px;padding:3px 10px}
+.sc-act{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-top:1px dashed #ecd6a8;background:#fff8e8}
+.sc-act small{color:var(--wn);font-weight:600}
+@media(hover:hover){.sc-main:hover{background:#ffffff80}}
+@media(min-width:900px){.sl{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.sd-h{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.sd-h .sc-t b{white-space:normal;font-size:1.1rem}
+.sd-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 4px}
+.sd-stats div{background:#fff;border:1px solid var(--edge);border-radius:16px;padding:10px 6px;text-align:center;box-shadow:var(--sh)}
+.sd-stats b{display:block;font-size:1.05rem;color:var(--p1);overflow:hidden;text-overflow:ellipsis}
+.sd-stats small{font-size:.7rem}
+.sd-info>div{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-top:1px solid #e6dcf066}
+.sd-info>div:first-child{border-top:0;padding-top:0}.sd-info>div:last-child{padding-bottom:0}
+.sd-info span{color:var(--mut);font-size:.84rem;flex:none}
+.sd-info b{text-align:right;font-weight:600;word-break:break-word;font-size:.9rem}
+.sd-note{background:#fdecf2;border-color:#f6c4d8}.sd-note p{margin:2px 0 0;color:var(--er);font-weight:600}
+.sd-doc{display:grid;gap:10px;justify-items:start}
+.sd-doc img{width:100%;max-height:380px;object-fit:contain;border-radius:14px;background:#f4ecf8;border:1px solid var(--edge)}
+.rsn{display:grid;gap:10px;margin:0 0 12px;padding:14px;border-radius:20px;background:#fff7fb;border:1.5px solid #f0b4cf}
+.rsn>b{color:var(--p3)}
+.rsn textarea{resize:vertical;min-height:72px}
+.rq{display:flex;flex-wrap:wrap;gap:6px}
+.rq button{all:unset;cursor:pointer;padding:7px 12px;border-radius:99px;border:1.5px solid var(--edge);background:#fff;font-size:.78rem;font-weight:600;color:var(--p1)}
+.rq button:active{transform:scale(.96)}
+
+/* dashboard banner when merchants are waiting */
+.mq{all:unset;cursor:pointer;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:22px;background:linear-gradient(135deg,#fff3df,#ffe6f0);border:1px solid #f3d3a0;box-shadow:var(--sh);color:var(--wn)}
+.mq:active{transform:scale(.985)}
+.mq .g1{flex:1;min-width:0}.mq b{color:var(--p1);display:block}
+.mq-i{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;flex:none;color:#fff;background:linear-gradient(135deg,#ffb04a,#e69500);box-shadow:inset 0 1px 0 #ffffff66}
+
+/* 7 tabs in the bottom bar: keep labels from touching */
+@media(max-width:420px){
+  .sb .nv button{font-size:.56rem;padding:7px 0}
+  .sb{margin-left:6px;margin-right:6px;padding:5px}
+  .sd-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sc-main{padding:12px}
+}
+>>>>>>> f25f895 (Add seller module and update admin)

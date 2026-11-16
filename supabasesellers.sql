@@ -1,0 +1,1 @@
+pbpaste > supabasesellers.sql

@@ -167,6 +167,15 @@ const LIQUID_CSS = `
 .store>div{flex:1;min-width:0;display:grid}.store b{font-size:14px}.store small{font-size:12px}
 .store .vf{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--grad);color:#fff;font-size:10px;font-style:normal;margin-left:6px;vertical-align:middle}
 .store .fl{padding:9px 16px;border-radius:999px;background:var(--ink);color:#fff;font-size:13px;font-weight:600}
+.store .sl.shop{overflow:hidden;background:linear-gradient(135deg,#fde7f0,#efe0fb)}.store .sl.shop img{width:100%;height:100%;object-fit:cover}.store .sl.shop em{font-style:normal;font-weight:800;font-size:20px;color:#b0236b}
+.store b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.store.link{cursor:pointer;transition:transform .15s,box-shadow .15s}.store.link:hover{box-shadow:0 10px 24px #4a166826}.store.link:active{transform:scale(.99)}.store.link:focus-visible{outline:3px solid #f5b8d6;outline-offset:2px}
+.shp{display:flex;align-items:center;gap:16px;padding:16px;border-radius:24px;background:linear-gradient(135deg,#fff,#fbf1fb);border:1px solid var(--edge);box-shadow:0 8px 22px #4a166814;margin-bottom:14px}
+.shp-lg{flex:none;width:76px;height:76px;border-radius:22px;overflow:hidden;display:grid;place-items:center;background:linear-gradient(135deg,#fde7f0,#efe0fb);box-shadow:0 8px 20px #7a1d8c33}
+.shp-lg img{width:100%;height:100%;object-fit:cover}.shp-lg em{font-style:normal;font-weight:800;font-size:32px;color:#b0236b}
+.shp-t{display:grid;gap:3px;min-width:0}.shp-t b{font-size:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shp-t .vf{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--grad);color:#fff;font-size:10px;font-style:normal;margin-left:7px;vertical-align:middle}
+.shp-t small{font-size:13px;color:var(--mute)}.shp-n{justify-self:start;margin-top:4px;padding:4px 12px;border-radius:999px;background:#f4ecf8;color:#6b5b7b;font-size:12px;font-weight:600}
 .opt{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
 .opt-l{display:grid;gap:8px;min-width:0;flex:1}.opt-l>span,.opt-r>span{font-size:12px;color:var(--mute);font-weight:600}
 .pdp-info .var{margin:0;gap:8px}
@@ -871,7 +880,7 @@ export default function App() {
   useLiquid()
   const [stack, setStack] = useState([{ s: 'splash' }])
   const [user, setUser] = useState(() => { try { return api.getUser() } catch { return null } })
-  const [cats, setCats] = useState([]), [prods, setProds] = useState([]), [loading, setLoading] = useState(true)
+  const [cats, setCats] = useState([]), [prods, setProds] = useState([]), [shops, setShops] = useState({}), [loading, setLoading] = useState(true)
   const [cart, setCart] = useState(() => readLS('ms_cart', []))
   const [orders, setOrders] = useState([]), [toast, setToast] = useState(''), [liveSt, setLiveSt] = useState({})
   const [ob, setOb] = useState(0), [mode, setMode] = useState(() => api.RECOVERY_LINK ? 'reset' : api.LINK_EXPIRED ? 'forgot' : 'login')
@@ -937,8 +946,8 @@ export default function App() {
   const bad = useCallback(m => { say(m); setShake(true); setTimeout(() => setShake(false), 480) }, [say])
 
   const load = useCallback(async () => {
-    const [c, p] = await Promise.all([safe(() => api.getCategories()), safe(() => api.getProducts())])
-    if (c) setCats(c); if (p) setProds(p)
+    const [c, p, sh] = await Promise.all([safe(() => api.getCategories()), safe(() => api.getProducts()), safe(() => api.getShops())])
+    if (c) setCats(c); if (p) setProds(p); if (sh) setShops(sh)
     if (!c && !p) say('Could not load products. Check your connection.')
     setLoading(false)
   }, [say])
@@ -1160,7 +1169,9 @@ export default function App() {
     <div className="tools"><div className="search">🔍<input placeholder={`Search ${cur.c.name}...`} value={q} onChange={e => setQ(e.target.value)} /></div><select className="inp sort" aria-label="Sort" value={sort} onChange={e => setSort(e.target.value)}>{Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select></div>
     <div className="chips">{tags.map(t => <button key={t} className={chip === t ? 'on' : ''} onClick={() => setChip(t)}>{t}</button>)}</div><Grid list={shown} loading={loading} {...gp} /></div></>
 
-  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: cur.p, back, addToCart, count, go, like, open }} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
+  if (s === 'shop') body = <ShopScreen shop={cur.shop} prods={prods} loading={loading} back={back} gp={gp} />
+
+  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: cur.p, back, addToCart, count, go, like, open }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
 
   if (s === 'cart') body = <><Hdr title={`My Cart (${count})`} back={back} right={cart.length > 0 && <button className="ib" aria-label="Clear cart" onClick={() => { setCart([]); setPromoOn(false) }}>🗑️</button>} /><div className="scr narrow">
     {!cart.length ? <div className="emp"><div className="emp-i"><CartArt /></div><h3>Your cart is empty</h3><p>Browse our categories and add something you like.</p><button className="btn" onClick={() => tab('categories')}>Start shopping</button></div> : <><Steps n={0} />
@@ -1237,7 +1248,20 @@ export default function App() {
 
 function safeAdmin(u) { try { return api.isAdmin(u) } catch { return false } }
 
-function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish }) {
+function ShopScreen({ shop, prods, loading, back, gp }) {
+  const [q, setQ] = useState('')
+  const list = useMemo(() => prods.filter(x => x.shop_id === shop.id), [prods, shop.id])
+  const shown = useMemo(() => { const k = q.trim().toLowerCase(); return k ? list.filter(x => `${x.name} ${x.brand || ''} ${x.tag || ''}`.toLowerCase().includes(k)) : list }, [list, q])
+  const name = shop.name || 'Shop'
+  return <><Hdr title={name} back={back} /><div className="scr">
+    <div className="shp"><span className="shp-lg">{shop.logo_url ? <img src={shop.logo_url} alt="" decoding="async" draggable="false" /> : <em>{name.trim().charAt(0).toUpperCase()}</em>}</span>
+      <div className="shp-t"><b>{name}<i className="vf">✓</i></b><small>{shop.city ? 'Seller · ' + shop.city : 'Verified seller on Pinkish'}</small><span className="shp-n">{loading ? 'Loading…' : list.length + (list.length === 1 ? ' product' : ' products')}</span></div></div>
+    {list.length > 6 && <div className="tools"><div className="search">🔍<input placeholder={`Search ${name}...`} value={q} onChange={e => setQ(e.target.value)} /></div></div>}
+    <Grid list={shown} loading={loading} {...gp} />
+  </div></>
+}
+
+function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish, shop = null }) {
   const [v, setV] = useState(p.variants?.[0]), [added, setAdded] = useState(false), [n, setN] = useState(1)
   const t = useRef(0)
   useEffect(() => () => clearTimeout(t.current), [])
@@ -1250,7 +1274,12 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
       <small className="pk">{[p.brand, p.tag].filter(Boolean).join(' · ') || 'Pinkish'}</small>
       <div className="row"><h3>{p.name}</h3><Heart on={liked} toggle={() => like(p.id)} inl /></div>
       <small style={{ color: '#8b8197' }}>★ {p.rating} ({p.reviews > 999 ? (p.reviews / 1000).toFixed(1) + 'k' : p.reviews} reviews)</small>
+<<<<<<< HEAD
       <div className="store"><span className="sl"><Glyph v="🛡️" /></span><div><b><span className="bp">Pink</span><span className="bi">ish</span> Store<i className="vf">✓</i></b><small>Official store</small></div><span className="fl">Verified</span></div>
+=======
+      {shop ? (() => { const sh = shop.id ? shop : { id: p.shop_id, name: 'Marketplace seller' }; const openShop = () => go('shop', { shop: sh }); return <div className="store link" role="button" tabIndex={0} aria-label={'View shop ' + (sh.name || '')} onClick={openShop} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShop() } }}><span className="sl shop">{sh.logo_url ? <img src={sh.logo_url} alt="" decoding="async" draggable="false" /> : <em>{(sh.name || 'S').trim().charAt(0).toUpperCase()}</em>}</span><div><b>{sh.name || 'Marketplace seller'}<i className="vf">✓</i></b><small>{sh.city ? 'Seller · ' + sh.city : 'Verified seller on Pinkish'}</small></div><span className="fl">View shop</span></div> })()
+        : <div className="store"><span className="sl"><Glyph v="🛡️" /></span><div><b><span className="bp">Pink</span><span className="bi">ish</span> Store<i className="vf">✓</i></b><small>Official store</small></div><span className="fl">Verified</span></div>}
+>>>>>>> f25f895 (Add seller module and update admin)
       <div className="opt"><div className="opt-l">{multi && <><span>Select option</span><div className="var">{p.variants.map(x => <button key={x.label} className={v?.label === x.label ? 'on' : ''} onClick={() => setV(x)}>{x.label}</button>)}</div></>}</div>
         <div className="opt-r"><span>QTY</span><div className="qty"><button aria-label="Decrease" onClick={() => setN(x => Math.max(1, x - 1))}>−</button><span className="qn">{n}</span><button aria-label="Increase" onClick={() => setN(x => Math.min(20, x + 1))}>+</button></div></div></div>
       <div className="dsc"><h5>Description</h5><ul className="ck">{(p.features || []).map(f => <li key={f}>{f}</li>)}</ul></div></div></div>
