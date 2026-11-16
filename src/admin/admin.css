@@ -531,8 +531,6 @@ html.adm-on body{position:fixed;inset:0;width:100%}
 .lgo .wm{font-size:1.9rem}
 .invp .ih .lk .bmk{width:44px;height:auto;display:block}
 .invp .ih .lk .wm{font-size:1.5rem}
-<<<<<<< HEAD
-=======
 /* =========================================================
    Merchants (marketplace sellers): verification list + detail
    ========================================================= */
@@ -591,4 +589,3 @@ html.adm-on body{position:fixed;inset:0;width:100%}
   .sd-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sc-main{padding:12px}
 }
->>>>>>> f25f895 (Add seller module and update admin)

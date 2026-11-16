@@ -1274,12 +1274,8 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
       <small className="pk">{[p.brand, p.tag].filter(Boolean).join(' · ') || 'Pinkish'}</small>
       <div className="row"><h3>{p.name}</h3><Heart on={liked} toggle={() => like(p.id)} inl /></div>
       <small style={{ color: '#8b8197' }}>★ {p.rating} ({p.reviews > 999 ? (p.reviews / 1000).toFixed(1) + 'k' : p.reviews} reviews)</small>
-<<<<<<< HEAD
-      <div className="store"><span className="sl"><Glyph v="🛡️" /></span><div><b><span className="bp">Pink</span><span className="bi">ish</span> Store<i className="vf">✓</i></b><small>Official store</small></div><span className="fl">Verified</span></div>
-=======
       {shop ? (() => { const sh = shop.id ? shop : { id: p.shop_id, name: 'Marketplace seller' }; const openShop = () => go('shop', { shop: sh }); return <div className="store link" role="button" tabIndex={0} aria-label={'View shop ' + (sh.name || '')} onClick={openShop} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShop() } }}><span className="sl shop">{sh.logo_url ? <img src={sh.logo_url} alt="" decoding="async" draggable="false" /> : <em>{(sh.name || 'S').trim().charAt(0).toUpperCase()}</em>}</span><div><b>{sh.name || 'Marketplace seller'}<i className="vf">✓</i></b><small>{sh.city ? 'Seller · ' + sh.city : 'Verified seller on Pinkish'}</small></div><span className="fl">View shop</span></div> })()
         : <div className="store"><span className="sl"><Glyph v="🛡️" /></span><div><b><span className="bp">Pink</span><span className="bi">ish</span> Store<i className="vf">✓</i></b><small>Official store</small></div><span className="fl">Verified</span></div>}
->>>>>>> f25f895 (Add seller module and update admin)
       <div className="opt"><div className="opt-l">{multi && <><span>Select option</span><div className="var">{p.variants.map(x => <button key={x.label} className={v?.label === x.label ? 'on' : ''} onClick={() => setV(x)}>{x.label}</button>)}</div></>}</div>
         <div className="opt-r"><span>QTY</span><div className="qty"><button aria-label="Decrease" onClick={() => setN(x => Math.max(1, x - 1))}>−</button><span className="qn">{n}</span><button aria-label="Increase" onClick={() => setN(x => Math.min(20, x + 1))}>+</button></div></div></div>
       <div className="dsc"><h5>Description</h5><ul className="ck">{(p.features || []).map(f => <li key={f}>{f}</li>)}</ul></div></div></div>

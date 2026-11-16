@@ -85,17 +85,6 @@ const localUser = (name, phone) => {
   const u = { id: 'local', name: name || 'Guest', phone }; sv('ms_user', u); return u
 }
 
-<<<<<<< HEAD
-export async function signUp({ name, phone, email, password }) {
-  name = str(name, 100); phone = str(phone, 20); email = mail(email)
-  if (!supabase) return localUser(name, phone)
-  const { data, error } = await supabase.auth.signUp({
-    email, password, options: { data: { full_name: name, phone }, emailRedirectTo: window.location.origin },
-  })
-  if (error) throw new Error(friendly(error))
-  // Supabase returns a user with no identities when the email already exists
-  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) throw new Error('This email is already registered. Please log in.')
-=======
 export async function signUp({ name, phone, email, password, redirectTo }) {
   name = str(name, 100); phone = str(phone, 20); email = mail(email)
   if (!supabase) return localUser(name, phone)
@@ -111,7 +100,6 @@ export async function signUp({ name, phone, email, password, redirectTo }) {
   }
   // Supabase returns a user with no identities when the email already exists
   if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) { const e = new Error('This email is already registered. Please log in.'); e.code = 'exists'; throw e }
->>>>>>> f25f895 (Add seller module and update admin)
   if (!data.session) return { needsConfirm: true } // "Confirm email" is on: they must click the link we emailed
   return buildUser(data.user)
 }
@@ -133,15 +121,9 @@ export async function updatePassword(password) {
   const { error } = await supabase.auth.updateUser({ password })
   if (error) throw new Error(friendly(error))
 }
-<<<<<<< HEAD
-export async function signInWithGoogle() {
-  if (!supabase) throw new Error('Google login is unavailable right now.')
-  const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
-=======
 export async function signInWithGoogle(redirectTo) {
   if (!supabase) throw new Error('Google login is unavailable right now.')
   const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectTo || window.location.origin } })
->>>>>>> f25f895 (Add seller module and update admin)
   if (error) throw new Error(friendly(error))
 }
 export async function restoreUser() {
@@ -264,8 +246,6 @@ export async function placeBkashOrder(o) {
   if (error) { const m = String(error.message || ''); throw new Error(/Transaction ID|bKash number|amount|sign in|deliver inside/i.test(m) ? m : friendlyOrder(error)) }
   return data
 }
-<<<<<<< HEAD
-=======
 // Public shop info for the storefront (name + logo only; never NID or documents).
 // Reads the safe view "shops_public" (see supabaseshopspublic.sql); falls back to the shops table's public columns.
 export async function getShops() {
@@ -279,4 +259,3 @@ export async function getShops() {
   }
   return null
 }
->>>>>>> f25f895 (Add seller module and update admin)
