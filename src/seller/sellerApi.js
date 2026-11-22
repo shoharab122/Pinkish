@@ -76,7 +76,11 @@ export async function myProducts(shopId) {
   if (error) throw error
   return data || []
 }
-export async function saveProduct(shop, form, imageFile, existing) {
+export const PHOTOS = 4
+// Photos already saved on a product (older products only have the single cover image_url).
+export const existingImages = p => (Array.isArray(p?.images) && p.images.filter(Boolean).length ? p.images.filter(Boolean) : p?.image_url ? [p.image_url] : [])
+// photos: array of 4 slots (File or null). Pass null to leave a product's photos untouched (e.g. hide/show toggle).
+export async function saveProduct(shop, form, photos, existing) {
   need()
   const price = Number(form.price), stock = parseInt(form.stock, 10)
   if (s(form.name, 120).length < 2) throw new Error('Product name is required.')
@@ -84,12 +88,33 @@ export async function saveProduct(shop, form, imageFile, existing) {
   if (!Number.isFinite(price) || price <= 0 || price > 10000000) throw new Error('Enter a valid price.')
   if (!Number.isInteger(stock) || stock < 0 || stock > 100000) throw new Error('Enter a valid stock quantity.')
   const row = { name: s(form.name, 120), brand: s(form.brand, 60) || null, tag: s(form.tag, 30) || null, category_id: form.category_id, price, stock, is_active: form.is_active !== false }
-  if (imageFile) row.image_url = await uploadImage(shop.id, imageFile)
+  if (photos) {
+    const old = existingImages(existing)
+    const slots = Array.from({ length: PHOTOS }, (_, i) => photos[i] || null)
+    if (slots.some((f, i) => !f && !old[i])) throw new Error(`Add all ${PHOTOS} product photos.`)
+    slots.forEach(f => f && checkFile(f))
+    const urls = await Promise.all(slots.map((f, i) => (f ? uploadImage(shop.id, f) : old[i])))
+    row.images = urls
+    row.image_url = urls[0]
+  }
+  // Flash deal: only touched when the form sends dealPrice (so the hide/show toggle never resets a running deal).
+  // price = live price, old_price = regular price shown crossed out, deal_ends_at = when the price goes back.
+  if ('dealPrice' in form) {
+    const dp = form.dealPrice === '' || form.dealPrice == null ? null : Number(form.dealPrice)
+    if (dp == null) { row.old_price = null; row.deal_ends_at = null }
+    else {
+      const end = new Date(form.dealEnds)
+      if (!Number.isFinite(dp) || dp <= 0 || dp >= price) throw new Error('Deal price must be lower than the regular price.')
+      if (!form.dealEnds || isNaN(end) || end.getTime() <= Date.now() + 60000) throw new Error('Choose a deal end time in the future.')
+      if (end.getTime() > Date.now() + 30 * 864e5) throw new Error('A deal can run for up to 30 days.')
+      row.old_price = price; row.price = dp; row.deal_ends_at = end.toISOString()
+    }
+  }
   if (existing) {
     const { data, error } = await supabase.from('products').update(row).eq('id', existing.id).eq('shop_id', shop.id).select().single()
     if (error) throw error; return data
   }
-  if (!imageFile) throw new Error('Add a product photo.')
+  if (!photos) throw new Error(`Add ${PHOTOS} product photos.`)
   const { data, error } = await supabase.from('products').insert({ ...row, shop_id: shop.id, variants: [{ label: 'Standard', mult: 1 }], features: [] }).select().single()
   if (error) throw error
   return data
@@ -99,4 +124,11 @@ export async function deleteProduct(shop, id) {
 }
 export async function sellerOrders() {
   need(); const { data, error } = await supabase.rpc('seller_orders'); if (error) throw error; return data || []
+}
+export async function sellerQuestions() {
+  need(); const { data, error } = await supabase.rpc('seller_questions'); if (error) throw error; return data || []
+}
+export async function answerQuestion(id, answer) {
+  need(); const { error } = await supabase.rpc('answer_question', { p_id: id, p_answer: s(answer, 600) })
+  if (error) throw new Error(/answer must|own products|not found|sign in/i.test(error.message) ? error.message : 'Could not save your answer. Please try again.')
 }
