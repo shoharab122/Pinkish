@@ -526,11 +526,35 @@ const SHOP_CSS = `
 const POP = '.add,.fab,.qty button,.ib'
 
 /* Delegated listeners power the liquid feel everywhere: ripple, pointer-tracking light and squish-pop (no per-component handlers) */
+// Keeps the UI smooth on weak phones / heavy load:
+//  - pauses every animation while the tab is hidden
+//  - weak devices (<=4 cores / <=4 GB / data saver) start in "lite" mode (no blur, no ambient animation)
+//  - a frame-rate watchdog switches to lite mode if the first seconds run below ~30 fps
+function usePerf() {
+  useEffect(() => {
+    const root = document.documentElement
+    const weak = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4 || !!navigator.connection?.saveData
+    if (weak) root.classList.add('lite')
+    const vis = () => root.classList.toggle('paused', document.hidden)
+    document.addEventListener('visibilitychange', vis)
+    let raf = 0, boot = 0, last = 0, n = 0, bad = 0
+    if (!weak && !NOMOTION) {
+      const tick = t => {
+        if (last) { const d = t - last; if (d < 500) { n++; if (d > 45) bad++ } }
+        last = t
+        if (n >= 120) { if (bad / n > 0.3) root.classList.add('lite'); return }
+        raf = requestAnimationFrame(tick)
+      }
+      boot = setTimeout(() => { raf = requestAnimationFrame(tick) }, 2500) // skip start-up jank
+    }
+    return () => { document.removeEventListener('visibilitychange', vis); clearTimeout(boot); cancelAnimationFrame(raf) }
+  }, [])
+}
 function useLiquid() {
   useEffect(() => {
     let st = document.getElementById('lq-css')
     if (!st) { st = document.createElement('style'); st.id = 'lq-css'; document.head.appendChild(st) }
-    if (st.textContent !== LIQUID_CSS + LOC_CSS + SHOP_CSS) st.textContent = LIQUID_CSS + LOC_CSS + SHOP_CSS
+    if (st.textContent !== LIQUID_CSS + LOC_CSS + SHOP_CSS + GATE_CSS) st.textContent = LIQUID_CSS + LOC_CSS + SHOP_CSS + GATE_CSS
     if (NOMOTION) return
     const light = (el, e) => {
       const r = el.getBoundingClientRect()
@@ -807,6 +831,9 @@ const CatIcon = ({ c }) => {
   return <svg className="cico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{CAT_SVG[k || 'grid']}</svg>
 }
 const ICONS = {
+  shield: <><path d="M12 3l7 3v5c0 4.6-3 8.2-7 10-4-1.8-7-5.4-7-10V6l7-3z" /><path d="M9 12l2.2 2.2L15.5 10" /></>,
+  truck: <><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H13v11H3V6.5z" /><path d="M13 9h4l3 3.2V16h-7V9z" /><circle cx="7.5" cy="17.5" r="1.8" /><circle cx="16.5" cy="17.5" r="1.8" /></>,
+  box: <><path d="M12 3l8 4.2v9.6L12 21l-8-4.2V7.2L12 3z" /><path d="M4 7.2l8 4.3 8-4.3M12 11.5V21" /></>,
   heart: <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />,
   pin: <><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10z" /><circle cx="12" cy="11" r="2.2" /></>,
   card: <><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M3 10.5h18M7 15h3" /></>,
@@ -953,12 +980,12 @@ function Notifications({ list, back, onOpen, onReadAll }) {
       : <div className="nt">{list.map(n => <button key={n.id} className={'nt-i' + (n.is_read ? '' : ' un')} onClick={() => onOpen(n)}><span className="nt-d" aria-hidden="true" /><span className="nt-t"><b>{n.title}</b>{n.body && <small>{n.body}</small>}</span><em>{ago(n.created_at)}</em></button>)}</div>}</div></>
 }
 
-function QA({ p, user, say }) {
+function QA({ p, user, say, login }) {
   const [list, setList] = useState(null), [q, setQ] = useState(''), [busy, setBusy] = useState(false)
   useEffect(() => { let on = true; api.getQuestions(p.id).then(r => on && setList(r)); return () => { on = false } }, [p.id])
   const ask = async e => {
     e.preventDefault()
-    if (!user?.id || user.id === 'local') return say('Please log in to ask a question')
+    if (!user?.id || user.id === 'local') return login ? login('ask') : say('Please log in to ask a question')
     setBusy(true)
     try { const r = await api.askQuestion(user.id, p.id, q); setList(l => [r, ...(l || [])]); setQ(''); say('Question sent. The seller will answer soon.', 2600) } catch (x) { say(x.message, 3000) }
     setBusy(false)
@@ -973,8 +1000,23 @@ function QA({ p, user, say }) {
 const ProductCard = memo(({ p, i, add, open, liked, like }) => <div className="card rise" style={{ '--i': Math.min(i, 12) }} onClick={() => open(p)}><Heart on={liked} toggle={() => like(p.id)} />{api.dealLive(p) && <span className="dl">-{api.dealPct(p)}%</span>}<Pic p={p} />
   <div className="cinfo"><small>{p.tag || p.brand}</small><h4>{p.name}</h4><div className="cfoot"><b>{taka(p.price)}{api.dealLive(p) && <s>{taka(p.old_price)}</s>}</b><button className="add" aria-label="Add to cart" onClick={e => { e.stopPropagation(); add(p) }}>+</button></div></div></div>)
 
-const Grid = memo(({ list, loading, add, open, wish, like }) => loading ? <div className="grid">{[...Array(6)].map((_, i) => <div key={i} className="skel" />)}</div>
-  : list.length ? <div className="grid">{list.map((p, i) => <ProductCard key={p.id} {...{ p, i, add, open, like }} liked={wish.has(p.id)} />)}</div> : <p className="empty">No products found.</p>)
+const CHUNK = 24
+const Grid = memo(({ list, loading, add, open, wish, like }) => {
+  const [n, setN] = useState(CHUNK), end = useRef(null), first = list[0]?.id
+  useEffect(() => { setN(CHUNK) }, [first])
+  // the sentinel overlaps the last 400px of the list, so the next batch is ready before you scroll to it
+  useEffect(() => {
+    const el = end.current
+    if (!el || n >= list.length || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(es => { if (es[0].isIntersecting) setN(x => x + CHUNK) })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [n, list.length])
+  if (loading) return <div className="grid">{[...Array(6)].map((_, i) => <div key={i} className="skel" />)}</div>
+  if (!list.length) return <p className="empty">No products found.</p>
+  const shown = n >= list.length ? list : list.slice(0, n)
+  return <><div className="grid">{shown.map((p, i) => <ProductCard key={p.id} {...{ p, i, add, open, like }} liked={wish.has(p.id)} />)}</div>{n < list.length && <div ref={end} aria-hidden="true" style={{ height: 400, marginTop: -400, pointerEvents: 'none' }} />}</>
+})
 
 /* ---------- Location: chip + map picker ---------- */
 const LOC_CSS = `
@@ -1152,7 +1194,7 @@ const OrderCard = ({ o, st, open }) => { const its = o.items || [], n = its.redu
     <div className="prg" aria-hidden="true">{STEPS.map((_, k) => <i key={k} className={k <= st ? 'on' : ''} />)}</div>
     <div className="oc-f"><span>{HINT[st]}</span><em>{st < 3 ? 'Track order' : 'View details'}<Icon n="chev" /></em></div></div> }
 
-const Profile = memo(({ user, admin, count, wishCount, place, hasAddr, tab, go, say, onLogout }) => {
+const Profile = memo(({ user, admin, count, wishCount, place, hasAddr, tab, go, say, onLogout, authed, onLogin }) => {
   const cols = useMemo(() => [
     [['Account', [['receipt', 'My Orders', 'Track your deliveries', () => tab('orders'), 't1'], ['heart', 'Wishlist', `${wishCount} saved item${wishCount === 1 ? '' : 's'}`, () => go('wishlist'), 't2'], ['pin', 'Addresses', hasAddr ? place : 'Set your delivery address', () => go('address'), 't3'], ['card', 'Payment Methods', 'Cards & mobile wallets', null, 't1']]]],
     [...(admin ? [['Store admin', [['grid', 'Manage Categories & Products', 'Add or remove items', () => go('manage'), 't2']]]] : []),
@@ -1160,23 +1202,24 @@ const Profile = memo(({ user, admin, count, wishCount, place, hasAddr, tab, go, 
   ], [admin, wishCount, tab, go, hasAddr, place])
   return <div className="scr narrow pf">
     <div className="pf-hero"><div className="pf-av"><div className="av">{(user?.name || 'G')[0].toUpperCase()}</div></div>
-      <div className="pf-id"><em>Welcome back</em><b>{user?.name || 'Guest'}</b><small>{user?.phone || 'Welcome back'}</small>{admin && <span className="pf-bd">★ Store Admin</span>}</div></div>
+      <div className="pf-id"><em>{authed ? 'Welcome back' : 'Welcome'}</em><b>{authed ? user?.name || 'Guest' : 'Guest'}</b><small>{authed ? user?.phone || 'Welcome back' : 'Log in to order and track deliveries'}</small>{admin && <span className="pf-bd">★ Store Admin</span>}</div></div>
     <div className="pf-stats">
       <button onClick={() => tab('cart')}><i className="t1"><Icon n="bag" /></i><b>{count}</b><small>In cart</small></button>
       <button onClick={() => go('wishlist')}><i className="t2"><Icon n="heart" /></i><b>{wishCount}</b><small>Wishlist</small></button>
       <button onClick={() => go('address')}><i className="t3"><Icon n="pin" /></i><b>{place}</b><small>Delivery area</small></button></div>
     <div className="pf-cols">{cols.map((col, n) => <div className="pf-col" key={n}>{col.map(([t, rows]) => <section key={t}><h5 className="pf-t">{t}</h5><div className="pf-g">
       {rows.map(([i, l, d, f, tone]) => <button key={l} className="menu pm" onClick={f || (() => say('Coming soon'))}><span className={'pi ' + tone}><Icon n={i} /></span><span className="pt"><b>{l}</b><small>{d}</small></span><span className="chev"><Icon n="chev" /></span></button>)}</div></section>)}</div>)}</div>
-    <button className="menu pf-out" onClick={onLogout}><span><Icon n="logout" /></span><span>Log out</span></button>
+    {authed ? <button className="menu pf-out" onClick={onLogout}><span><Icon n="logout" /></span><span>Log out</span></button>
+      : <button className="menu pf-out pf-in" onClick={onLogin}><span><Icon n="user" /></span><span>Log in / Sign up</span></button>}
   </div>
 })
 
 export default function App() {
   const [oflt, setOflt] = useState('all')
-  useLiquid()
+  useLiquid(); usePerf()
   const [stack, setStack] = useState([{ s: 'splash' }])
   const [user, setUser] = useState(() => { try { return api.getUser() } catch { return null } })
-  const [cats, setCats] = useState([]), [prods, setProds] = useState([]), [shops, setShops] = useState({}), [loading, setLoading] = useState(true)
+  const [cats, setCats] = useState(() => readLS('pk_c', [])), [prods, setProds] = useState(() => readLS('pk_p', [])), [shops, setShops] = useState(() => readLS('pk_s', {})), [loading, setLoading] = useState(() => !readLS('pk_p', []).length)
   const [cart, setCart] = useState(() => readLS('ms_cart', []))
   const [orders, setOrders] = useState([]), [toast, setToast] = useState(''), [liveSt, setLiveSt] = useState({})
   const [ob, setOb] = useState(0), [mode, setMode] = useState(() => api.RECOVERY_LINK ? 'reset' : api.LINK_EXPIRED ? 'forgot' : 'login')
@@ -1193,6 +1236,7 @@ export default function App() {
   const [dir, setDir] = useState('fade'), [sort, setSort] = useState('pop'), [chip, setChip] = useState('All'), dq = useDeferredValue(q)
   const toastT = useRef(0), wishPrev = useRef(null), wishUser = useRef(''), prodsR = useRef([]), recov = useRef(!!api.RECOVERY_LINK)
 
+  const [gate, setGate] = useState(null) // why the "please log in" sheet is open (null = closed)
   const cur = stack[stack.length - 1]
   const s = cur.s
   const admin = useMemo(() => !!user && !!safeAdmin(user), [user])
@@ -1234,18 +1278,43 @@ export default function App() {
   const say = useCallback((m, ms = 1800) => { clearTimeout(toastT.current); setToast(m); toastT.current = setTimeout(() => setToast(''), ms) }, [])
   const open = useCallback(p => go('product', { p }), [go])
   const like = useCallback(id => setWish(w => w.includes(id) ? w.filter(x => x !== id) : [...w, id]), [])
-  const logout = useCallback(async () => { await safe(() => api.signOut()); setUser(null); tab('auth') }, [tab])
+  const logout = useCallback(async () => { await safe(() => api.signOut()); setUser(null); tab('home'); say('You have been logged out') }, [tab, say])
   const saveLoc = useCallback(v => {
     if (!v) return say('Add your area or full address')
     setLoc(v); writeLS('ms_loc', v); setAddr(a => ({ ...a, address: fullAddr(v), lat: v.lat, lng: v.lng })); say('Address saved'); back()
   }, [say, back])
   const bad = useCallback(m => { say(m); setShake(true); setTimeout(() => setShake(false), 480) }, [say])
+  // ---- login on demand: browsing is open to everyone, an account is needed only to order / ask / follow ----
+  const authed = !!realUid(user) || (!api.supabase && !!user)
+  const pending = useRef(null) // what the person was doing when we asked them to log in ('checkout' resumes it)
+  const needLogin = useCallback(why => setGate(why || 'login'), [])
+  const goLogin = useCallback(() => { pending.current = null; setMode('login'); go('auth') }, [go])
+  const openAuth = m => { pending.current = gate === 'checkout' ? 'checkout' : null; setGate(null); setMode(m); go('auth') }
+  const finishAuth = () => {
+    const n = pending.current; pending.current = null
+    if (n === 'checkout') { setDir('fwd'); setStack(a => [...a.slice(0, -1), { s: 'checkout' }]) } // swap the login screen for checkout
+    else if (depth.current > 0) back()
+    else tab('home')
+  }
+  const googleGate = () => { try { sessionStorage.setItem('pk_after', gate === 'checkout' ? 'checkout' : '') } catch { /* storage unavailable */ } setGate(null); api.signInWithGoogle().catch(e => say(e?.message || 'Google login failed')) }
+  const closeAuth = () => { pending.current = null; setMode('login'); if (depth.current > 0) back(); else tab('home') }
 
-  const load = useCallback(async () => {
-    const [c, p, sh] = await Promise.all([safe(() => api.getCategories()), safe(() => api.getProducts()), safe(() => api.getShops())])
-    if (c) setCats(c); if (p) setProds(p); if (sh) setShops(sh)
-    if (!c && !p) say('Could not load products. Check your connection.')
-    setLoading(false)
+  const busyL = useRef(false), againL = useRef(null), sigs = useRef({ c: '', p: '', s: '' })
+  // only = 'p' reloads just the products (cheap); anything else reloads everything.
+  // Never runs two loads at once, and skips the re-render when the data did not change.
+  const load = useCallback(async only => {
+    if (busyL.current) { againL.current = againL.current === 'all' || only !== 'p' ? 'all' : 'p'; return }
+    busyL.current = true
+    try {
+      const [c, p, sh] = await Promise.all([only === 'p' ? null : safe(() => api.getCategories()), safe(() => api.getProducts()), only === 'p' ? null : safe(() => api.getShops())])
+      const put = (k, v, set, sg, store) => { if (!v) return; if (sigs.current[k] !== sg) { sigs.current[k] = sg; set(v); setTimeout(() => writeLS(store, v), 0) } }
+      put('c', c, setCats, c && JSON.stringify(c), 'pk_c')
+      put('p', p, setProds, p && p.map(x => [x.id, x.name, x.price, x.old_price, x.deal_ends_at, x.stock, x.is_active, x.image_url, x.tag, x.brand, x.rating, x.reviews, x.category_id, x.shop_id, JSON.stringify(x.variants), JSON.stringify(x.features), (x.images || []).join(',')].join('|')).join('~'), 'pk_p')
+      put('s', sh, setShops, sh && JSON.stringify(sh), 'pk_s')
+      if (!c && !p && only !== 'p') say('Could not load products. Check your connection.')
+    } finally { busyL.current = false; setLoading(false) }
+    const next = againL.current; againL.current = null
+    if (next) load(next === 'p' ? 'p' : undefined)
   }, [say])
 
   useEffect(() => { load(); return () => clearTimeout(toastT.current) }, [load])
@@ -1268,11 +1337,11 @@ export default function App() {
   const unread = useMemo(() => notifs.reduce((a, n) => a + (n.is_read ? 0 : 1), 0), [notifs])
   const readAll = useCallback(() => { setNotifs(a => a.map(n => ({ ...n, is_read: true }))); safe(() => api.markNotificationsRead(user?.id)) }, [user?.id])
   const toggleFollow = useCallback(async shopId => {
-    if (!user?.id || user.id === 'local') return say('Please log in to follow shops')
+    if (!user?.id || user.id === 'local') return needLogin('follow')
     const on = !following.has(shopId), flip = v => setFollowing(s => { const n = new Set(s); v ? n.add(shopId) : n.delete(shopId); return n })
     flip(on)
     try { await api.setFollow(user.id, shopId, on); say(on ? 'Following. You will hear about new products and deals.' : 'Unfollowed', 2200) } catch { flip(!on); say('Could not update. Please try again.') }
-  }, [user?.id, following, say])
+  }, [user?.id, following, say, needLogin])
   const openNote = useCallback(n => {
     if (!n.is_read) { setNotifs(a => a.map(x => x.id === n.id ? { ...x, is_read: true } : x)); safe(() => api.markNotificationsRead(user?.id, [n.id])) }
     const [kind, id] = String(n.link || '').split(':')
@@ -1284,16 +1353,19 @@ export default function App() {
     if (ev === 'PASSWORD_RECOVERY') { recov.current = true; setMode('reset'); setStack([{ s: 'auth' }]); return }
     if (!u) { setUser(null); return }
     setUser(p => (p?.id === u.id && p.is_admin === u.is_admin ? p : u))
-    if (!recov.current) setStack(st => (['splash', 'ob', 'auth'].includes(st[st.length - 1].s) ? [{ s: 'home' }] : st))
+    if (!recov.current) setStack(st => { const top = st[st.length - 1].s; return top === 'splash' || top === 'ob' || (top === 'auth' && depth.current === 0) ? [{ s: 'home' }] : st })
   }), [])
   // use the name / phone given at registration to pre-fill delivery details
   useEffect(() => { if (user?.id && user.id !== 'local') setAddr(a => ({ ...a, name: a.name || user.name || '', phone: a.phone || user.mobile || '' })) }, [user])
   // new / edited / hidden products and categories show up without a reload
   useEffect(() => {
     const sb = api.supabase; if (!sb) return
-    let t; const soon = () => { clearTimeout(t); t = setTimeout(load, 400) }, vis = () => { if (!document.hidden) soon() }
-    const ch = sb.channel('store-live').on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, soon).on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, soon).subscribe()
-    document.addEventListener('visibilitychange', vis); const poll = setInterval(vis, 30000)
+    // bursts of changes are merged into one refresh, at most one every 4 seconds
+    let t, last = 0, full = false
+    const soon = all => { if (all) full = true; clearTimeout(t); t = setTimeout(() => { last = Date.now(); const f = full; full = false; load(f ? undefined : 'p') }, Math.max(500, 4000 - (Date.now() - last))) }
+    const vis = () => { if (!document.hidden) soon(true) }
+    const ch = sb.channel('store-live').on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => soon(false)).on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => soon(true)).subscribe()
+    document.addEventListener('visibilitychange', vis); const poll = setInterval(() => { if (!document.hidden) soon(false) }, 90000)
     return () => { clearTimeout(t); clearInterval(poll); document.removeEventListener('visibilitychange', vis); sb.removeChannel(ch) }
   }, [load])
   useEffect(() => { const t = setTimeout(() => writeLS('ms_cart', cart), 250); return () => clearTimeout(t) }, [cart])
@@ -1319,7 +1391,7 @@ export default function App() {
   useEffect(() => {
     if (cur.s !== 'splash') return
     let on = true
-    Promise.all([safe(() => api.restoreUser()), new Promise(r => setTimeout(r, 1500))]).then(([u]) => { if (!on) return; if (recov.current || api.LINK_EXPIRED) return tab('auth'); if (u) setUser(u); tab(u || user ? 'home' : 'ob') })
+    Promise.all([safe(() => api.restoreUser()), new Promise(r => setTimeout(r, user ? 250 : 800))]).then(([u]) => { if (!on) return; if (recov.current || api.LINK_EXPIRED) return tab('auth'); if (u) setUser(u); let r = ''; try { r = sessionStorage.getItem('pk_after') || ''; sessionStorage.removeItem('pk_after') } catch { /* storage unavailable */ } if (r === 'checkout' && (u || user)) { tab('cart'); say('You are logged in. Continue to checkout.', 3000) } else tab('home') })
     return () => { on = false }
   }, [])
   useEffect(() => { if (s === 'orders' || s === 'tracking') safe(() => api.getOrders(user?.id), null).then(o => { if (o) setOrders(o) }) }, [s, user])
@@ -1389,9 +1461,9 @@ export default function App() {
       else if (mode === 'signup') {
         const r = await api.signUp({ name, phone, email, password: form.pw })
         if (r?.needsConfirm) { say('Account created. Check your email to confirm it, then log in.', 5000); setMode('login') }
-        else { setUser(r); tab('home') }
+        else { setUser(r); finishAuth() }
       }
-      else { const u = await api.signIn(email, form.pw); setUser(u); tab('home') }
+      else { const u = await api.signIn(email, form.pw); setUser(u); finishAuth() }
     }
     catch (err) { bad(err?.message || 'Could not continue. Please try again.') }
     finally { setBusy(false) }
@@ -1399,6 +1471,7 @@ export default function App() {
   const applyPromo = () => promo.trim().toUpperCase() === 'SHIELD10' ? (setPromoOn(true), say('10% off applied')) : say('Invalid promo code')
   const place = async () => {
     if (busy) return
+    if (!authed) return needLogin('checkout')
     if (delivery.fee == null) return say(OUT_MSG, 3500)
     if (pay === 1) { // manual bKash: no order yet. It is created only when the customer submits the TrxID, so leaving keeps the cart
       if (!realUid(user) || !api.supabase) return say('Please sign in with your email to pay with bKash')
@@ -1448,14 +1521,14 @@ export default function App() {
   if (s === 'splash') return <div className="app"><div className="splash"><div className="lgcard"><div className="lk col" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="84" height="84" alt="" decoding="async" fetchpriority="high" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div></div><div>Privacy. Confidence. Comfort. Wellness.</div><div className="sbar"><i /></div></div></div>
 
   if (s === 'ob') { const o = OB[ob]; body = <div className="ob">
-    <div className="row"><span /><button onClick={() => tab('auth')} style={{ color: '#8b8197' }}>Skip</button></div>
+    <div className="row"><span /><button onClick={() => tab('home')} style={{ color: '#8b8197' }}>Skip</button></div>
     <div key={ob} className="hero pop"><span className="float"><Glyph v={o.e} /></span></div><div key={'t' + ob} className="fadeUp"><h1>{o.t[0]}<br />{o.t[1]}</h1><p>{o.d}</p></div>
     <div className="row"><div className="dots">{OB.map((_, i) => <i key={i} className={i === ob ? 'on' : ''} />)}</div>
-      {ob < 2 ? <button className="fab" aria-label="Next" onClick={() => setOb(ob + 1)}>→</button> : <button className="btn" style={{ width: 200 }} onClick={() => tab('auth')}>Get Started</button>}</div></div> }
+      {ob < 2 ? <button className="fab" aria-label="Next" onClick={() => setOb(ob + 1)}>→</button> : <button className="btn" style={{ width: 200 }} onClick={() => tab('home')}>Get Started</button>}</div></div> }
 
   if (s === 'auth') body = <div className="auth">
     <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
-    <header className="abar"><span className="am"><img src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" draggable="false" /></span><div className="an"><h1><span className="bn"><span className="bp">Pink</span><span className="bi">ish</span></span></h1><small>Privacy. Confidence. Comfort. Wellness.</small></div><span className="ap"><Icon n="lock" />Private</span></header>
+    <header className="abar"><span className="am"><img src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" draggable="false" /></span><div className="an"><h1><span className="bn"><span className="bp">Pink</span><span className="bi">ish</span></span></h1><small>Privacy. Confidence. Comfort. Wellness.</small></div><span className="ap"><Icon n="lock" />Private</span><button type="button" className="a-x" aria-label="Close" onClick={closeAuth}>✕</button></header>
     <div className="auth-in">
       <form className={'auth-card glass' + (shake ? ' shake' : '')} onSubmit={login} noValidate>
         {(mode === 'login' || mode === 'signup') && <div className="ah"><h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2><p>{mode === 'login' ? 'Log in to continue shopping privately.' : 'Join Pinkish for discreet delivery across Chattogram.'}</p></div>}
@@ -1472,7 +1545,7 @@ export default function App() {
         <button className="btn" type="submit" disabled={busy}>{busy ? <i className="spin" /> : { login: 'Login', signup: 'Create Account', forgot: 'Send Reset Link', reset: 'Update Password' }[mode]}</button>
         {(mode === 'login' || mode === 'signup') && <>
           <div className="or"><span>or continue with</span></div>
-          <div className="socials" style={{ gridTemplateColumns: '1fr' }}><button type="button" className="btn o social" onClick={() => api.signInWithGoogle().catch(e => bad(e?.message || 'Google login failed'))}><GoogleG />Google</button></div>
+          <div className="socials" style={{ gridTemplateColumns: '1fr' }}><button type="button" className="btn o social" onClick={() => { try { sessionStorage.setItem('pk_after', pending.current || '') } catch { /* storage unavailable */ } api.signInWithGoogle().catch(e => bad(e?.message || 'Google login failed')) }}><GoogleG />Google</button></div>
         </>}
       </form>
       {mode !== 'reset' && <p className="sw">{mode === 'forgot' ? <>Remembered it? <button type="button" onClick={() => setMode('login')}>Back to login</button></> : <>{mode === 'login' ? 'New here?' : 'Already have an account?'} <button type="button" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>{mode === 'login' ? 'Create an account' : 'Login'}</button></>}</p>}
@@ -1481,7 +1554,7 @@ export default function App() {
 
   if (s === 'home') body = <div className="scr hm">
     <div className="hstick">
-      <div className="topbar"><LocChip loc={loc} onClick={() => go('address')} /><div className="tbr"><NotifBell n={unread} authed={!!user?.id && user.id !== 'local'} onOpen={() => user?.id && user.id !== 'local' ? go('notifications') : say('Please log in to see notifications')} /><button className="ib" aria-label="Open cart" onClick={() => tab('cart')}><Icon n="bag" />{count > 0 && <em className="cb" key={count}>{count}</em>}</button></div></div>
+      <div className="topbar"><LocChip loc={loc} onClick={() => go('address')} /><div className="tbr"><NotifBell n={unread} authed={!!user?.id && user.id !== 'local'} onOpen={() => user?.id && user.id !== 'local' ? go('notifications') : needLogin('notifications')} /><button className="ib" aria-label="Open cart" onClick={() => tab('cart')}><Icon n="bag" />{count > 0 && <em className="cb" key={count}>{count}</em>}</button></div></div>
       <div className="search"><Icon n="search" /><input placeholder="What are you looking for?" value={q} onChange={e => setQ(e.target.value)} /><button className="sf" aria-label="Filters" onClick={() => tab('categories')}><Icon n="sliders" /></button></div>
     </div>
     <Banner shop={tab} go={go} open={open} cats={cats} prods={prods} />
@@ -1502,7 +1575,7 @@ export default function App() {
   if (s === 'notifications') body = <Notifications list={notifs} back={back} onOpen={openNote} onReadAll={readAll} />
   if (s === 'shop') body = <ShopScreen shop={cur.shop} prods={prods} loading={loading} back={back} gp={gp} follow={{ on: following, toggle: toggleFollow }} />
 
-  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: cur.p, back, addToCart, count, go, like, open, user, say }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
+  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: cur.p, back, addToCart, count, go, like, open, user, say, login: needLogin }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
 
   if (s === 'cart') body = <><Hdr title={`My Cart (${count})`} back={back} right={cart.length > 0 && <button className="ib" aria-label="Clear cart" onClick={() => { setCart([]); setPromoOn(false) }}>🗑️</button>} /><div className="scr narrow">
     {!cart.length ? <div className="emp"><div className="emp-i"><CartArt /></div><h3>Your cart is empty</h3><p>Browse our categories and add something you like.</p><button className="btn" onClick={() => tab('categories')}>Start shopping</button></div> : <><Steps n={0} />
@@ -1511,7 +1584,7 @@ export default function App() {
       <div className="promo"><input placeholder="Have a promo code? (try SHIELD10)" value={promo} onChange={e => setPromo(e.target.value)} /><button onClick={applyPromo}>Apply</button></div>
       <div className="sum"><div><span>Subtotal ({count} item{count === 1 ? '' : 's'})</span><span><Money v={subtotal} /></span></div>{disc > 0 && <div><span>Discount</span><span style={{ color: '#3ab36b' }}>−<Money v={disc} /></span></div>}<div><span>Delivery{delivery.km != null && <small className="dl-km"> · {delivery.km.toFixed(1)} km</small>}</span><span className={delivery.fee == null ? 'dl-bad' : 'dl-ok'}>{feeTxt(delivery)}</span></div><div className="t"><span>Total</span><span><Money v={total} /></span></div></div>
       <Rail title="Add more to your order" list={cartSugg} {...gp} /></>}</div>
-    {cart.length > 0 && <div className="buybar"><div><small>Total · {count} item{count === 1 ? '' : 's'}</small><b><Money v={total} /></b></div><button className="btn buy" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : go('checkout')}>Checkout →</button></div>}</>
+    {cart.length > 0 && <div className="buybar"><div><small>Total · {count} item{count === 1 ? '' : 's'}</small><b><Money v={total} /></b></div><button className="btn buy" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : !authed ? needLogin('checkout') : go('checkout')}>Checkout →</button></div>}</>
 
   if (s === 'checkout') body = <><Hdr title="Delivery Details" back={back} /><div className="scr narrow"><Steps n={1} />
     {[['name', 'Full Name', 'name'], ['phone', 'Phone Number (+8801XXXXXXXXX)', 'tel'], ['address', 'House, Road, Area, Chattogram', 'street-address'], ['note', 'Delivery Instructions (Optional)', 'off']].map(([k, l, ac]) => <input key={k} className="inp" placeholder={l} autoComplete={ac} inputMode={k === 'phone' ? 'tel' : undefined} value={addr[k]} onChange={e => setAddr(a => ({ ...a, [k]: e.target.value }))} />)}
@@ -1556,7 +1629,7 @@ export default function App() {
         <div className="tot"><span>Total</span><span>{taka(o.total)}</span></div></section>
       {its.length > 0 && <button className="btn o" style={{ marginTop: 14 }} onClick={() => reorder(o)}>Order again</button>}</div></> }
 
-  if (s === 'profile') body = <Profile {...{ user, admin, count, tab, go, say }} wishCount={wish.length} place={loc.area || loc.city} hasAddr={!!(loc.area || loc.line)} onLogout={logout} />
+  if (s === 'profile') body = <Profile {...{ user, admin, count, tab, go, say }} wishCount={wish.length} place={loc.area || loc.city} hasAddr={!!(loc.area || loc.line)} onLogout={logout} authed={authed} onLogin={goLogin} />
 
   if (s === 'address') body = <AddressScreen key="addr" loc={loc} back={back} onSave={saveLoc} />
 
@@ -1574,7 +1647,72 @@ export default function App() {
     <select className="inp" value={np.category_id} onChange={e => setNp(p => ({ ...p, category_id: e.target.value }))}><option value="">Select category</option>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
     <button className="btn" onClick={() => { if (!np.name || !np.price || !np.category_id) return say('Fill all fields'); adminDo(async () => { await api.addProduct({ ...np, price: +np.price, image_url: np.image_url || null }); setNp({ name: '', price: '', category_id: '', image_url: '' }) }, 'Product added') }}>Add Product</button></div></>
 
-  return <div className="app">{!['ob', 'auth'].includes(s) && <Nav {...{ s, count, tab }} />}<main className="main"><div key={s + stack.length} className={'pg ' + dir}>{body}</div></main>{toast && <div className="toast" role="status">{toast}</div>}</div>
+  return <div className="app">{!['ob', 'auth'].includes(s) && <Nav {...{ s, count, tab }} />}<main className="main"><div key={s + stack.length} className={'pg ' + dir}>{body}</div></main>{toast && <div className="toast" role="status">{toast}</div>}{gate && <LoginSheet why={gate} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onGoogle={googleGate} onClose={() => setGate(null)} />}</div>
+}
+
+const GATE_CSS = `
+.gt-bg{position:fixed;inset:0;z-index:900;display:flex;align-items:flex-end;justify-content:center;background:#1a063a73;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:gtFade .25s ease both;overscroll-behavior:contain}
+.gt{position:relative;width:100%;max-width:480px;max-height:92dvh;overflow-y:auto;overscroll-behavior:contain;display:grid;gap:12px;justify-items:center;text-align:center;padding:10px 20px calc(18px + env(safe-area-inset-bottom));border-radius:30px 30px 0 0;background:linear-gradient(180deg,#fff 0,#fff 60%,#fbf4fb);box-shadow:0 -20px 60px #4a166855;animation:gtUp .4s cubic-bezier(.2,.9,.3,1) both;will-change:transform;touch-action:pan-y}
+.gt.drag{transition:none;animation:none}.gt.rel{transition:transform .28s cubic-bezier(.2,.9,.3,1)}
+.gt-bar{width:42px;height:5px;border-radius:9px;background:#d9cde6;margin:2px 0 4px}
+.gt-x{position:absolute;right:14px;top:14px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#f4ecf8;color:var(--mute);font-size:14px;border:0;cursor:pointer}
+.gt-ic{position:relative;width:72px;height:72px;border-radius:24px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#8e2a8c,#e0457b);box-shadow:0 14px 30px #8e2a8c55,inset 0 1.5px 0 #ffffff80;margin-top:6px}
+.gt-ic::before{content:'';position:absolute;inset:-8px;border-radius:30px;border:2px solid #e0457b30;animation:gtPulse 2.6s ease-out infinite}
+.gt-ic .ico{width:32px;height:32px}
+.gt h3{margin:2px 0 0;font-size:21px;line-height:1.2;letter-spacing:-.2px;color:var(--ink)}
+.gt p{margin:0;font-size:14px;line-height:1.5;color:var(--mute);max-width:330px}
+.gt-pts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;margin:4px 0 2px}
+.gt-pts span{display:grid;justify-items:center;gap:4px;padding:10px 4px;border-radius:16px;background:#f8f1fb;font-size:11.5px;font-weight:600;color:var(--p1);line-height:1.2}
+.gt-pts i{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;font-style:normal;color:#fff;background:linear-gradient(135deg,#8e2a8c,#e0457b);box-shadow:0 6px 14px #8e2a8c40,inset 0 1px 0 #ffffff70}.gt-pts i .ico{width:21px;height:21px}
+.gt .btn{width:100%;min-height:54px;font-size:16px;display:flex;align-items:center;justify-content:center;gap:10px;touch-action:manipulation}
+.gt .gg{background:#fff;color:var(--ink);border:1.5px solid var(--line);box-shadow:0 6px 16px #4a166814}
+.gt .gg::before,.gt .gg::after{display:none}
+.gt-or{display:flex;align-items:center;gap:12px;width:100%;font-size:12px;color:var(--mute)}
+.gt-or::before,.gt-or::after{content:'';flex:1;height:1px;background:var(--line)}
+.gt-no{background:none;border:0;padding:10px 16px;font-size:14px;font-weight:600;color:var(--mute);cursor:pointer;touch-action:manipulation}
+.gt-fine{font-size:11.5px;color:var(--mute);display:flex;align-items:center;gap:6px;margin:0}
+@media(min-width:600px){.gt-bg{align-items:center}.gt{border-radius:30px;padding-bottom:22px}.gt-bar{display:none}}
+@media(max-height:640px){.gt{gap:8px}.gt-ic{width:56px;height:56px;border-radius:18px}.gt-pts{display:none}}
+@keyframes gtFade{from{opacity:0}}
+@keyframes gtUp{from{transform:translateY(60px);opacity:0}}
+@keyframes gtPulse{0%{opacity:.9;transform:scale(.94)}100%{opacity:0;transform:scale(1.18)}}
+@media(prefers-reduced-motion:reduce){.gt,.gt-bg,.gt-ic::before{animation:none}}
+.a-x{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;background:#ffffff22;border:1px solid #ffffff3d;font-size:15px;cursor:pointer;touch-action:manipulation}
+.auth{overscroll-behavior:contain;-webkit-overflow-scrolling:touch;min-height:100dvh}
+.auth .fld input,.auth .fld{font-size:16px}
+.auth .btn,.auth .social,.auth .tabs button,.auth .sw button,.auth .forgot button{touch-action:manipulation}
+@media(max-width:480px){.auth .auth-card{border-radius:26px}.auth .abar{margin-bottom:4px}}
+.pf .pf-in{background:linear-gradient(120deg,#8e2a8c,#e0457b);border-color:transparent;color:#fff;box-shadow:0 10px 24px #8e2a8c44}
+.pf .pf-in span:first-child{background:#ffffff33;color:#fff}
+`
+const GATE_TXT = {
+  checkout: ['Log in to place your order', 'Your cart is saved. Log in or sign up to checkout and track your delivery.'],
+  ask: ['Log in to ask the seller', 'Log in or sign up to send your question and see the answer here.'],
+  follow: ['Log in to follow shops', 'Log in or sign up to hear about new products and deals.'],
+  notifications: ['Log in to see updates', 'Log in or sign up to get order updates and seller answers.'],
+  login: ['Log in to continue', 'Please log in or sign up to continue.'],
+}
+function LoginSheet({ why, onLogin, onSignup, onGoogle, onClose }) {
+  const [t, d] = GATE_TXT[why] || GATE_TXT.login, [dy, setDy] = useState(0), [mode, setMode] = useState(''), y0 = useRef(null), ref = useRef(null)
+  useEffect(() => {
+    const k = e => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k)
+    const prev = document.body.style.overflow; document.body.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev }
+  }, [onClose])
+  // swipe the sheet down to dismiss (only when it is scrolled to the top)
+  const ts = e => { y0.current = ref.current && ref.current.scrollTop <= 0 ? e.touches[0].clientY : null }
+  const tm = e => { if (y0.current == null) return; const v = e.touches[0].clientY - y0.current; if (v > 0) { setMode('drag'); setDy(v) } }
+  const te = () => { if (y0.current == null) return; y0.current = null; setMode('rel'); if (dy > 110) onClose(); else setDy(0) }
+  return <div className="gt-bg" onClick={onClose}><div ref={ref} className={'gt ' + mode} style={dy ? { transform: `translateY(${dy}px)` } : undefined} role="dialog" aria-modal="true" aria-label={t} onClick={e => e.stopPropagation()} onTouchStart={ts} onTouchMove={tm} onTouchEnd={te} onTouchCancel={te}>
+    <span className="gt-bar" aria-hidden="true" /><button type="button" className="gt-x" aria-label="Close" onClick={onClose}>✕</button>
+    <span className="gt-ic"><Icon n="lock" /></span><h3>{t}</h3><p>{d}</p>
+    <div className="gt-pts" aria-hidden="true"><span><i><Icon n="shield" /></i>Discreet packaging</span><span><i><Icon n="truck" /></i>Fast delivery</span><span><i><Icon n="box" /></i>Track orders</span></div>
+    <button type="button" className="btn gg" onClick={onGoogle}><GoogleG />Continue with Google</button>
+    <div className="gt-or"><span>or</span></div>
+    <button type="button" className="btn" onClick={onLogin}>Log in with email</button>
+    <button type="button" className="btn o" onClick={onSignup}>Create new account</button>
+    <button type="button" className="gt-no" onClick={onClose}>Not now, keep browsing</button>
+    <p className="gt-fine"><Icon n="lock" />Private by design · Your data stays safe</p></div></div>
 }
 
 function safeAdmin(u) { try { return api.isAdmin(u) } catch { return false } }
@@ -1594,7 +1732,7 @@ function ShopScreen({ shop, prods, loading, back, gp, follow }) {
   </div></>
 }
 
-function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish, shop = null, user = null, say = () => {} }) {
+function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish, shop = null, user = null, say = () => {}, login = null }) {
   const [v, setV] = useState(p.variants?.[0]), [added, setAdded] = useState(false), [n, setN] = useState(1)
   const t = useRef(0)
   useEffect(() => () => clearTimeout(t.current), [])
@@ -1617,7 +1755,7 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
         <div className="opt-r"><span>QTY</span><div className="qty"><button aria-label="Decrease" onClick={() => setN(x => Math.max(1, x - 1))}>−</button><span className="qn">{n}</span><button aria-label="Increase" onClick={() => setN(x => Math.min(20, x + 1))}>+</button></div></div></div>
       <div className="dsc"><h5>Description</h5><ul className="ck">{(p.features || []).map(f => <li key={f}>{f}</li>)}</ul></div></div></div>
       {also.length > 0 && <Rail title="Customers also bought" list={also} add={addToCart} open={open} wish={wish} like={like} />}
-      {p.shop_id && <QA p={p} user={user} say={say} />}
+      {p.shop_id && <QA p={p} user={user} say={say} login={login} />}
       {sugg.length > 0 && <Rail title="You may also like" list={sugg} add={addToCart} open={open} wish={wish} like={like} />}</div>
     <div className="buybar"><div><small>Total price</small><b><Money v={price * n} />{deal && <s className="old">{taka(p.old_price * (v?.mult || 1) * n)}</s>}</b></div><button className={'btn buy' + (added ? ' done' : '')} onClick={add}><Icon n="bag" />{added ? 'Added ✓' : 'Add to Cart'}</button></div></>
 }
