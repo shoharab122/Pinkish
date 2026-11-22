@@ -2,6 +2,8 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 const root = createRoot(document.getElementById('root'))
 const path = location.pathname
+// open the connection to the database early, so the first request does not wait for the handshake
+try { const u = import.meta.env.VITE_SUPABASE_URL; if (u) { const l = document.createElement('link'); l.rel = 'preconnect'; l.href = new URL(u).origin; l.crossOrigin = ''; document.head.appendChild(l) } } catch { /* ignore */ }
 // A seller who signed in with Google can be sent back to the site root by the auth provider.
 // We remember where they started and bring them (and the login tokens in the URL) back to /merchant.
 let fromSeller = false
