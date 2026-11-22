@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import './seller.css'
-import { signIn, signUp, signOut, restoreUser, onAuthChange, resetPassword, signInWithGoogle, supabase } from '../api.js'
-import { getMyShop, createShop, resubmitShop, updateShop, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid } from './sellerApi.js'
+import { signIn, signUp, signOut, restoreUser, onAuthChange, resetPassword, signInWithGoogle, supabase, dealLive } from '../api.js'
+import { getMyShop, createShop, resubmitShop, updateShop, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion } from './sellerApi.js'
 
 const taka = n => '৳' + Number(n || 0).toLocaleString('en-BD')
 const when = d => { try { return new Date(d).toLocaleString('en-BD', { dateStyle: 'medium', timeStyle: 'short' }) } catch { return '' } }
 const msg = e => e?.message || 'Something went wrong. Please try again.'
 const okEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim())
 const strength = p => (p.length >= 8) + (/[a-z]/.test(p) && /[A-Z]/.test(p)) + /\d/.test(p) + (/[^A-Za-z0-9]/.test(p) || p.length >= 12)
+const toLocalInput = x => { const d = new Date(x); if (isNaN(d)) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 const DRAFT = 'sl_draft'
 const readDraft = () => { try { return JSON.parse(localStorage.getItem(DRAFT)) || {} } catch { return {} } }
 const saveDraft = d => { try { localStorage.setItem(DRAFT, JSON.stringify(d)) } catch { /* storage unavailable */ } }
@@ -224,22 +225,36 @@ function Waiting({ shop, onRefresh }) {
   )
 }
 
+function PhotoSlot({ n, file, saved, onPick }) {
+  const url = useObjectUrl(file), src = url || saved
+  return (
+    <label className={'sl-ph' + (src ? ' has' : '')} title={`Photo ${n}`}>
+      {src ? <img src={src} alt={`Product photo ${n}`} /> : <span className="sl-ph-add"><b>+</b><small>Photo {n}</small></span>}
+      {n === 1 && <em className="sl-ph-tag">Cover</em>}
+      <input type="file" accept="image/jpeg,image/png,image/webp" aria-label={`Product photo ${n}`} onChange={e => { onPick(e.target.files?.[0] || null); e.target.value = '' }} />
+    </label>
+  )
+}
+
 function ProductForm({ shop, cats, product, onSaved, onCancel }) {
-  const [f, setF] = useState({ name: product?.name || '', brand: product?.brand || '', tag: product?.tag || '', category_id: product?.category_id || '', price: product?.price ?? '', stock: product?.stock ?? '', is_active: product?.is_active !== false })
-  const [img, setImg] = useState(null), [err, setErr] = useState(''), [busy, setBusy] = useState(false)
+  const [f, setF] = useState({ name: product?.name || '', brand: product?.brand || '', tag: product?.tag || '', category_id: product?.category_id || '', price: (dealLive(product) ? product.old_price : product?.price) ?? '', stock: product?.stock ?? '', is_active: product?.is_active !== false, dealPrice: dealLive(product) ? product.price : '', dealEnds: dealLive(product) ? toLocalInput(product.deal_ends_at) : '' })
+  const [files, setFiles] = useState(() => Array(PHOTOS).fill(null)), [err, setErr] = useState(''), [busy, setBusy] = useState(false)
+  const saved = useMemo(() => existingImages(product), [product])
+  const filled = files.filter((f, i) => f || saved[i]).length
   const set = k => v => setF(p => ({ ...p, [k]: v }))
-  const imgUrl = useObjectUrl(img), preview = imgUrl || product?.image_url
   const go = async e => {
-    e.preventDefault(); setErr(''); setBusy(true)
-    try { onSaved(await saveProduct(shop, f, img, product)) } catch (x) { setErr(msg(x)) }
+    e.preventDefault(); setErr('')
+    if (filled < PHOTOS) return setErr(`Add all ${PHOTOS} product photos (${filled}/${PHOTOS} added).`)
+    setBusy(true)
+    try { onSaved(await saveProduct(shop, f, files, product)) } catch (x) { setErr(msg(x)) }
     setBusy(false)
   }
   return (
     <form className="sl-card" onSubmit={go}>
       <h2>{product ? 'Edit product' : 'Add product'}</h2>
       {err && <div className="sl-err">{err}</div>}
-      {preview && <img className="sl-prev" src={preview} alt="" />}
-      <Field label="Product photo (JPG/PNG/WebP, max 3 MB)"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => setImg(e.target.files?.[0] || null)} /></Field>
+      <div className="sl-f"><span>Product photos: add {PHOTOS} (JPG/PNG/WebP, max 3 MB each) · {filled}/{PHOTOS} added</span>
+        <div className="sl-photos">{files.map((f, i) => <PhotoSlot key={i} n={i + 1} file={f} saved={saved[i]} onPick={nf => setFiles(a => a.map((x, k) => (k === i ? nf : x)))} />)}</div></div>
       <Inp label="Product name" value={f.name} onChange={set('name')} maxLength={120} required />
       <div className="sl-row">
         <Field label="Category"><select value={f.category_id} onChange={e => set('category_id')(e.target.value)} required><option value="">Select…</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></Field>
@@ -250,6 +265,12 @@ function ProductForm({ shop, cats, product, onSaved, onCancel }) {
         <Inp label="Stock" type="number" min="0" step="1" value={f.stock} onChange={set('stock')} required />
       </div>
       <Inp label="Tag (optional, e.g. New, Best seller)" value={f.tag} onChange={set('tag')} maxLength={30} />
+      <div className="sl-deal"><b>⚡ Flash deal (optional)</b><p className="sl-mut">Set a lower price for a limited time. The regular price above is shown crossed out, and it returns automatically when the deal ends. Followers of your shop are notified.</p>
+        <div className="sl-row">
+          <Inp label="Deal price (৳)" type="number" min="1" step="0.01" value={f.dealPrice} onChange={set('dealPrice')} />
+          <Inp label="Deal ends" type="datetime-local" value={f.dealEnds} onChange={set('dealEnds')} />
+        </div>
+        {f.dealPrice !== '' && <button type="button" className="sl-btn ghost sm" onClick={() => setF(p => ({ ...p, dealPrice: '', dealEnds: '' }))}>Remove deal</button>}</div>
       <label className="sl-f"><input type="checkbox" checked={f.is_active} onChange={e => set('is_active')(e.target.checked)} /> Visible in the store</label>
       <div className="sl-acts"><button className="sl-btn" disabled={busy}>{busy ? 'Saving…' : 'Save product'}</button><button type="button" className="sl-btn ghost" onClick={onCancel}>Cancel</button></div>
     </form>
@@ -280,7 +301,8 @@ function Products({ shop }) {
               <span className={'sl-badge ' + (p.is_active !== false ? 'approved' : 'pending')}>{p.is_active !== false ? 'Live' : 'Hidden'}</span>
             </div>
             <div className="b"><div className="n">{p.name}</div>
-              <div className="sl-price">{taka(p.price)}</div>
+              <div className="sl-price">{taka(p.price)}{dealLive(p) && <s className="sl-old">{taka(p.old_price)}</s>}</div>
+              {dealLive(p) && <div className="sl-dealtag">⚡ Deal until {when(p.deal_ends_at)}</div>}
               <div className={'sl-stk' + ((p.stock ?? 0) <= 5 ? ' low' : '')}>Stock {p.stock ?? 0}{(p.stock ?? 0) <= 5 ? ' · running low' : ''}</div>
               <div className="sl-acts">
                 <button className="sl-btn ghost sm" onClick={() => setEdit(p)}>Edit</button>
@@ -289,6 +311,34 @@ function Products({ shop }) {
               </div></div>
           </div>))}</div>
       )}
+    </>
+  )
+}
+
+function Questions() {
+  const [rows, setRows] = useState(null), [err, setErr] = useState(''), [draft, setDraft] = useState({}), [busy, setBusy] = useState('')
+  const load = useCallback(() => sellerQuestions().then(setRows).catch(x => { setErr(msg(x)); setRows([]) }), [])
+  useEffect(() => { load() }, [load])
+  const send = async q => {
+    const a = (draft[q.id] || '').trim(); if (!a) return setErr('Write an answer first.')
+    setBusy(q.id); setErr('')
+    try { await answerQuestion(q.id, a); setDraft(d => ({ ...d, [q.id]: '' })); await load() } catch (x) { setErr(msg(x)) }
+    setBusy('')
+  }
+  if (rows === null) return <p className="sl-mut">Loading…</p>
+  const open = rows.filter(q => !q.answer).length
+  return (
+    <>
+      <div className="sl-head"><div><h2>Customer questions</h2><p className="sl-mut">{open ? `${open} waiting for your answer. ` : 'You are all caught up. '}Answers appear on the product page and the customer is notified.</p></div></div>
+      {err && <div className="sl-err">{err}</div>}
+      {!rows.length ? <div className="sl-empty"><i><Ico n="bell" s={34} /></i><b>No questions yet</b><p>When a customer asks about one of your products, it shows up here.</p></div> : rows.map(q => (
+        <div className="sl-card sl-q" key={q.id}>
+          <div className="sl-mut">{q.product_name} · {q.user_name || 'Customer'} · {when(q.created_at)}</div>
+          <p><b>Q:</b> {q.question}</p>
+          {q.answer ? <p className="sl-a"><b>A:</b> {q.answer}</p> : <>
+            <textarea rows={2} maxLength={600} placeholder="Write your answer…" value={draft[q.id] || ''} onChange={e => setDraft(d => ({ ...d, [q.id]: e.target.value }))} />
+            <div className="sl-acts"><button className="sl-btn sm" disabled={busy === q.id} onClick={() => send(q)}>{busy === q.id ? 'Sending…' : 'Send answer'}</button></div></>}
+        </div>))}
     </>
   )
 }
@@ -450,8 +500,8 @@ export default function Seller() {
   )
   const errBox = err && <div className="sl-wrap"><div className="sl-err">{err}</div></div>
   if (shop && shop.status === 'approved') {
-    const NAV = [['overview', 'Overview', 'overview'], ['products', 'Products', 'box'], ['orders', 'Orders', 'receipt'], ['shop', 'Shop', 'store']]
-    const TITLE = { overview: 'Overview', products: 'Products', orders: 'Orders', shop: 'Shop settings' }
+    const NAV = [['overview', 'Overview', 'overview'], ['products', 'Products', 'box'], ['orders', 'Orders', 'receipt'], ['questions', 'Questions', 'bell'], ['shop', 'Shop', 'store']]
+    const TITLE = { overview: 'Overview', products: 'Products', orders: 'Orders', questions: 'Questions', shop: 'Shop settings' }
     return (
       <div className="slx app"><div className="shell">
         <nav className="sb" aria-label="Seller sections">
@@ -471,6 +521,7 @@ export default function Seller() {
             {tab === 'overview' && <Overview shop={shop} go={setTab} />}
             {tab === 'products' && <Products shop={shop} />}
             {tab === 'orders' && <Orders />}
+            {tab === 'questions' && <Questions />}
             {tab === 'shop' && <ShopSettings shop={shop} onSaved={setShop} />}
           </div></div>
         </main>
