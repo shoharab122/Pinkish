@@ -322,3 +322,21 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px #fff inset;-webkit-text-fil
 @media(max-width:420px){.sl-vf{padding:18px}.sl-steps span{font-size:.64rem}}
 @media(max-width:340px){.slx .sb .nv button{font-size:.58rem}}
 @media(prefers-reduced-motion:reduce){.slx::before,.slx .shell,.slx .pg,.sa-card,.sa-hero::before{animation:none}.sl-btn,.sl-prod,.sl-stat,.slx .ib2,.slx .sb .nv button{transition:none}}
+/* 4-photo picker */
+.sl-photos{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.sl-f .sl-ph{position:relative;display:grid;place-items:center;aspect-ratio:1;margin:0;overflow:hidden;border:2px dashed #d9cbe6;border-radius:18px;background:#ffffff99;cursor:pointer;transition:border-color .2s}
+.sl-f .sl-ph:hover{border-color:var(--p2)}
+.sl-f .sl-ph.has{border:2px solid #fff;box-shadow:var(--sh)}
+.sl-f .sl-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.sl-f .sl-ph input{position:absolute;inset:0;width:100%;height:100%;min-height:0;padding:0;opacity:0;cursor:pointer;border:0;box-shadow:none}
+.sl-ph-add{display:grid;justify-items:center;gap:2px;color:var(--p2);font-weight:600}
+.sl-ph-add b{font-size:1.5rem;line-height:1;font-weight:500}
+.sl-ph-add small{font-size:.68rem;color:#8b8197;font-weight:500}
+.sl-ph-tag{position:absolute;left:6px;top:6px;padding:2px 8px;border-radius:999px;background:var(--grad);color:#fff;font-style:normal;font-size:.62rem;font-weight:700;pointer-events:none}
+@media(max-width:380px){.sl-photos{grid-template-columns:repeat(2,1fr)}}
+/* flash deals + questions */
+.sl-deal{border:1px dashed var(--edge);border-radius:16px;padding:14px;display:grid;gap:8px;background:#fff8}
+.sl-old{margin-left:8px;font-size:.8rem;font-weight:500;color:var(--mut)}
+.sl-dealtag{font-size:.78rem;font-weight:700;color:var(--p3)}
+.sl-q{display:grid;gap:8px;margin-bottom:12px}.sl-q p{margin:0;overflow-wrap:anywhere}.sl-q textarea{width:100%;border:1px solid var(--edge);border-radius:12px;padding:10px;font:inherit;resize:vertical}
+.sl-a{color:#1a7f4b}
