@@ -609,3 +609,26 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .rt-i{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;flex:none;color:#fff;background:linear-gradient(135deg,#ffa23d,#ff3358);box-shadow:0 6px 14px #ff335855,inset 0 1px 0 #ffffff80}
 .rt-i.bolt{background:linear-gradient(135deg,#8e2a8c,#e0457b);box-shadow:0 6px 14px #e0457b55,inset 0 1px 0 #ffffff80}
 .rt-i.sm{width:24px;height:24px;border-radius:8px}.rt-i.sm svg{width:14px;height:14px}
+
+/* ---- performance: faster transitions, pause when hidden, "lite" mode for weak devices ---- */
+.pg.fwd,.pg.back{animation-duration:.22s}.pg.fade{animation-duration:.2s}
+.rise{animation-duration:.28s;animation-delay:calc(min(var(--i,0),8)*24ms)}.fadeUp{animation-duration:.26s}
+.grid{contain:layout style}
+img{-webkit-user-drag:none}
+html.paused *,html.paused *::before,html.paused *::after{animation-play-state:paused!important}
+html.lite *:not(.spin):not(.skel),html.lite *::before,html.lite *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important}
+html.lite *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;transition-duration:.12s!important}
+html.lite .hdr,html.lite .nav,html.lite .toast,html.lite .glass,html.lite .hstick::before{background:#fffffff2}
+html.lite .card::before,html.lite .cat::before{display:none}
+html.lite .blobs,html.lite .orb{display:none}
+@media(prefers-reduced-motion:reduce){*:not(.spin):not(.skel),*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* ---- compact category row on phones ---- */
+@media(max-width:600px){
+  .catrow{gap:0;padding:2px 0 8px}
+  .cc{width:54px;gap:4px}
+  .cc span{width:40px;height:40px;font-size:18px;box-shadow:0 4px 10px #8e2a8c1a,inset 0 1px 0 #fff}
+  .cc span svg,.cc span img{width:19px;height:19px}
+  .cc b{font-size:10.5px;font-weight:600;max-width:54px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+@media(max-width:360px){.cc{width:50px}.cc span{width:36px;height:36px}.cc span svg,.cc span img{width:17px;height:17px}.cc b{font-size:10px;max-width:50px}}
