@@ -12,7 +12,7 @@ const STEPS = ['Placed', 'Processing', 'Out for delivery', 'Delivered']
 const IDLE = 20 * 60 * 1000
 const fmt = d => new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 const wa = (p, t) => { const n = (p || '').replace(/\D/g, ''); return 'https://wa.me/' + (n.startsWith('0') ? '88' + n : n) + (t ? '?text=' + encodeURIComponent(t) : '') }
-const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['cats', 'Categories'], ['hero', 'Hero']]
+const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['cats', 'Categories'], ['notify', 'Notify'], ['hero', 'Hero']]
 
 const ICN = {
   dash: <><rect x="3" y="3" width="7.5" height="9" rx="2.2" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="2.2" /><rect x="13.5" y="12" width="7.5" height="9" rx="2.2" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="2.2" /></>,
@@ -255,11 +255,11 @@ function Shell({ user }) {
   const p = { d, reload: load, say, go, focus, clearFocus }
   return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
     <div className="me"><span className="mav" aria-hidden="true">{ini(nm)}</span><b>{nm}</b><small>Store admin</small></div>
-    <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}</button>)}</div>
+    <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k === 'notify' ? 'bell' : k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}</button>)}</div>
     <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
     <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => sb.auth.signOut()}><Ic n="out" s={20} /></button></div></header>
       <div className="scr">
-      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'hero' ? <Hero say={say} /> : <Dash {...p} />}</div></main></div>
+      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
     {nOpen && <Notifs orders={d.orders} shops={d.shops || []} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
     {toast && <div className="toast" role="status">{toast}</div>}</div>
 }
@@ -622,17 +622,54 @@ function Cats({ d, reload, say }) {
     <div className="cd lst">{d.cats.map(c => <div className="rw" key={c.id}>{e?.id === c.id ? <><input className="in ic" aria-label="Icon" value={e.icon} onChange={x => setE({ ...e, icon: x.target.value })} /><input className="in g1" aria-label="Name" value={e.name} onChange={x => setE({ ...e, name: x.target.value })} /><button className="bt sm" onClick={async () => { if (!e.name.trim()) return say('Enter a category name'); if (await run(sb.from('categories').update({ name: e.name.trim(), icon: e.icon || '🛍️' }).eq('id', c.id), 'Category saved')) setE(null) }}>Save</button><button className="bt g sm" onClick={() => setE(null)}>Cancel</button></> : <><span className="th">{c.icon}</span><span className="g1"><b>{c.name}</b><small>{cnt[c.id] || 0} products</small></span><button className="bt g sm" onClick={() => setE({ ...c })}>Edit</button><button className="bt d sm" aria-label={'Delete ' + c.name} onClick={() => del(c)}>Delete</button></>}</div>)}{!d.cats.length && <p className="mut pad">No categories yet.</p>}</div></div>
 }
 
-const DEF = [{ chip: 'Limited Offer', lines: 'Privacy. Confidence.\nComfort. Wellness.', emoji: '🛡️', image: '', on: true }, { chip: 'Delivery from ৳40', lines: 'Discreet delivery\nacross Chattogram', emoji: '🚚', image: '', on: true }, { chip: 'Use code SHIELD10', lines: 'Get 10% off\nyour first order', emoji: '🎁', image: '', on: true }]
+// Send a push-style notification to customers (shows in the bell on the storefront, live).
+function Notify({ d, say }) {
+  const [f, setF] = useState({ title: '', body: '', aud: 'all', pid: '' }), [busy, setBusy] = useState(false), [last, setLast] = useState(null)
+  const prods = useMemo(() => d.products.filter(p => p.is_active !== false).slice(0, 300), [d.products])
+  const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
+  const send = async () => {
+    const title = f.title.trim()
+    if (title.length < 2) return say('Enter a title')
+    if (!window.confirm(`Send this notification to ${f.aud === 'buyers' ? 'customers who have ordered' : 'ALL customers'}? This cannot be undone.`)) return
+    setBusy(true)
+    const { data, error } = await sb.rpc('admin_broadcast', { p_title: title, p_body: f.body.trim() || null, p_link: f.pid ? 'product:' + f.pid : null, p_audience: f.aud })
+    setBusy(false)
+    if (error) return say(error.message)
+    setLast({ n: data, title }); setF(p => ({ ...p, title: '', body: '', pid: '' })); say(`Sent to ${data} ${data === 1 ? 'person' : 'people'}`)
+  }
+  return <div className="pg"><div className="cd"><h2>Send a notification</h2>
+    <p style={{ opacity: .7, margin: '0 0 12px' }}>Customers see it in the bell on the store, instantly. Use it for offers, new arrivals and announcements.</p>
+    <F l="Title"><input className="in" maxLength={80} placeholder="e.g. Weekend sale is live" value={f.title} onChange={set('title')} /></F>
+    <F l="Message (optional)"><textarea className="in" rows={3} maxLength={300} placeholder="Short and clear works best" value={f.body} onChange={set('body')} /></F>
+    <div className="tl"><F l="Send to"><select className="in" value={f.aud} onChange={set('aud')}><option value="all">All customers</option><option value="buyers">Customers who have ordered</option></select></F>
+      <F l="Open product when tapped (optional)"><select className="in" value={f.pid} onChange={set('pid')}><option value="">Just open notifications</option>{prods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F></div>
+    <div className="pv"><b>{f.title.trim() || 'Your title appears here'}</b>{f.body.trim() && <small>{f.body.trim()}</small>}</div>
+    <button className="bt" disabled={busy || f.title.trim().length < 2} onClick={send}>{busy ? 'Sending…' : 'Send notification'}</button>
+    {last && <p style={{ margin: '12px 0 0', color: '#1a7f4b' }}>✓ “{last.title}” sent to {last.n} {last.n === 1 ? 'person' : 'people'}.</p>}</div></div>
+}
+
+const HERO_BG = { purple: ['#2d0b4a', '#8e2a8c', '#c2377f'], pink: ['#7a1648', '#e0457b', '#ff8fb8'], ocean: ['#0b2a5b', '#1f6fd1', '#38c6e0'], sunset: ['#7a1f2b', '#e8542f', '#ffb347'], forest: ['#0d3b2e', '#1f8a5b', '#7bd88f'], night: ['#0c0713', '#2a1a3a', '#4a1668'] }
+const BG_NAMES = { purple: 'Purple', pink: 'Pink', ocean: 'Ocean', sunset: 'Sunset', forest: 'Forest', night: 'Night', custom: 'Custom' }
+const heroBg = x => {
+  if (x.bg === 'custom' && /^#[0-9a-f]{6}$/i.test(x.c1 || '') && /^#[0-9a-f]{6}$/i.test(x.c2 || '')) return `linear-gradient(120deg,${x.c1},${x.c2})`
+  const c = HERO_BG[x.bg] || HERO_BG.purple
+  return `linear-gradient(120deg,${c[0]},${c[1]} 70%,${c[2]})`
+}
+const SPEEDS = [3, 4, 5, 6, 8, 10]
+const SLIDE0 = { chip: '', lines: '', sub: '', emoji: '', image: '', on: true, cta: 'Shop Now', link: '', bg: 'purple', c1: '#2d0b4a', c2: '#c2377f', layout: 'side', tone: 'light' }
+const DEF = [{ ...SLIDE0, chip: 'Limited Offer', lines: 'Privacy. Confidence.\nComfort. Wellness.', emoji: '🛡️' }, { ...SLIDE0, chip: 'Delivery from ৳40', lines: 'Discreet delivery\nacross Chattogram', emoji: '🚚' }, { ...SLIDE0, chip: 'Use code SHIELD10', lines: 'Get 10% off\nyour first order', emoji: '🎁' }]
 const isLogo = v => v === '🛡️' || v === '🛡'
-function Hero({ say }) {
-  const [s, setS] = useState(null), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false)
+function Hero({ say, d }) {
+  const [s, setS] = useState(null), [cfg, setCfg] = useState({ auto: true, speed: 4 }), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false)
+  const cats = d?.cats || [], prods = d?.products || []
   useEffect(() => {
     let live = true
     sb.from('site_settings').select('value').eq('key', 'hero').maybeSingle().then(({ data, error }) => {
       if (!live) return
       if (error) say(error.message)
       const v = data?.value?.slides
-      setS(Array.isArray(v) && v.length ? v.map(x => ({ chip: '', lines: '', emoji: '', image: '', on: true, ...x })) : DEF)
+      setCfg({ auto: data?.value?.auto !== false, speed: SPEEDS.includes(+data?.value?.speed) ? +data.value.speed : 4 })
+      setS(Array.isArray(v) && v.length ? v.map(x => ({ ...SLIDE0, ...x })) : DEF)
     })
     return () => { live = false }
   }, [say])
@@ -645,23 +682,43 @@ function Hero({ say }) {
   const upd = fn => { setS(fn); setDirty(true) }
   const set = (i, k, v) => upd(a => a.map((x, j) => j === i ? { ...x, [k]: v } : x))
   const mv = (i, d) => upd(a => { const b = [...a], j = i + d; if (j < 0 || j >= b.length) return a;[b[i], b[j]] = [b[j], b[i]]; return b })
+  const setC = p => { setCfg(c => ({ ...c, ...p })); setDirty(true) }
   const save = async () => {
     const bad = s.findIndex(x => x.on !== false && !(x.lines || '').trim())
     if (bad >= 0) return say(`Slide ${bad + 1} is shown but has no text. Add text, hide it or delete it.`)
     if (!s.some(x => x.on !== false)) return say('Show at least one slide, or the store uses its default banner.')
-    const slides = s.map(x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false }))
+    const badUrl = s.findIndex(x => (x.link || '').startsWith('url:') && !/^https?:\/\/\S+\.\S+/i.test(x.link.slice(4).trim()))
+    if (badUrl >= 0) return say(`Slide ${badUrl + 1}: the web link must start with https://`)
+    const slides = s.map(x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), sub: (x.sub || '').trim().slice(0, 90), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false, cta: (x.cta || '').trim().slice(0, 24), link: (x.link || '').startsWith('url:') ? 'url:' + x.link.slice(4).trim() : x.link || '', bg: x.bg || 'purple', c1: x.c1 || '#2d0b4a', c2: x.c2 || '#c2377f', layout: x.layout === 'cover' ? 'cover' : 'side', tone: x.tone === 'dark' ? 'dark' : 'light' }))
     setBusy(true)
-    const { error } = await sb.from('site_settings').upsert({ key: 'hero', value: { slides }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    const { error } = await sb.from('site_settings').upsert({ key: 'hero', value: { slides, auto: cfg.auto, speed: cfg.speed }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
     setBusy(false)
     if (error) return say(error.message)
     setS(slides); setDirty(false); say('Hero saved. It is live on the storefront.')
   }
   return <div className="pg"><p className="mut">The slides on the storefront home banner. Customers see slides marked Show, in this order. {dirty && <b className="wn">Unsaved changes</b>}</p>
-    {s.map((x, i) => <div className="cd hs" key={i}><div className="pv"><div>{x.chip && <span style={{ fontSize: '.7rem', opacity: .85, letterSpacing: '.08em', textTransform: 'uppercase' }}>{x.chip}</span>}{(x.lines || '').split('\n').filter(Boolean).map((l, k) => <span key={k}>{l}</span>)}</div><i>{x.image ? <img src={x.image} alt="" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji}</i></div>
-      <div><F l="Text (one line per row)"><textarea className="in" rows="3" value={x.lines} onChange={e => set(i, 'lines', e.target.value)} /></F>
-        <div className="fg"><F l="Badge (small label above the text)"><input className="in" maxLength={30} value={x.chip} onChange={e => set(i, 'chip', e.target.value)} /></F><F l="Emoji (used when there is no image)"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set(i, 'emoji', e.target.value)} /></F></div>
-        <Img value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
-        <div className="acts"><label className="ck"><input type="checkbox" checked={x.on !== false} onChange={e => set(i, 'on', e.target.checked)} /> Show</label><button className="bt g sm" disabled={!i} onClick={() => mv(i, -1)}>Move up</button><button className="bt g sm" disabled={i === s.length - 1} onClick={() => mv(i, 1)}>Move down</button><button className="bt d sm" onClick={() => { if (window.confirm(`Delete slide ${i + 1}?`)) upd(a => a.filter((_, j) => j !== i)) }}>Delete</button></div></div></div>)}
+    <div className="cd"><div className="fg"><label className="ck"><input type="checkbox" checked={cfg.auto} onChange={e => setC({ auto: e.target.checked })} /> Slide automatically</label><F l="Time on each slide"><select className="in" disabled={!cfg.auto} value={cfg.speed} onChange={e => setC({ speed: +e.target.value })}>{SPEEDS.map(v => <option key={v} value={v}>{v} seconds</option>)}</select></F></div></div>
+    {s.map((x, i) => {
+      const cov = x.layout === 'cover' && !!x.image, lk = x.link || '', lt = lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : ''
+      const pv = { background: heroBg(x), color: x.tone === 'dark' ? '#2a1a3a' : '#fff' }
+      if (cov) pv.background = `linear-gradient(90deg,${x.tone === 'dark' ? '#fffd' : '#000b'},#0000), url(${JSON.stringify(x.image)}) center/cover`
+      return <div className="cd hs" key={i}><div className="pv" style={pv}><div>{x.chip && <span style={{ fontSize: '.7rem', opacity: .85, letterSpacing: '.08em', textTransform: 'uppercase' }}>{x.chip}</span>}{(x.lines || '').split('\n').filter(Boolean).map((l, k) => <span key={k}>{l}</span>)}{x.sub && <span className="pvs">{x.sub}</span>}{x.cta && <span className="pvb">{x.cta} ↗</span>}</div>{!cov && <i>{x.image ? <img src={x.image} alt="" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji}</i>}</div>
+        <div><F l="Headline (one line per row)"><textarea className="in" rows="3" value={x.lines} onChange={e => set(i, 'lines', e.target.value)} /></F>
+          <div className="fg"><F l="Small text under the headline (optional)"><input className="in" maxLength={90} value={x.sub} onChange={e => set(i, 'sub', e.target.value)} /></F><F l="Badge (small label above the headline)"><input className="in" maxLength={30} value={x.chip} onChange={e => set(i, 'chip', e.target.value)} /></F></div>
+          <div className="fg"><F l="Button text (empty = no button)"><input className="in" maxLength={24} value={x.cta} onChange={e => set(i, 'cta', e.target.value)} /></F>
+            <F l="Tapping the slide opens"><select className="in" value={lt} onChange={e => set(i, 'link', e.target.value === 'cat' ? 'cat:' + (cats[0]?.id ?? '') : e.target.value === 'prod' ? 'prod:' + (prods[0]?.id ?? '') : e.target.value === 'url' ? 'url:https://' : '')}><option value="">All categories</option>{cats.length > 0 && <option value="cat">One category</option>}{prods.length > 0 && <option value="prod">One product</option>}<option value="url">A web link</option></select></F></div>
+          {lt === 'cat' && <F l="Category"><select className="in" value={lk.slice(4)} onChange={e => set(i, 'link', 'cat:' + e.target.value)}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></F>}
+          {lt === 'prod' && <F l="Product"><select className="in" value={lk.slice(5)} onChange={e => set(i, 'link', 'prod:' + e.target.value)}>{prods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F>}
+          {lt === 'url' && <F l="Web link (opens in a new tab)"><input className="in" inputMode="url" placeholder="https://" value={lk.slice(4)} onChange={e => set(i, 'link', 'url:' + e.target.value)} /></F>}
+          <F l="Background colour"><div className="sw">{Object.keys(BG_NAMES).map(k => <button key={k} type="button" title={BG_NAMES[k]} aria-label={BG_NAMES[k]} aria-pressed={(x.bg || 'purple') === k} className={(x.bg || 'purple') === k ? 'on' : ''} style={{ background: k === 'custom' ? 'conic-gradient(#e0457b,#f5c542,#3fbf7f,#2f80ed,#8e2a8c,#e0457b)' : heroBg({ bg: k }) }} onClick={() => set(i, 'bg', k)} />)}</div></F>
+          {x.bg === 'custom' && <div className="fg"><F l="Colour 1"><input className="in col" type="color" value={x.c1 || '#2d0b4a'} onChange={e => set(i, 'c1', e.target.value)} /></F><F l="Colour 2"><input className="in col" type="color" value={x.c2 || '#c2377f'} onChange={e => set(i, 'c2', e.target.value)} /></F></div>}
+          <div className="fg"><F l="Picture style"><select className="in" value={x.layout === 'cover' ? 'cover' : 'side'} onChange={e => set(i, 'layout', e.target.value)}><option value="side">Picture on the right</option><option value="cover">Picture fills the whole banner</option></select></F>
+            <F l="Text colour"><select className="in" value={x.tone === 'dark' ? 'dark' : 'light'} onChange={e => set(i, 'tone', e.target.value)}><option value="light">White (for dark backgrounds)</option><option value="dark">Dark (for light backgrounds)</option></select></F></div>
+          <F l="Emoji (used when there is no picture)"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set(i, 'emoji', e.target.value)} /></F>
+          <Img value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
+          {x.layout === 'cover' && !x.image && <p className="mut">Upload a picture to use the full-banner style. Wide photos (3:2) with the subject on the right work best.</p>}
+          <div className="acts"><label className="ck"><input type="checkbox" checked={x.on !== false} onChange={e => set(i, 'on', e.target.checked)} /> Show</label><button className="bt g sm" disabled={!i} onClick={() => mv(i, -1)}>Move up</button><button className="bt g sm" disabled={i === s.length - 1} onClick={() => mv(i, 1)}>Move down</button><button className="bt d sm" onClick={() => { if (window.confirm(`Delete slide ${i + 1}?`)) upd(a => a.filter((_, j) => j !== i)) }}>Delete</button></div></div></div>
+    })}
     {!s.length && <p className="mut cd">No slides. Add one, or save to let the store use its default banner.</p>}
-    <div className="acts"><button className="bt g" onClick={() => upd(a => [...a, { chip: '', lines: '', emoji: '✨', image: '', on: true }])}>Add slide</button><button className="bt g" onClick={() => { if (window.confirm('Reset to the default slides? Nothing is saved until you press Save hero.')) upd(() => DEF) }}>Reset to defaults</button><button className="bt" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save hero'}</button></div></div>
+    <div className="acts"><button className="bt g" onClick={() => upd(a => [...a, { ...SLIDE0, emoji: '✨' }])}>Add slide</button><button className="bt g" onClick={() => { if (window.confirm('Reset to the default slides? Nothing is saved until you press Save hero.')) upd(() => DEF) }}>Reset to defaults</button><button className="bt" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save hero'}</button></div></div>
 }
