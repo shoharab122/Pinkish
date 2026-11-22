@@ -199,6 +199,17 @@ export async function getHero() {
   } catch { return null }
 }
 
+// Full hero config (slides + autoplay settings) controlled from the admin panel.
+export async function getHeroFull() {
+  if (!supabase) return null
+  try {
+    const { data } = await supabase.from('site_settings').select('value').eq('key', 'hero').maybeSingle()
+    const v = data?.value || {}
+    const slides = (v.slides || []).filter(x => x.on !== false && (x.lines || '').trim()).map(x => ({ ...x, lines: x.lines.split('\n').map(l => l.trim()).filter(Boolean).join('|') }))
+    return slides.length ? { slides, auto: v.auto !== false, speed: Math.min(10, Math.max(2, Number(v.speed) || 4)) } : null
+  } catch { return null }
+}
+
 // Online payments (bKash / Nagad). The server prices the cart from the database and talks to the gateway;
 // the browser only receives a payment-page URL to redirect to.
 export async function startOnlinePayment({ provider, items, promo, address }) {
@@ -258,4 +269,62 @@ export async function getShops() {
     } catch { /* try the next source */ }
   }
   return null
+}
+// ---------------- Marketplace features (deals, best sellers, notifications, follow, Q&A) ----------------
+// A deal is "live" only while deal_ends_at is in the future. The server (pg_cron) puts the price back afterwards.
+export const dealLive = p => !!(p && p.old_price && p.deal_ends_at && Number(p.old_price) > Number(p.price) && new Date(p.deal_ends_at).getTime() > Date.now())
+export const dealPct = p => dealLive(p) ? Math.max(1, Math.round((1 - Number(p.price) / Number(p.old_price)) * 100)) : 0
+
+export async function getBestSellers(limit = 12) {
+  if (!supabase) return []
+  try { const { data, error } = await supabase.rpc('best_sellers', { p_limit: limit }); return error ? [] : (data || []).map(r => String(r.product_id)) } catch { return [] }
+}
+export async function getAlsoBought(id, limit = 8) {
+  if (!supabase || !id) return []
+  try { const { data, error } = await supabase.rpc('also_bought', { p_id: String(id), p_limit: limit }); return error ? [] : (data || []).map(r => String(r.product_id)) } catch { return [] }
+}
+export async function getNotifications(uid) {
+  if (!supabase || !isUuid(uid)) return []
+  const { data, error } = await supabase.from('notifications').select('id,title,body,link,is_read,created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(50)
+  if (error) throw error
+  return data || []
+}
+export async function markNotificationsRead(uid, ids) {
+  if (!supabase || !isUuid(uid)) return
+  let q = supabase.from('notifications').update({ is_read: true }).eq('user_id', uid).eq('is_read', false)
+  if (ids?.length) q = q.in('id', ids)
+  const { error } = await q; if (error) throw error
+}
+// Live: a new notification appears without reloading. Returns an unsubscribe function.
+export function onNotification(uid, cb) {
+  if (!supabase || !isUuid(uid)) return () => {}
+  const ch = supabase.channel('notif-' + uid).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + uid }, e => e?.new && cb(e.new)).subscribe()
+  return () => { try { supabase.removeChannel(ch) } catch { /* already closed */ } }
+}
+export async function getFollowing(uid) {
+  if (!supabase || !isUuid(uid)) return []
+  const { data, error } = await supabase.from('shop_follows').select('shop_id').eq('user_id', uid)
+  if (error) throw error
+  return (data || []).map(r => r.shop_id)
+}
+export async function setFollow(uid, shopId, on) {
+  if (!supabase || !isUuid(uid) || !isUuid(shopId)) throw new Error('Please sign in.')
+  if (on) { const { error } = await supabase.from('shop_follows').insert({ user_id: uid, shop_id: shopId }); if (error && error.code !== '23505') throw error }
+  else { const { error } = await supabase.from('shop_follows').delete().eq('user_id', uid).eq('shop_id', shopId); if (error) throw error }
+}
+export async function getFollowerCount(shopId) {
+  if (!supabase || !isUuid(shopId)) return null
+  try { const { data, error } = await supabase.rpc('shop_follower_count', { p_shop: shopId }); return error ? null : Number(data) } catch { return null }
+}
+export async function getQuestions(productId) {
+  if (!supabase || !isUuid(productId)) return []
+  try { const { data, error } = await supabase.from('product_questions').select('id,question,answer,user_name,created_at,answered_at').eq('product_id', productId).order('created_at', { ascending: false }).limit(30); return error ? [] : (data || []) } catch { return [] }
+}
+export async function askQuestion(uid, productId, text) {
+  if (!supabase || !isUuid(uid) || !isUuid(productId)) throw new Error('Please sign in to ask a question.')
+  const question = str(text, 300)
+  if (question.length < 5) throw new Error('Write your question (at least 5 characters).')
+  const { data, error } = await supabase.from('product_questions').insert({ product_id: productId, user_id: uid, question }).select('id,question,answer,user_name,created_at,answered_at').single()
+  if (error) throw new Error(/up to 10/i.test(error.message) ? error.message : 'Could not send your question. Please try again.')
+  return data
 }
