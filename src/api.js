@@ -43,7 +43,7 @@ export async function deleteCategory(id) {
 }
 export async function getProducts() {
   if (supabase) {
-    try { const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false }); if (!error && data) return data.filter(p => p.is_active !== false) } catch {}
+    try { const { data, error } = await supabase.from('products').select('*').or('is_active.is.null,is_active.eq.true').order('created_at', { ascending: false }); if (!error && data) return data.filter(p => p.is_active !== false) } catch {}
     return null
   }
   return DEV ? ls('ms_prods', []) : null
