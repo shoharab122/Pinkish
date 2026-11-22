@@ -297,7 +297,7 @@ function Products({ shop }) {
         <div className="sl-grid">{list.map(p => (
           <div className={'sl-prod' + (p.is_active !== false ? '' : ' off')} key={p.id}>
             <div className="sl-pimg">
-              {p.image_url ? <img src={p.image_url} alt="" /> : <div className="sl-ph">{p.emoji || <Ico n="bag" s={40} />}</div>}
+              {p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" /> : <div className="sl-ph">{p.emoji || <Ico n="bag" s={40} />}</div>}
               <span className={'sl-badge ' + (p.is_active !== false ? 'approved' : 'pending')}>{p.is_active !== false ? 'Live' : 'Hidden'}</span>
             </div>
             <div className="b"><div className="n">{p.name}</div>
