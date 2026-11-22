@@ -681,3 +681,11 @@ html.adm-on body{position:fixed;inset:0;width:100%}
 }
 @media(max-height:560px) and (max-width:899px){.al-hero h1{display:none}.al-hero{padding-bottom:50px}}
 @media(prefers-reduced-motion:reduce){.al-hero::before,.al-card,.al-err{animation:none}}
+/* hero editor */
+.pv .pvs{font-weight:500;font-size:.72rem;opacity:.9;margin-top:2px}
+.pv .pvb{justify-self:start;margin-top:6px;padding:4px 12px;border-radius:999px;background:#2a1a3a;color:#fff;font-size:.72rem;font-weight:700}
+.sw{display:flex;gap:10px;flex-wrap:wrap}
+.sw button{width:38px;height:38px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 10px #4a16682e;transition:transform .25s var(--spring)}
+.sw button.on{outline:3px solid var(--p2);outline-offset:2px;transform:scale(1.08)}
+.in.col{padding:4px;min-height:48px;cursor:pointer}
+.pv{display:grid;gap:2px;margin:6px 0 14px;padding:12px 14px;border-radius:14px;border:1px solid #f3b4cb;background:#fff7fa}.pv b{font-size:14px}.pv small{opacity:.7;overflow-wrap:anywhere}
