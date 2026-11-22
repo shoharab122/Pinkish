@@ -1,4 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import * as api from './api'
 
 const taka = n => '৳' + Math.round(n).toLocaleString()
@@ -315,6 +316,79 @@ const LIQUID_CSS = `
 }
 @media(max-width:340px){.auth .social{font-size:14px;gap:6px}.auth .tabs button{font-size:14px}}
 @media (prefers-reduced-motion:reduce){.fab,.add,.btn{animation:none!important}.rp{display:none}.lq-pop{animation:none!important}}
+/* category tiles: round icon badge with the name underneath */
+.catrow{gap:6px;padding:4px 2px 14px}
+.cc{width:78px;flex-direction:column;align-items:center;gap:8px;padding:0;border-radius:0;background:none;border:0;box-shadow:none;overflow:visible}
+.cc .rp{display:none}
+.cc span{width:66px;height:66px;border-radius:50%;background:linear-gradient(145deg,#fff1f6,#f3e9fb);box-shadow:0 8px 18px #8e2a8c1f,inset 0 1px 0 #fff;color:var(--p3);transition:transform .35s var(--spring),background .25s,color .25s}
+.cc b{font-size:12.5px;font-weight:600;text-align:center;max-width:78px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc:active{transform:none}.cc:active span{transform:scale(.9)}
+.cico{width:30px;height:30px;display:block}
+.cc span img,.cats .cat>span img{width:32px;height:32px;object-fit:contain}
+@media(hover:hover){.cc:hover span,.cats .cat:hover>span{background:linear-gradient(145deg,var(--p3),var(--p2));color:#fff}}
+.cats{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:12px}
+.cats .cat,.cats .cat:nth-child(2n){padding:16px 6px 14px;border-radius:24px;background:#fff;gap:8px;font-size:13px;font-weight:600;text-align:center;line-height:1.2}
+.cats .cat>span{width:60px;height:60px;border-radius:50%;background:linear-gradient(145deg,#fff1f6,#f3e9fb);color:var(--p3);display:grid;place-items:center;font-size:26px;box-shadow:inset 0 1px 0 #fff;transition:background .25s,color .25s}
+.cats .cat small{font-size:11px}
+.menu>span:first-child .cico{width:22px;height:22px;color:var(--p3)}
+/* product page photo gallery */
+.gal{display:grid;gap:12px;min-width:0}
+.gal .big img{animation:galIn .35s var(--ease) both}
+@keyframes galIn{from{opacity:0;transform:scale(1.03)}to{opacity:1;transform:none}}
+.gth{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.gth button{aspect-ratio:1;padding:0;overflow:hidden;border-radius:16px;border:2px solid transparent;background:#fff;box-shadow:0 6px 14px #4a16681a;opacity:.72;transition:opacity .2s,border-color .2s,transform .3s var(--spring)}
+.gth button.on{border-color:var(--p3);opacity:1;transform:translateY(-2px)}
+.gth img{width:100%;height:100%;object-fit:cover;display:block}
+@media (prefers-reduced-motion:reduce){.gal .big img{animation:none}}
+/* home hero: stacked slides (cross-fade), swipe, mobile-first sizing */
+.bw .banner.hb{position:relative;height:clamp(176px,48vw,224px);min-height:0;padding:0;display:block;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;background:none}
+.bw .banner.hb.lk{cursor:pointer}
+.bw .banner.hb::before{display:none}
+.bs{position:absolute;inset:0;display:flex;align-items:center;padding:20px 20px 20px 22px;color:#fff;opacity:0;visibility:hidden;transition:opacity .5s var(--ease),visibility 0s .5s;overflow:hidden}
+.bs.on{opacity:1;visibility:visible;transition:opacity .5s var(--ease),visibility 0s}
+.bs.dk{color:var(--ink)}
+.bs::after{content:'';position:absolute;width:190px;height:190px;right:-50px;top:-70px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#ffffff40,#fff0 70%);pointer-events:none}
+.bs.cov::after{inset:0;width:auto;height:auto;right:auto;top:auto;border-radius:0;background:linear-gradient(90deg,#000b,#0005 58%,#0000)}
+.bs.cov.dk::after{background:linear-gradient(90deg,#fffd,#fff7 58%,#fff0)}
+.bcov{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.bw .bs .bt{position:relative;z-index:1;max-width:64%;gap:5px;animation:none}
+.bw .bs.on .bt{animation:up .5s both}
+.bs.cov .bt{max-width:72%}
+.bw .bs .bchip{background:#ffffff33;color:#fff;font-size:11px;font-weight:600;padding:4px 11px;border-radius:99px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bw .bs.dk .bchip{background:#2a1a3a14;color:var(--ink)}
+.bw .bs .bt h3{font-size:clamp(16px,5.2vw,21px);line-height:1.18;font-weight:800;margin-top:2px;overflow-wrap:anywhere}
+.bsub{font-size:12.5px;line-height:1.35;font-weight:500;opacity:.9;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bw .bs .bshop{margin-top:6px;padding:5px 5px 5px 16px;font-size:13.5px;gap:10px;max-width:100%}
+.bw .bs.dk .bshop{background:var(--ink);color:#fff}
+.bart{position:absolute;right:10px;bottom:0;height:90%;max-width:42%;object-fit:contain;display:block;pointer-events:none}
+.bs .be{z-index:1;pointer-events:none}
+.bw .bd{gap:0;margin-top:6px}
+.bw .bd button{width:24px;height:24px;display:grid;place-items:center;padding:0}
+.bw .bd button::before{content:'';width:6px;height:6px;border-radius:6px;background:#d9c8ea;transition:.35s var(--spring)}
+.bw .bd button.on::before{width:20px;background:var(--grad)}
+@media(max-width:360px){.bw .bs .bt{max-width:70%}.bsub{font-size:12px}.bs{padding:16px 14px 16px 16px}}
+@media (prefers-reduced-motion:reduce){.bs,.bs.on{transition:none}.bw .bs.on .bt{animation:none}}
+/* full-screen photo viewer */
+.zm{position:relative;cursor:zoom-in}
+.gzoom{position:absolute;right:12px;bottom:12px;width:36px;height:36px;border-radius:50%;background:#2a1a3acc;color:#fff;display:grid;place-items:center;pointer-events:none}
+.gzoom svg{width:18px;height:18px}
+.lb{position:fixed;inset:0;z-index:2000;background:#0c0713;color:#fff;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);animation:lbIn .22s var(--ease) both}
+@keyframes lbIn{from{opacity:0}to{opacity:1}}
+.lb-top{flex:none;display:flex;align-items:center;justify-content:space-between;padding:12px 14px}
+.lb-top b{font-size:14px;font-weight:600}.lb-acts{display:flex;gap:8px}
+.lb-btn{width:42px;height:42px;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center}
+.lb-btn:hover{background:#ffffff38}
+.lb-mid{flex:1;min-height:0;position:relative;display:flex}
+.lb-stage{flex:1;min-width:0;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;display:grid;place-items:center;cursor:zoom-in}
+.lb-img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center;will-change:transform;pointer-events:none;-webkit-user-drag:none}
+.lb-img.a{transition:transform .25s var(--ease)}
+.lb-nav{position:absolute;top:50%;translate:0 -50%}.lb-nav.l{left:10px}.lb-nav.r{right:10px}
+@media(hover:none){.lb-nav{display:none}}
+.lb-bot{flex:none;display:flex;justify-content:center;gap:8px;padding:12px 14px 16px}
+.lb-bot button{width:56px;height:56px;padding:0;overflow:hidden;border-radius:12px;border:2px solid transparent;opacity:.6;transition:opacity .2s,border-color .2s}
+.lb-bot button.on{border-color:var(--p3);opacity:1}
+.lb-bot img{width:100%;height:100%;object-fit:cover;display:block}
+@media (prefers-reduced-motion:reduce){.lb{animation:none}.lb-img.a{transition:none}}
 `
 const SHOP_CSS = `
 /* ===== cart / orders / tracking / suggestions (mobile-first) ===== */
@@ -488,6 +562,82 @@ function useLiquid() {
 }
 
 const Pic = memo(({ p, big }) => <div className={big ? 'big' : 'pic'}>{p.image_url ? <img src={p.image_url} alt={p.name} loading="lazy" decoding="async" /> : p.emoji || '🛍️'}</div>)
+const imgsOf = p => { const a = Array.isArray(p.images) ? p.images.filter(Boolean) : []; return a.length ? a : p.image_url ? [p.image_url] : [] }
+const SV = (d, extra) => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}{extra}</svg>
+const clampT = (s, x, y, w, h) => { const mx = (s - 1) * w / 2, my = (s - 1) * h / 2; return { s, x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) } }
+// Full-screen photo viewer: pinch / double-tap / wheel to zoom, drag to pan, swipe for next photo, swipe down or Esc to close
+const Lightbox = ({ list, start, name, onClose }) => {
+  const [i, setI] = useState(start), [t, setT] = useState({ s: 1, x: 0, y: 0, a: true })
+  const box = useRef(null), pts = useRef(new Map()), g = useRef({}), tt = useRef(t), ir = useRef(i)
+  tt.current = t; ir.current = i
+  const close = () => onClose(ir.current)
+  const dims = () => { const r = box.current?.getBoundingClientRect(); return r ? { w: r.width, h: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2 } : { w: 1, h: 1, cx: 0, cy: 0 } }
+  const zoomTo = (s, px, py, a = true) => {
+    const d = dims(), c = tt.current; s = Math.max(1, Math.min(5, s)); const k = s / c.s, qx = px - d.cx, qy = py - d.cy
+    setT({ ...clampT(s, qx - (qx - c.x) * k, qy - (qy - c.y) * k, d.w, d.h), a })
+  }
+  const go = n => { setI(k => (k + n + list.length) % list.length); setT({ s: 1, x: 0, y: 0, a: true }) }
+  const pick = n => { setI(n); setT({ s: 1, x: 0, y: 0, a: true }) }
+  useEffect(() => {
+    const k = e => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1) }
+    const ov = document.body.style.overflow; document.body.style.overflow = 'hidden'; addEventListener('keydown', k)
+    return () => { document.body.style.overflow = ov; removeEventListener('keydown', k) }
+  }, [])
+  const down = e => {
+    e.currentTarget.setPointerCapture?.(e.pointerId); pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); const c = tt.current
+    if (pts.current.size === 2) { const [p, q] = [...pts.current.values()]; g.current.pinch = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, s: c.s }; g.current.one = null }
+    else if (pts.current.size === 1) g.current.one = { x: e.clientX, y: e.clientY, tx: c.x, ty: c.y, moved: false }
+  }
+  const move = e => {
+    if (!pts.current.has(e.pointerId)) return
+    pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); const d = dims(), c = tt.current
+    if (pts.current.size === 2 && g.current.pinch) {
+      const [p, q] = [...pts.current.values()], s = Math.max(1, Math.min(5, g.current.pinch.s * Math.hypot(p.x - q.x, p.y - q.y) / g.current.pinch.d))
+      const k = s / c.s, qx = (p.x + q.x) / 2 - d.cx, qy = (p.y + q.y) / 2 - d.cy
+      return setT({ ...clampT(s, qx - (qx - c.x) * k, qy - (qy - c.y) * k, d.w, d.h), a: false })
+    }
+    const o = g.current.one; if (!o) return
+    const dx = e.clientX - o.x, dy = e.clientY - o.y
+    if (Math.abs(dx) + Math.abs(dy) > 8) o.moved = true
+    if (c.s > 1) setT({ ...clampT(c.s, o.tx + dx, o.ty + dy, d.w, d.h), a: false })
+  }
+  const up = e => {
+    if (!pts.current.delete(e.pointerId)) return
+    if (pts.current.size === 1) { const [p] = [...pts.current.values()], c = tt.current; g.current.pinch = null; g.current.one = { x: p.x, y: p.y, tx: c.x, ty: c.y, moved: true }; return }
+    if (pts.current.size) return
+    g.current.pinch = null; const o = g.current.one; g.current.one = null; if (!o) return
+    const dx = e.clientX - o.x, dy = e.clientY - o.y, c = tt.current
+    if (!o.moved) { const now = Date.now(); if (now - (g.current.tap || 0) < 300) { g.current.tap = 0; zoomTo(c.s > 1.02 ? 1 : 2.5, e.clientX, e.clientY) } else g.current.tap = now; return }
+    if (c.s <= 1.02) {
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4 && list.length > 1) go(dx < 0 ? 1 : -1)
+      else if (dy > 90 && dy > Math.abs(dx) * 1.4) close()
+    }
+  }
+  const step = f => { const d = dims(); zoomTo(tt.current.s * f, d.cx, d.cy) }
+  return createPortal(<div className="lb" role="dialog" aria-modal="true" aria-label={(name || 'Product') + ' photos'}>
+    <div className="lb-top"><b>{i + 1} / {list.length}</b><div className="lb-acts">
+      <button className="lb-btn" aria-label="Zoom out" onClick={() => step(1 / 1.6)}>{SV(<path d="M5 12h14" />)}</button>
+      <button className="lb-btn" aria-label="Zoom in" onClick={() => step(1.6)}>{SV(<path d="M5 12h14M12 5v14" />)}</button>
+      <button className="lb-btn" aria-label="Close" autoFocus onClick={close}>{SV(<path d="M6 6l12 12M18 6 6 18" />)}</button></div></div>
+    <div className="lb-mid">
+      <div className="lb-stage" ref={box} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onWheel={e => zoomTo(tt.current.s * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY, false)}>
+        <img className={'lb-img' + (t.a ? ' a' : '')} src={list[i]} alt={name || ''} draggable="false" style={{ transform: `translate(${t.x}px,${t.y}px) scale(${t.s})` }} /></div>
+      {list.length > 1 && <><button className="lb-btn lb-nav l" aria-label="Previous photo" onClick={() => go(-1)}>{SV(<path d="M15 5l-7 7 7 7" />)}</button><button className="lb-btn lb-nav r" aria-label="Next photo" onClick={() => go(1)}>{SV(<path d="M9 5l7 7-7 7" />)}</button></>}</div>
+    {list.length > 1 && <div className="lb-bot">{list.map((u, n) => <button key={n} className={n === i ? 'on' : ''} aria-label={'Photo ' + (n + 1)} onClick={() => pick(n)}><img src={u} alt="" draggable="false" /></button>)}</div>}
+  </div>, document.body)
+}
+// Product page photos: large image (tap to open full screen + zoom) and a thumbnail strip
+const Gallery = ({ p }) => {
+  const list = useMemo(() => imgsOf(p), [p]), [k, setK] = useState(0), [open, setOpen] = useState(false)
+  useEffect(() => { setK(0); setOpen(false) }, [p.id])
+  if (!list.length) return <Pic p={p} big />
+  const show = () => setOpen(true)
+  return <div className="gal"><div className="big zm" role="button" tabIndex={0} aria-label="View full photo and zoom" onClick={show} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show() } }}>
+    <img key={k} src={list[k] || list[0]} alt={p.name} decoding="async" draggable="false" />
+    <span className="gzoom">{SV(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2M11 8.5v5M8.5 11h5" /></>)}</span></div>
+    {list.length > 1 && <div className="gth" role="group" aria-label="Product photos">{list.map((u, i) => <button key={i} className={i === k ? 'on' : ''} aria-label={'Photo ' + (i + 1)} aria-current={i === k} onClick={() => setK(i)}><img src={u} alt="" loading="lazy" decoding="async" draggable="false" /></button>)}</div>}
+    {open && <Lightbox list={list} start={k} name={p.name} onClose={n => { setK(n); setOpen(false) }} />}</div>
+}
 // Brand-aware icon: the 🛡️ emoji (or an image URL) renders as the real Pinkish logo mark
 // Small illustrations for empty states and order-status banner (inline SVG, brand colors)
 const CartArt = () => (
@@ -521,6 +671,24 @@ const OrdersArt = () => (
     <path d="M60 66 V98" stroke="#fff" strokeOpacity=".35" strokeWidth="2" />
     <path d="M94 16 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z" fill="#ec4a7c" opacity=".8" />
     <path d="M16 28 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" fill="#a23fb8" opacity=".6" />
+  </svg>
+)
+const NotifArt = () => (
+  <svg viewBox="0 0 120 120" width="1em" height="1em" role="img" aria-label="No notifications yet" style={{ display: 'block' }}>
+    <defs>
+      <linearGradient id="nfa" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a23fb8" /><stop offset="1" stopColor="#ec4a7c" /></linearGradient>
+      <linearGradient id="nfb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffe3ef" /><stop offset="1" stopColor="#f79ac0" /></linearGradient>
+      <linearGradient id="nfc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ff7a9c" /><stop offset="1" stopColor="#ff3358" /></linearGradient>
+    </defs>
+    <ellipse cx="60" cy="104" rx="26" ry="5" fill="#8e3bb8" opacity=".12" />
+    <path d="M60 18c-17 0-28 13-28 30v20c0 6-4 10-8 14h72c-4-4-8-8-8-14V48c0-17-11-30-28-30z" fill="url(#nfa)" />
+    <path d="M60 18c-17 0-28 13-28 30v20c0 6-4 10-8 14h36z" fill="url(#nfb)" opacity=".9" />
+    <path d="M44 30c4-4 9-6 14-6" stroke="#fff" strokeWidth="4" strokeLinecap="round" fill="none" opacity=".7" />
+    <path d="M50 86a10 10 0 0 0 20 0z" fill="#8e2a8c" />
+    <circle cx="60" cy="13" r="5" fill="#8e2a8c" />
+    <circle cx="88" cy="30" r="11" fill="url(#nfc)" stroke="#fff" strokeWidth="3" />
+    <path d="M10 52l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#ec4a7c" opacity=".7" />
+    <path d="M100 74l2 4 4 2-4 2-2 4-2-4-4-2 4-2z" fill="#a23fb8" opacity=".6" />
   </svg>
 )
 const StatusArt = ({ st }) => (
@@ -596,6 +764,48 @@ const DeliveryArt = () => (
   </svg>
 )
 const Glyph = ({ v }) => v === 'art:privacy' ? <PrivacyArt /> : v === 'art:delivery' ? <DeliveryArt /> : (v === '🛡️' || v === '🛡' || /^(https?:|\/)/.test(v || '')) ? <img src={/^(https?:|\/)/.test(v) ? v : '/logo-mark.webp?v=2'} alt="" decoding="async" draggable="false" /> : <>{v}</>
+// Category logos: modern line icons picked from the category name (custom image icons set by admin still win)
+const CAT_SVG = {
+  clothes: <path d="M8 3 3 6l2 4 3-1.5V21h8V8.5L19 10l2-4-5-3a4 4 0 0 1-8 0z" />,
+  electronics: <><rect x="4" y="5" width="16" height="11" rx="2" /><path d="M2 19.5h20" /></>,
+  phone: <><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M11 18.5h2" /></>,
+  shoes: <><path d="M3 17V8l4 2c1 1.5 3 2 5 2l1.5 1.5c1 .8 4 1 6.5 2.3V17z" /><path d="M3 17h18v2H3zM9 12.5l1.2-1.6M12 14l1.2-1.6" /></>,
+  watch: <><rect x="7" y="6.5" width="10" height="11" rx="3" /><path d="M9 6.5 9.7 3h4.6l.7 3.5M9 17.5l.7 3.5h4.6l.7-3.5M12 10v2.2l1.6 1" /></>,
+  beauty: <><rect x="9" y="12" width="6" height="9" rx="1.2" /><path d="M10 12V9h4v3M10.5 9l1-5.5 3 2.5-.5 3" /></>,
+  bag: <><path d="M5 8h14l1 13H4z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></>,
+  jewelry: <><path d="M6 3h12l4 6-10 12L2 9z" /><path d="M2 9h20M9 3 7 9l5 12 5-12-2-6" /></>,
+  glasses: <><circle cx="6.5" cy="14" r="3.5" /><circle cx="17.5" cy="14" r="3.5" /><path d="M10 14h4M3 14l1.5-6M21 14l-1.5-6" /></>,
+  home: <><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10M10 20v-6h4v6" /></>,
+  kitchen: <><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1.5-3 4-3 7h3" /></>,
+  grocery: <><path d="M3 10h18l-2 10H5z" /><path d="M8 10l3-6M16 10l-3-6" /></>,
+  toys: <><rect x="3" y="12" width="8" height="8" rx="1.5" /><rect x="13" y="12" width="8" height="8" rx="1.5" /><rect x="8" y="3" width="8" height="8" rx="1.5" /></>,
+  gaming: <><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 4a2.2 2.2 0 0 1-3.8 1.2L15 16H9l-1.6 1.7a2.2 2.2 0 0 1-3.8-1.2l-.6-4A4 4 0 0 1 7 8z" /><path d="M8 11v3M6.5 12.5h3M15.5 11.5h.01M17.5 13.5h.01" /></>,
+  sports: <><circle cx="12" cy="12" r="9" /><path d="M12 3v18M3 12h18M5.6 5.6c3 2.4 3 10.4 0 12.8M18.4 5.6c-3 2.4-3 10.4 0 12.8" /></>,
+  books: <path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z" />,
+  health: <><rect x="3" y="3" width="18" height="18" rx="5" /><path d="M12 8v8M8 12h8" /></>,
+  auto: <><path d="M4 15l1.5-5a2 2 0 0 1 2-1.5h9a2 2 0 0 1 2 1.5L20 15v4h-3v-2H7v2H4z" /><path d="M4 15h16M7.5 12.5h.01M16.5 12.5h.01" /></>,
+  pets: <><circle cx="6" cy="10" r="2" /><circle cx="10" cy="6" r="2" /><circle cx="14" cy="6" r="2" /><circle cx="18" cy="10" r="2" /><path d="M12 12c3 0 5 3 5 5.5 0 1.8-1.5 2.5-3 2-.8-.3-1.3-.5-2-.5s-1.2.2-2 .5c-1.5.5-3-.2-3-2C7 15 9 12 12 12z" /></>,
+  grid: <><rect x="3" y="3" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="2" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" /></>,
+}
+const CAT_RULES = [
+  [/phone|mobile|tablet/i, 'phone'], [/shoe|sneaker|footwear|sandal|boot|slipper/i, 'shoes'], [/watch|clock/i, 'watch'],
+  [/cloth|fashion|apparel|wear|shirt|dress|garment|saree|panjabi|punjabi|t-?shirt/i, 'clothes'],
+  [/electronic|gadget|appliance|laptop|computer|camera|headphone|audio|speaker|\btvs?\b/i, 'electronics'],
+  [/toy|baby|\bkids?\b|child/i, 'toys'], [/beauty|cosmetic|makeup|make-up|skin|perfume|fragrance|grooming/i, 'beauty'],
+  [/\bbags?\b|handbag|luggage|wallet|backpack/i, 'bag'], [/jewel|ornament|\bgold\b|\brings?\b|necklace/i, 'jewelry'],
+  [/glass|eyewear|sunglass|accessor/i, 'glasses'], [/home|furniture|decor|living|bedding/i, 'home'],
+  [/kitchen|cook|dining|restaurant|food/i, 'kitchen'], [/grocer|fruit|vegetable|supermarket|snack|beverage|drink/i, 'grocery'],
+  [/game|gaming|console/i, 'gaming'], [/sport|fitness|gym|outdoor|cricket|football/i, 'sports'],
+  [/book|stationer|office|education|school/i, 'books'], [/health|medic|pharma|wellness|vitamin/i, 'health'],
+  [/\bcars?\b|auto|vehicle|\bbikes?\b|motor/i, 'auto'], [/\bpets?\b/i, 'pets'],
+]
+const catKind = n => { const s = String(n || ''); for (const [r, k] of CAT_RULES) if (r.test(s)) return k; return null }
+const CatIcon = ({ c }) => {
+  const ic = c?.icon, k = catKind(c?.name)
+  if (/^(https?:|\/)/.test(ic || '')) return <Glyph v={ic} />
+  if (!k && ic && ic !== '🛍️') return <Glyph v={ic} />
+  return <svg className="cico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{CAT_SVG[k || 'grid']}</svg>
+}
 const ICONS = {
   heart: <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />,
   pin: <><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10z" /><circle cx="12" cy="11" r="2.2" /></>,
@@ -662,20 +872,106 @@ function Money({ v }) {
   return taka(n)
 }
 
-function BannerImpl({ shop }) {
-  const [list, setList] = useState(OFFERS), [i, setI] = useState(0)
-  useEffect(() => { let on = true; api.getHero().then(h => { if (on && h?.length) { setList(h.map(x => [x.chip || 'Pinkish', x.lines, x.image || x.emoji || '🛡️'])); setI(0) } }).catch(() => {}); return () => { on = false } }, [])
-  useEffect(() => { if (list.length < 2) return; const t = setInterval(() => { if (!document.hidden) setI(x => (x + 1) % list.length) }, 3500); return () => clearInterval(t) }, [list])
-  const o = list[i % list.length]
-  return <div className="bw"><div className="banner"><div key={i} className="bt"><span className="bchip">{o[0]}</span><h3>{o[1].split('|').map((l, k) => <span key={k}>{l}</span>)}</h3><button className="bshop" onClick={() => shop('categories')}>Shop Now<i>↗</i></button></div><div key={'e' + i} className="be"><Glyph v={o[2]} /></div></div><div className="bd">{list.map((_, k) => <i key={k} className={k === i % list.length ? 'on' : ''} />)}</div></div>
+const HERO_BG = { purple: ['#2d0b4a', '#8e2a8c', '#c2377f'], pink: ['#7a1648', '#e0457b', '#ff8fb8'], ocean: ['#0b2a5b', '#1f6fd1', '#38c6e0'], sunset: ['#7a1f2b', '#e8542f', '#ffb347'], forest: ['#0d3b2e', '#1f8a5b', '#7bd88f'], night: ['#0c0713', '#2a1a3a', '#4a1668'] }
+const heroBg = x => {
+  if (x.bg === 'custom' && /^#[0-9a-f]{6}$/i.test(x.c1 || '') && /^#[0-9a-f]{6}$/i.test(x.c2 || '')) return `linear-gradient(120deg,${x.c1},${x.c2})`
+  const c = HERO_BG[x.bg] || HERO_BG.purple
+  return `linear-gradient(120deg,${c[0]},${c[1]} 70%,${c[2]})`
+}
+// Home hero: every slide (text, button, link, colours, picture) and the autoplay speed are set in the admin panel.
+// Mobile: swipe left/right, tap anywhere to open the slide's link, pauses while touched, no autoplay with reduced motion.
+function BannerImpl({ shop, go, open, cats, prods }) {
+  const [cfg, setCfg] = useState(() => ({ slides: OFFERS.map(o => ({ chip: o[0], lines: o[1], emoji: o[2] })), auto: true, speed: 4 }))
+  const [i, setI] = useState(0), [hold, setHold] = useState(false), sw = useRef(null)
+  useEffect(() => { let on = true; api.getHeroFull().then(h => { if (on && h) { setCfg(h); setI(0) } }).catch(() => {}); return () => { on = false } }, [])
+  const list = cfg.slides, n = list.length, cur = i % n
+  const reduce = useMemo(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches, [])
+  useEffect(() => {
+    if (!cfg.auto || n < 2 || hold || reduce) return
+    const t = setTimeout(() => setI(x => (x + 1) % n), cfg.speed * 1000)
+    return () => clearTimeout(t)
+  }, [i, n, cfg.auto, cfg.speed, hold, reduce])
+  const live = x => x.cta !== '' || !!x.link
+  const act = x => {
+    const l = String(x.link || '')
+    if (l.startsWith('cat:')) { const c = (cats || []).find(c => String(c.id) === l.slice(4)); if (c) return go('category', { c }) }
+    else if (l.startsWith('prod:')) { const p = (prods || []).find(p => String(p.id) === l.slice(5)); if (p) return open(p) }
+    else if (l.startsWith('url:')) { if (/^https?:\/\//i.test(l.slice(4))) return void window.open(l.slice(4), '_blank', 'noopener,noreferrer') }
+    shop('categories')
+  }
+  const down = e => { sw.current = { x: e.clientX, y: e.clientY, m: false }; setHold(true) }
+  const move = e => { const s = sw.current; if (s && (Math.abs(e.clientX - s.x) > 8 || Math.abs(e.clientY - s.y) > 8)) s.m = true }
+  const up = e => {
+    setHold(false); const s = sw.current; if (!s) return
+    const dx = e.clientX - s.x, dy = e.clientY - s.y
+    if (s.m && n > 1 && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) setI(k => (k % n + (dx < 0 ? 1 : -1) + n) % n)
+  }
+  const x0 = list[cur]
+  return <div className="bw" role="region" aria-roledescription="carousel" aria-label="Offers">
+    <div className={'banner hb' + (live(x0) ? ' lk' : '')} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={e => { if (sw.current) sw.current.m = true; setHold(false) }} onClick={() => { if (!sw.current?.m && live(x0)) act(x0) }}>
+      {list.map((x, k) => {
+        const cov = x.layout === 'cover' && !!x.image, art = x.image || x.emoji || '🛡️', btn = x.cta === undefined ? 'Shop Now' : x.cta
+        return <div key={k} className={'bs' + (k === cur ? ' on' : '') + (cov ? ' cov' : '') + (x.tone === 'dark' ? ' dk' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
+          {cov && <img className="bcov" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />}
+          <div className="bt">{x.chip && <span className="bchip">{x.chip}</span>}<h3>{x.lines.split('|').map((l, j) => <span key={j}>{l}</span>)}</h3>{x.sub && <p className="bsub">{x.sub}</p>}
+            {btn && <button type="button" className="bshop" tabIndex={k === cur ? 0 : -1} onClick={e => { e.stopPropagation(); act(x) }}>{btn}<i>↗</i></button>}</div>
+          {!cov && (x.image ? <img className="bart" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} /> : <div className="be"><Glyph v={art} /></div>)}
+        </div>
+      })}
+    </div>
+    {n > 1 && <div className="bd">{list.map((_, k) => <button key={k} type="button" aria-label={`Show slide ${k + 1}`} aria-current={k === cur} className={k === cur ? 'on' : ''} onClick={() => setI(k)} />)}</div>}
+  </div>
 }
 
 const Banner = memo(BannerImpl)
 
 const Nav = memo(({ s, count, tab }) => <nav className={'nav' + (TABS.includes(s) ? '' : ' hide-m')}><div className="nv-brand"><div className="lk" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" /><span className="wm" style={{ filter: 'none', opacity: 1, fontSize: 26 }}><span className="bp" style={{ color: '#e0457b', filter: 'none', opacity: 1, fontSize: 'inherit' }}>Pink</span><span className="bi" style={{ color: '#000', filter: 'none', opacity: 1, fontSize: 'inherit' }}>ish</span></span></div></div>{NAV.map(([k, ic, l]) => <button key={k} className={s === k ? 'on' : ''} aria-current={s === k ? 'page' : undefined} onClick={() => tab(k)}><span><Icon n={ic} /></span>{l}{k === 'cart' && count > 0 && <em key={count}>{count}</em>}</button>)}</nav>)
 
-const ProductCard = memo(({ p, i, add, open, liked, like }) => <div className="card rise" style={{ '--i': Math.min(i, 12) }} onClick={() => open(p)}><Heart on={liked} toggle={() => like(p.id)} /><Pic p={p} />
-  <div className="cinfo"><small>{p.tag || p.brand}</small><h4>{p.name}</h4><div className="cfoot"><b>{taka(p.price)}</b><button className="add" aria-label="Add to cart" onClick={e => { e.stopPropagation(); add(p) }}>+</button></div></div></div>)
+
+// ---------- Marketplace: deals, countdown, notifications, Q&A ----------
+const Countdown = ({ end }) => {
+  const [n, setN] = useState(() => Date.now())
+  useEffect(() => { const i = setInterval(() => setN(Date.now()), 1000); return () => clearInterval(i) }, [])
+  const ms = new Date(end).getTime() - n
+  if (!(ms > 0)) return <span className="cd">Ended</span>
+  const h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4), sec = Math.floor(ms % 6e4 / 1e3)
+  return <span className="cd">{h >= 48 ? Math.floor(h / 24) + 'd ' + (h % 24) + 'h' : [h, m, sec].map(x => String(x).padStart(2, '0')).join(':')}</span>
+}
+const ago = d => { const m = Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 6e4)); return m < 1 ? 'now' : m < 60 ? m + 'm' : m < 1440 ? Math.floor(m / 60) + 'h' : Math.floor(m / 1440) + 'd' }
+const FlameIc = () => <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M12.5 2c.5 3.3-1.1 4.9-2.6 6.6C8.4 10.3 7 12 7 14.5a5 5 0 0 0 10 0c0-1.7-.7-3-1.6-4-.2 1.3-.9 2-1.8 2.300.8-3.600-.2-7.400-1.100-10.800z" /><path d="M12 21a2.5 2.5 0 0 1-2.5-2.5c0-1.200.8-2 1.6-2.9.3 1 .9 1.500 1.7 1.8.3-.5.4-1 .4-1.500.9.800 1.3 1.7 1.3 2.600A2.5 2.5 0 0 1 12 21z" fill="#fff" opacity=".55" /></svg>
+const BoltIc = () => <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M13.5 2 5 13.500h6L10 22l9-12h-6.2z" /></svg>
+const RailT = ({ k, children }) => <span className="rt"><i className={'rt-i ' + k}>{k === 'hot' ? <FlameIc /> : <BoltIc />}</i>{children}</span>
+const BellSvg = () => SV(<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></>)
+
+// Corner bell: memoised so it only re-renders when the unread count changes.
+const NotifBell = memo(({ n, authed, onOpen }) => <button className={'ib bellb' + (n ? ' ring' : '')} aria-label={n ? n + ' unread notifications' : 'Notifications'} onClick={onOpen}><BellSvg />{authed && n > 0 && <em className="bdg" key={n}>{n > 9 ? '9+' : n}</em>}</button>)
+
+function Notifications({ list, back, onOpen, onReadAll }) {
+  const unread = list.some(n => !n.is_read)
+  return <><Hdr title="Notifications" back={back} right={unread ? <button className="ib nt-all" aria-label="Mark all as read" onClick={onReadAll}>✓</button> : null} />
+    <div className="scr narrow">{!list.length ? <div className="emp"><div className="emp-i"><NotifArt /></div><h3>No notifications yet</h3><p>Follow shops to hear about new products and deals. Answers to your questions show up here too.</p></div>
+      : <div className="nt">{list.map(n => <button key={n.id} className={'nt-i' + (n.is_read ? '' : ' un')} onClick={() => onOpen(n)}><span className="nt-d" aria-hidden="true" /><span className="nt-t"><b>{n.title}</b>{n.body && <small>{n.body}</small>}</span><em>{ago(n.created_at)}</em></button>)}</div>}</div></>
+}
+
+function QA({ p, user, say }) {
+  const [list, setList] = useState(null), [q, setQ] = useState(''), [busy, setBusy] = useState(false)
+  useEffect(() => { let on = true; api.getQuestions(p.id).then(r => on && setList(r)); return () => { on = false } }, [p.id])
+  const ask = async e => {
+    e.preventDefault()
+    if (!user?.id || user.id === 'local') return say('Please log in to ask a question')
+    setBusy(true)
+    try { const r = await api.askQuestion(user.id, p.id, q); setList(l => [r, ...(l || [])]); setQ(''); say('Question sent. The seller will answer soon.', 2600) } catch (x) { say(x.message, 3000) }
+    setBusy(false)
+  }
+  return <section className="qa"><h5>Questions &amp; answers</h5>
+    <form onSubmit={ask}><input value={q} maxLength={300} placeholder="Ask the seller about this product…" onChange={e => setQ(e.target.value)} /><button className="btn" disabled={busy || q.trim().length < 5}>{busy ? '…' : 'Ask'}</button></form>
+    {list === null ? <small className="qa-m">Loading…</small> : !list.length ? <small className="qa-m">No questions yet. Be the first to ask.</small>
+      : list.map(x => <div className="qa-i" key={x.id}><p><b>Q:</b> {x.question}<small> · {x.user_name || 'Customer'}</small></p>{x.answer ? <p className="qa-a"><b>A:</b> {x.answer}</p> : <small className="qa-m">Waiting for the seller's answer</small>}</div>)}
+  </section>
+}
+
+const ProductCard = memo(({ p, i, add, open, liked, like }) => <div className="card rise" style={{ '--i': Math.min(i, 12) }} onClick={() => open(p)}><Heart on={liked} toggle={() => like(p.id)} />{api.dealLive(p) && <span className="dl">-{api.dealPct(p)}%</span>}<Pic p={p} />
+  <div className="cinfo"><small>{p.tag || p.brand}</small><h4>{p.name}</h4><div className="cfoot"><b>{taka(p.price)}{api.dealLive(p) && <s>{taka(p.old_price)}</s>}</b><button className="add" aria-label="Add to cart" onClick={e => { e.stopPropagation(); add(p) }}>+</button></div></div></div>)
 
 const Grid = memo(({ list, loading, add, open, wish, like }) => loading ? <div className="grid">{[...Array(6)].map((_, i) => <div key={i} className="skel" />)}</div>
   : list.length ? <div className="grid">{list.map((p, i) => <ProductCard key={p.id} {...{ p, i, add, open, like }} liked={wish.has(p.id)} />)}</div> : <p className="empty">No products found.</p>)
@@ -953,6 +1249,36 @@ export default function App() {
   }, [say])
 
   useEffect(() => { load(); return () => clearTimeout(toastT.current) }, [load])
+  // best sellers: separate from load() because it is heavier and changes slowly
+  const [best, setBest] = useState([]), [notifs, setNotifs] = useState([]), [following, setFollowing] = useState(() => new Set())
+  useEffect(() => {
+    let on = true; const run = () => { if (!document.hidden) api.getBestSellers(12).then(r => on && setBest(r)) }
+    run(); const i = setInterval(run, 300000)
+    return () => { on = false; clearInterval(i) }
+  }, [])
+  // notifications (live) + followed shops, only for real signed-in accounts
+  useEffect(() => {
+    if (!user?.id || user.id === 'local') { setNotifs([]); setFollowing(new Set()); return }
+    let on = true
+    safe(() => api.getNotifications(user.id), []).then(n => on && setNotifs(n))
+    safe(() => api.getFollowing(user.id), []).then(f => on && setFollowing(new Set(f)))
+    const off = api.onNotification(user.id, n => setNotifs(a => [n, ...a.filter(x => x.id !== n.id)].slice(0, 50)))
+    return () => { on = false; off() }
+  }, [user?.id])
+  const unread = useMemo(() => notifs.reduce((a, n) => a + (n.is_read ? 0 : 1), 0), [notifs])
+  const readAll = useCallback(() => { setNotifs(a => a.map(n => ({ ...n, is_read: true }))); safe(() => api.markNotificationsRead(user?.id)) }, [user?.id])
+  const toggleFollow = useCallback(async shopId => {
+    if (!user?.id || user.id === 'local') return say('Please log in to follow shops')
+    const on = !following.has(shopId), flip = v => setFollowing(s => { const n = new Set(s); v ? n.add(shopId) : n.delete(shopId); return n })
+    flip(on)
+    try { await api.setFollow(user.id, shopId, on); say(on ? 'Following. You will hear about new products and deals.' : 'Unfollowed', 2200) } catch { flip(!on); say('Could not update. Please try again.') }
+  }, [user?.id, following, say])
+  const openNote = useCallback(n => {
+    if (!n.is_read) { setNotifs(a => a.map(x => x.id === n.id ? { ...x, is_read: true } : x)); safe(() => api.markNotificationsRead(user?.id, [n.id])) }
+    const [kind, id] = String(n.link || '').split(':')
+    if (kind === 'product') { const p = prodsR.current.find(x => String(x.id) === id); p ? open(p) : say('This product is no longer available') }
+    else if (kind === 'shop') { const sh = shops[id]; sh && go('shop', { shop: sh }) }
+  }, [user?.id, open, go, say, shops])
   // Google / email-confirm redirects, password-recovery links, sign-out
   useEffect(() => api.onAuthChange((u, ev) => {
     if (ev === 'PASSWORD_RECOVERY') { recov.current = true; setMode('reset'); setStack([{ s: 'auth' }]); return }
@@ -1023,6 +1349,8 @@ export default function App() {
   const catCount = useMemo(() => { const m = new Map(); for (const p of prods) m.set(p.category_id, (m.get(p.category_id) || 0) + 1); return m }, [prods])
   const hits = useMemo(() => { if (!dq) return prods; const k = dq.toLowerCase(); return prods.filter(p => (p.name + ' ' + (p.brand || '')).toLowerCase().includes(k)) }, [prods, dq])
   const pop = useMemo(() => dq ? hits : hits.slice(0, 6), [dq, hits])
+  const deals = useMemo(() => prods.filter(api.dealLive).sort((a, b) => new Date(a.deal_ends_at) - new Date(b.deal_ends_at)).slice(0, 12), [prods])
+  const bestList = useMemo(() => { const m = new Map(prods.map(x => [String(x.id), x])); return best.map(id => m.get(id)).filter(Boolean).slice(0, 10) }, [best, prods])
   const catList = useMemo(() => s === 'category' ? prods.filter(p => p.category_id === cur.c.id) : null, [s, prods, cur])
   const tags = useMemo(() => catList ? ['All', ...new Set(catList.map(p => p.tag).filter(Boolean))] : [], [catList])
   const shown = useMemo(() => {
@@ -1153,25 +1481,28 @@ export default function App() {
 
   if (s === 'home') body = <div className="scr hm">
     <div className="hstick">
-      <div className="topbar"><LocChip loc={loc} onClick={() => go('address')} /><button className="ib" aria-label="Open cart" onClick={() => tab('cart')}><Icon n="bag" />{count > 0 && <em className="cb" key={count}>{count}</em>}</button></div>
+      <div className="topbar"><LocChip loc={loc} onClick={() => go('address')} /><div className="tbr"><NotifBell n={unread} authed={!!user?.id && user.id !== 'local'} onOpen={() => user?.id && user.id !== 'local' ? go('notifications') : say('Please log in to see notifications')} /><button className="ib" aria-label="Open cart" onClick={() => tab('cart')}><Icon n="bag" />{count > 0 && <em className="cb" key={count}>{count}</em>}</button></div></div>
       <div className="search"><Icon n="search" /><input placeholder="What are you looking for?" value={q} onChange={e => setQ(e.target.value)} /><button className="sf" aria-label="Filters" onClick={() => tab('categories')}><Icon n="sliders" /></button></div>
     </div>
-    <Banner shop={tab} />
+    <Banner shop={tab} go={go} open={open} cats={cats} prods={prods} />
     <div className="sec">Categories <a onClick={() => tab('categories')}>See all</a></div>
-    <div className="catrow">{cats.map((c, i) => <button key={c.id} style={{ '--i': i }} className="cc rise" onClick={() => go('category', { c })}><b>{c.name}</b><span><Glyph v={c.icon} /></span></button>)}</div>
+    <div className="catrow">{cats.map((c, i) => <button key={c.id} style={{ '--i': i }} className="cc rise" onClick={() => go('category', { c })}><span><CatIcon c={c} /></span><b>{c.name}</b></button>)}</div>
+    {!dq && deals.length > 0 && <Rail title={<RailT k="bolt">Flash deals <Countdown end={deals[0].deal_ends_at} /></RailT>} list={deals} {...gp} />}
+    {!dq && bestList.length > 0 && <Rail title={<RailT k="hot">Best sellers</RailT>} list={bestList} {...gp} />}
     <div className="sec">{dq ? `Results (${hits.length})` : 'Popular Products'} <a onClick={() => tab('categories')}>See All</a></div><Grid list={pop} loading={loading} {...gp} /></div>
 
   if (s === 'categories') body = <><Hdr title="Categories" back={back} /><div className="scr">
-    <div className="cats">{cats.map((c, i) => <button key={c.id} style={{ '--i': i }} className="cat rise" onClick={() => go('category', { c })}><span><Glyph v={c.icon} /></span>{c.name}<small style={{ color: '#8b8197', fontWeight: 400 }}>{catCount.get(c.id) || 0} items</small></button>)}
+    <div className="cats">{cats.map((c, i) => <button key={c.id} style={{ '--i': i }} className="cat rise" onClick={() => go('category', { c })}><span><CatIcon c={c} /></span>{c.name}<small style={{ color: '#8b8197', fontWeight: 400 }}>{catCount.get(c.id) || 0} items</small></button>)}
       {admin && <button className="cat" style={{ background: '#ffffff99', border: '2px dashed #d9c8ea' }} onClick={() => go('manage')}><span>＋</span>Add Category</button>}</div></div></>
 
   if (s === 'category') body = <><Hdr title={cur.c.name} back={() => { setChip('All'); back() }} /><div className="scr">
     <div className="tools"><div className="search">🔍<input placeholder={`Search ${cur.c.name}...`} value={q} onChange={e => setQ(e.target.value)} /></div><select className="inp sort" aria-label="Sort" value={sort} onChange={e => setSort(e.target.value)}>{Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select></div>
     <div className="chips">{tags.map(t => <button key={t} className={chip === t ? 'on' : ''} onClick={() => setChip(t)}>{t}</button>)}</div><Grid list={shown} loading={loading} {...gp} /></div></>
 
-  if (s === 'shop') body = <ShopScreen shop={cur.shop} prods={prods} loading={loading} back={back} gp={gp} />
+  if (s === 'notifications') body = <Notifications list={notifs} back={back} onOpen={openNote} onReadAll={readAll} />
+  if (s === 'shop') body = <ShopScreen shop={cur.shop} prods={prods} loading={loading} back={back} gp={gp} follow={{ on: following, toggle: toggleFollow }} />
 
-  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: cur.p, back, addToCart, count, go, like, open }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
+  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: cur.p, back, addToCart, count, go, like, open, user, say }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
 
   if (s === 'cart') body = <><Hdr title={`My Cart (${count})`} back={back} right={cart.length > 0 && <button className="ib" aria-label="Clear cart" onClick={() => { setCart([]); setPromoOn(false) }}>🗑️</button>} /><div className="scr narrow">
     {!cart.length ? <div className="emp"><div className="emp-i"><CartArt /></div><h3>Your cart is empty</h3><p>Browse our categories and add something you like.</p><button className="btn" onClick={() => tab('categories')}>Start shopping</button></div> : <><Steps n={0} />
@@ -1235,7 +1566,7 @@ export default function App() {
     <div className="sec">Add Category</div>
     <div className="row" style={{ gap: 8 }}><input className="inp" style={{ width: 70, textAlign: 'center', marginBottom: 0 }} value={nc.icon} onChange={e => setNc(c => ({ ...c, icon: e.target.value }))} /><input className="inp" style={{ marginBottom: 0 }} placeholder="e.g. Lubricants, Pregnancy Tests" value={nc.name} onChange={e => setNc(c => ({ ...c, name: e.target.value }))} /></div>
     <button className="btn" style={{ margin: '12px 0 20px' }} onClick={() => { if (!nc.name.trim()) return say('Enter category name'); adminDo(async () => { await api.addCategory(nc.name.trim(), nc.icon || '🛍️'); setNc({ name: '', icon: '🛍️' }) }, 'Category added') }}>Add Category</button>
-    {cats.map(c => <div key={c.id} className="menu"><span><Glyph v={c.icon} /></span><span>{c.name}</span><span role="button" aria-label={`Delete ${c.name}`} onClick={() => adminDo(() => api.deleteCategory(c.id), 'Category deleted')}>🗑️</span></div>)}
+    {cats.map(c => <div key={c.id} className="menu"><span><CatIcon c={c} /></span><span>{c.name}</span><span role="button" aria-label={`Delete ${c.name}`} onClick={() => adminDo(() => api.deleteCategory(c.id), 'Category deleted')}>🗑️</span></div>)}
     <div className="sec" style={{ marginTop: 22 }}>Add Product</div>
     <input className="inp" placeholder="Product name" value={np.name} onChange={e => setNp(p => ({ ...p, name: e.target.value }))} />
     <input className="inp" type="number" inputMode="decimal" placeholder="Price (৳)" value={np.price} onChange={e => setNp(p => ({ ...p, price: e.target.value }))} />
@@ -1248,20 +1579,22 @@ export default function App() {
 
 function safeAdmin(u) { try { return api.isAdmin(u) } catch { return false } }
 
-function ShopScreen({ shop, prods, loading, back, gp }) {
-  const [q, setQ] = useState('')
+function ShopScreen({ shop, prods, loading, back, gp, follow }) {
+  const [q, setQ] = useState(''), [fc, setFc] = useState(null), followed = !!shop.id && !!follow?.on.has(shop.id)
+  useEffect(() => { let on = true; if (shop.id) api.getFollowerCount(shop.id).then(n => on && setFc(n)); return () => { on = false } }, [shop.id])
   const list = useMemo(() => prods.filter(x => x.shop_id === shop.id), [prods, shop.id])
   const shown = useMemo(() => { const k = q.trim().toLowerCase(); return k ? list.filter(x => `${x.name} ${x.brand || ''} ${x.tag || ''}`.toLowerCase().includes(k)) : list }, [list, q])
   const name = shop.name || 'Shop'
   return <><Hdr title={name} back={back} /><div className="scr">
     <div className="shp"><span className="shp-lg">{shop.logo_url ? <img src={shop.logo_url} alt="" decoding="async" draggable="false" /> : <em>{name.trim().charAt(0).toUpperCase()}</em>}</span>
-      <div className="shp-t"><b>{name}<i className="vf">✓</i></b><small>{shop.city ? 'Seller · ' + shop.city : 'Verified seller on Pinkish'}</small><span className="shp-n">{loading ? 'Loading…' : list.length + (list.length === 1 ? ' product' : ' products')}</span></div></div>
+      <div className="shp-t"><b>{name}<i className="vf">✓</i></b><small>{shop.city ? 'Seller · ' + shop.city : 'Verified seller on Pinkish'}</small><span className="shp-n">{loading ? 'Loading…' : list.length + (list.length === 1 ? ' product' : ' products')}{fc != null && ' · ' + fc + (fc === 1 ? ' follower' : ' followers')}</span></div>
+      {shop.id && follow && <button className={'fol' + (followed ? ' on' : '')} aria-pressed={followed} onClick={() => { follow.toggle(shop.id); setFc(c => c == null ? c : Math.max(0, c + (followed ? -1 : 1))) }}>{followed ? 'Following ✓' : '+ Follow'}</button>}</div>
     {list.length > 6 && <div className="tools"><div className="search">🔍<input placeholder={`Search ${name}...`} value={q} onChange={e => setQ(e.target.value)} /></div></div>}
     <Grid list={shown} loading={loading} {...gp} />
   </div></>
 }
 
-function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish, shop = null }) {
+function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish, shop = null, user = null, say = () => {} }) {
   const [v, setV] = useState(p.variants?.[0]), [added, setAdded] = useState(false), [n, setN] = useState(1)
   const t = useRef(0)
   useEffect(() => () => clearTimeout(t.current), [])
@@ -1269,16 +1602,22 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
   const add = () => { addToCart(p, v, n); setAdded(true); clearTimeout(t.current); t.current = setTimeout(() => setAdded(false), 1200) }
   const multi = (p.variants || []).length > 1
   const sugg = useMemo(() => suggest(prods, [p], new Set([p.id]), 8), [prods, p])
+  const deal = api.dealLive(p), [alsoIds, setAlsoIds] = useState([])
+  useEffect(() => { let on = true; api.getAlsoBought(p.id, 8).then(r => on && setAlsoIds(r)); return () => { on = false } }, [p.id])
+  const also = useMemo(() => { const m = new Map(prods.map(x => [String(x.id), x])); return alsoIds.map(id => m.get(id)).filter(Boolean) }, [alsoIds, prods])
   return <><Hdr title="Details" back={back} right={<button className="ib" aria-label="Open cart" onClick={() => go('cart')}><Icon n="bag" />{count > 0 && <em className="cb" key={count}>{count}</em>}</button>} />
-    <div className="scr pd"><div className="pdp"><Pic p={p} big /><div className="fadeUp pdp-info">
+    <div className="scr pd"><div className="pdp"><Gallery p={p} /><div className="fadeUp pdp-info">
       <small className="pk">{[p.brand, p.tag].filter(Boolean).join(' · ') || 'Pinkish'}</small>
       <div className="row"><h3>{p.name}</h3><Heart on={liked} toggle={() => like(p.id)} inl /></div>
+      {deal && <div className="dealbar"><b className="rt"><i className="rt-i bolt sm"><BoltIc /></i>Flash deal -{api.dealPct(p)}%</b><span>Ends in <Countdown end={p.deal_ends_at} /></span></div>}
       <small style={{ color: '#8b8197' }}>★ {p.rating} ({p.reviews > 999 ? (p.reviews / 1000).toFixed(1) + 'k' : p.reviews} reviews)</small>
       {shop ? (() => { const sh = shop.id ? shop : { id: p.shop_id, name: 'Marketplace seller' }; const openShop = () => go('shop', { shop: sh }); return <div className="store link" role="button" tabIndex={0} aria-label={'View shop ' + (sh.name || '')} onClick={openShop} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShop() } }}><span className="sl shop">{sh.logo_url ? <img src={sh.logo_url} alt="" decoding="async" draggable="false" /> : <em>{(sh.name || 'S').trim().charAt(0).toUpperCase()}</em>}</span><div><b>{sh.name || 'Marketplace seller'}<i className="vf">✓</i></b><small>{sh.city ? 'Seller · ' + sh.city : 'Verified seller on Pinkish'}</small></div><span className="fl">View shop</span></div> })()
         : <div className="store"><span className="sl"><Glyph v="🛡️" /></span><div><b><span className="bp">Pink</span><span className="bi">ish</span> Store<i className="vf">✓</i></b><small>Official store</small></div><span className="fl">Verified</span></div>}
       <div className="opt"><div className="opt-l">{multi && <><span>Select option</span><div className="var">{p.variants.map(x => <button key={x.label} className={v?.label === x.label ? 'on' : ''} onClick={() => setV(x)}>{x.label}</button>)}</div></>}</div>
         <div className="opt-r"><span>QTY</span><div className="qty"><button aria-label="Decrease" onClick={() => setN(x => Math.max(1, x - 1))}>−</button><span className="qn">{n}</span><button aria-label="Increase" onClick={() => setN(x => Math.min(20, x + 1))}>+</button></div></div></div>
       <div className="dsc"><h5>Description</h5><ul className="ck">{(p.features || []).map(f => <li key={f}>{f}</li>)}</ul></div></div></div>
+      {also.length > 0 && <Rail title="Customers also bought" list={also} add={addToCart} open={open} wish={wish} like={like} />}
+      {p.shop_id && <QA p={p} user={user} say={say} />}
       {sugg.length > 0 && <Rail title="You may also like" list={sugg} add={addToCart} open={open} wish={wish} like={like} />}</div>
-    <div className="buybar"><div><small>Total price</small><b><Money v={price * n} /></b></div><button className={'btn buy' + (added ? ' done' : '')} onClick={add}><Icon n="bag" />{added ? 'Added ✓' : 'Add to Cart'}</button></div></>
+    <div className="buybar"><div><small>Total price</small><b><Money v={price * n} />{deal && <s className="old">{taka(p.old_price * (v?.mult || 1) * n)}</s>}</b></div><button className={'btn buy' + (added ? ' done' : '')} onClick={add}><Icon n="bag" />{added ? 'Added ✓' : 'Add to Cart'}</button></div></>
 }
