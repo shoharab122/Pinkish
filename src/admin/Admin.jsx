@@ -69,8 +69,12 @@ function Count({ to, f = v => Math.round(v).toLocaleString() }) {
 }
 
 async function upload(file, folder) {
-  if (!/^image\/(png|jpe?g|webp)$/.test(file.type) || file.size > 8e6) throw new Error('Use a PNG, JPG or WebP image under 8 MB')
-  const bmp = await createImageBitmap(file), r = Math.min(1, 1200 / Math.max(bmp.width, bmp.height))
+  if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name || '')) throw new Error('Choose a picture (any photo or image)')
+  if (file.size > 30e6) throw new Error('Picture is too large (max 30 MB)')
+  let bmp
+  try { try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }) } catch { bmp = await createImageBitmap(file) } } catch { throw new Error('This picture format is not supported on your device. Try a JPG or PNG.') }
+  // hero pictures keep more detail (they are shown large); everything else stays small
+  const r = Math.min(1, (folder === 'hero' ? 2400 : 1200) / Math.max(bmp.width, bmp.height))
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * r); c.height = Math.round(bmp.height * r)
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height)
   const blob = await new Promise(res => c.toBlob(res, 'image/webp', 0.85))
@@ -89,7 +93,7 @@ function Modal({ title, onClose, children, footer, cls = '' }) {
 function Img({ value, onChange, folder, say, onBusy }) {
   const [b, setB] = useState(false)
   const pick = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setB(true); onBusy?.(true); try { onChange(await upload(f, folder)) } catch (x) { say(x.message || 'Upload failed') } setB(false); onBusy?.(false) }
-  return <div className="img">{value ? <img src={value} alt="" /> : <span>No image</span>}<div><label className="bt g sm">{b ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}<input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pick} /></label>{value && <button className="bt g sm" onClick={() => onChange('')}>Remove</button>}</div></div>
+  return <div className="img">{value ? <img src={value} alt="" /> : <span>No image</span>}<div><label className="bt g sm">{b ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}<input type="file" accept="image/*" hidden onChange={pick} /></label>{value && <button className="bt g sm" onClick={() => onChange('')}>Remove</button>}</div></div>
 }
 
 export default function Admin() {
@@ -639,12 +643,13 @@ function Notify({ d, say }) {
   }
   return <div className="pg"><div className="cd"><h2>Send a notification</h2>
     <p style={{ opacity: .7, margin: '0 0 12px' }}>Customers see it in the bell on the store, instantly. Use it for offers, new arrivals and announcements.</p>
-    <F l="Title"><input className="in" maxLength={80} placeholder="e.g. Weekend sale is live" value={f.title} onChange={set('title')} /></F>
-    <F l="Message (optional)"><textarea className="in" rows={3} maxLength={300} placeholder="Short and clear works best" value={f.body} onChange={set('body')} /></F>
+    <F l={`Title · ${f.title.length}/80`}><input className="in" maxLength={80} enterKeyHint="next" placeholder="e.g. Weekend sale is live" value={f.title} onChange={set('title')} /></F>
+    <F l={`Message (optional) · ${f.body.length}/300`}><textarea className="in" rows={3} maxLength={300} placeholder="Short and clear works best" value={f.body} onChange={set('body')} /></F>
     <div className="tl"><F l="Send to"><select className="in" value={f.aud} onChange={set('aud')}><option value="all">All customers</option><option value="buyers">Customers who have ordered</option></select></F>
       <F l="Open product when tapped (optional)"><select className="in" value={f.pid} onChange={set('pid')}><option value="">Just open notifications</option>{prods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F></div>
-    <div className="pv"><b>{f.title.trim() || 'Your title appears here'}</b>{f.body.trim() && <small>{f.body.trim()}</small>}</div>
-    <button className="bt" disabled={busy || f.title.trim().length < 2} onClick={send}>{busy ? 'Sending…' : 'Send notification'}</button>
+    <div className="ntp-l">Preview · how it looks on a customer's phone</div>
+    <div className="ntp"><span className="ntp-ic" aria-hidden="true">🔔</span><div className="ntp-t"><div className="ntp-h"><b>{f.title.trim() || 'Your title appears here'}</b><em>now</em></div>{f.body.trim() && <p>{f.body.trim()}</p>}{f.pid && <span className="ntp-go">View ›</span>}</div></div>
+    <button className="bt ntp-send" disabled={busy || f.title.trim().length < 2} onClick={send}>{busy ? 'Sending…' : 'Send notification'}</button>
     {last && <p style={{ margin: '12px 0 0', color: '#1a7f4b' }}>✓ “{last.title}” sent to {last.n} {last.n === 1 ? 'person' : 'people'}.</p>}</div></div>
 }
 
@@ -684,12 +689,12 @@ function Hero({ say, d }) {
   const mv = (i, d) => upd(a => { const b = [...a], j = i + d; if (j < 0 || j >= b.length) return a;[b[i], b[j]] = [b[j], b[i]]; return b })
   const setC = p => { setCfg(c => ({ ...c, ...p })); setDirty(true) }
   const save = async () => {
-    const bad = s.findIndex(x => x.on !== false && !(x.lines || '').trim())
+    const bad = s.findIndex(x => x.on !== false && !(x.lines || '').trim() && !(x.layout === 'full' && x.image))
     if (bad >= 0) return say(`Slide ${bad + 1} is shown but has no text. Add text, hide it or delete it.`)
     if (!s.some(x => x.on !== false)) return say('Show at least one slide, or the store uses its default banner.')
     const badUrl = s.findIndex(x => (x.link || '').startsWith('url:') && !/^https?:\/\/\S+\.\S+/i.test(x.link.slice(4).trim()))
     if (badUrl >= 0) return say(`Slide ${badUrl + 1}: the web link must start with https://`)
-    const slides = s.map(x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), sub: (x.sub || '').trim().slice(0, 90), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false, cta: (x.cta || '').trim().slice(0, 24), link: (x.link || '').startsWith('url:') ? 'url:' + x.link.slice(4).trim() : x.link || '', bg: x.bg || 'purple', c1: x.c1 || '#2d0b4a', c2: x.c2 || '#c2377f', layout: x.layout === 'cover' ? 'cover' : 'side', tone: x.tone === 'dark' ? 'dark' : 'light' }))
+    const slides = s.map(x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), sub: (x.sub || '').trim().slice(0, 90), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false, cta: (x.cta || '').trim().slice(0, 24), link: (x.link || '').startsWith('url:') ? 'url:' + x.link.slice(4).trim() : x.link || '', bg: x.bg || 'purple', c1: x.c1 || '#2d0b4a', c2: x.c2 || '#c2377f', layout: x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side', tone: x.tone === 'dark' ? 'dark' : 'light' }))
     setBusy(true)
     const { error } = await sb.from('site_settings').upsert({ key: 'hero', value: { slides, auto: cfg.auto, speed: cfg.speed }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
     setBusy(false)
@@ -699,10 +704,11 @@ function Hero({ say, d }) {
   return <div className="pg"><p className="mut">The slides on the storefront home banner. Customers see slides marked Show, in this order. {dirty && <b className="wn">Unsaved changes</b>}</p>
     <div className="cd"><div className="fg"><label className="ck"><input type="checkbox" checked={cfg.auto} onChange={e => setC({ auto: e.target.checked })} /> Slide automatically</label><F l="Time on each slide"><select className="in" disabled={!cfg.auto} value={cfg.speed} onChange={e => setC({ speed: +e.target.value })}>{SPEEDS.map(v => <option key={v} value={v}>{v} seconds</option>)}</select></F></div></div>
     {s.map((x, i) => {
-      const cov = x.layout === 'cover' && !!x.image, lk = x.link || '', lt = lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : ''
+      const cov = x.layout === 'cover' && !!x.image, full = x.layout === 'full' && !!x.image, lk = x.link || '', lt = lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : ''
       const pv = { background: heroBg(x), color: x.tone === 'dark' ? '#2a1a3a' : '#fff' }
       if (cov) pv.background = `linear-gradient(90deg,${x.tone === 'dark' ? '#fffd' : '#000b'},#0000), url(${JSON.stringify(x.image)}) center/cover`
-      return <div className="cd hs" key={i}><div className="pv" style={pv}><div>{x.chip && <span style={{ fontSize: '.7rem', opacity: .85, letterSpacing: '.08em', textTransform: 'uppercase' }}>{x.chip}</span>}{(x.lines || '').split('\n').filter(Boolean).map((l, k) => <span key={k}>{l}</span>)}{x.sub && <span className="pvs">{x.sub}</span>}{x.cta && <span className="pvb">{x.cta} ↗</span>}</div>{!cov && <i>{x.image ? <img src={x.image} alt="" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji}</i>}</div>
+      if (full) { pv.background = `url(${JSON.stringify(x.image)}) center/contain no-repeat, ${heroBg(x)}`; pv.aspectRatio = '2.4/1'; pv.minHeight = 0 }
+      return <div className="cd hs" key={i}><div className="pv" style={pv}>{!full && <div>{x.chip && <span style={{ fontSize: '.7rem', opacity: .85, letterSpacing: '.08em', textTransform: 'uppercase' }}>{x.chip}</span>}{(x.lines || '').split('\n').filter(Boolean).map((l, k) => <span key={k}>{l}</span>)}{x.sub && <span className="pvs">{x.sub}</span>}{x.cta && <span className="pvb">{x.cta} ↗</span>}</div>}{!cov && !full && <i>{x.image ? <img src={x.image} alt="" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji}</i>}</div>
         <div><F l="Headline (one line per row)"><textarea className="in" rows="3" value={x.lines} onChange={e => set(i, 'lines', e.target.value)} /></F>
           <div className="fg"><F l="Small text under the headline (optional)"><input className="in" maxLength={90} value={x.sub} onChange={e => set(i, 'sub', e.target.value)} /></F><F l="Badge (small label above the headline)"><input className="in" maxLength={30} value={x.chip} onChange={e => set(i, 'chip', e.target.value)} /></F></div>
           <div className="fg"><F l="Button text (empty = no button)"><input className="in" maxLength={24} value={x.cta} onChange={e => set(i, 'cta', e.target.value)} /></F>
@@ -712,11 +718,12 @@ function Hero({ say, d }) {
           {lt === 'url' && <F l="Web link (opens in a new tab)"><input className="in" inputMode="url" placeholder="https://" value={lk.slice(4)} onChange={e => set(i, 'link', 'url:' + e.target.value)} /></F>}
           <F l="Background colour"><div className="sw">{Object.keys(BG_NAMES).map(k => <button key={k} type="button" title={BG_NAMES[k]} aria-label={BG_NAMES[k]} aria-pressed={(x.bg || 'purple') === k} className={(x.bg || 'purple') === k ? 'on' : ''} style={{ background: k === 'custom' ? 'conic-gradient(#e0457b,#f5c542,#3fbf7f,#2f80ed,#8e2a8c,#e0457b)' : heroBg({ bg: k }) }} onClick={() => set(i, 'bg', k)} />)}</div></F>
           {x.bg === 'custom' && <div className="fg"><F l="Colour 1"><input className="in col" type="color" value={x.c1 || '#2d0b4a'} onChange={e => set(i, 'c1', e.target.value)} /></F><F l="Colour 2"><input className="in col" type="color" value={x.c2 || '#c2377f'} onChange={e => set(i, 'c2', e.target.value)} /></F></div>}
-          <div className="fg"><F l="Picture style"><select className="in" value={x.layout === 'cover' ? 'cover' : 'side'} onChange={e => set(i, 'layout', e.target.value)}><option value="side">Picture on the right</option><option value="cover">Picture fills the whole banner</option></select></F>
+          <div className="fg"><F l="Picture style"><select className="in" value={x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side'} onChange={e => set(i, 'layout', e.target.value)}><option value="side">Picture on the right</option><option value="cover">Picture behind the text</option><option value="full">Picture only (whole picture, no text)</option></select></F>
             <F l="Text colour"><select className="in" value={x.tone === 'dark' ? 'dark' : 'light'} onChange={e => set(i, 'tone', e.target.value)}><option value="light">White (for dark backgrounds)</option><option value="dark">Dark (for light backgrounds)</option></select></F></div>
           <F l="Emoji (used when there is no picture)"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set(i, 'emoji', e.target.value)} /></F>
           <Img value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
-          {x.layout === 'cover' && !x.image && <p className="mut">Upload a picture to use the full-banner style. Wide photos (3:2) with the subject on the right work best.</p>}
+          {x.layout === 'cover' && !x.image && <p className="mut">Upload a picture to use this style. Wide photos (3:2) with the subject on the right work best.</p>}
+          {x.layout === 'full' && <p className="mut">{x.image ? 'The whole picture is shown on the banner, nothing is cut. Tapping it opens the link above.' : 'Upload a wide picture, best 2400 × 1000 px (about 2.4:1). Put any text inside the picture itself.'}</p>}
           <div className="acts"><label className="ck"><input type="checkbox" checked={x.on !== false} onChange={e => set(i, 'on', e.target.checked)} /> Show</label><button className="bt g sm" disabled={!i} onClick={() => mv(i, -1)}>Move up</button><button className="bt g sm" disabled={i === s.length - 1} onClick={() => mv(i, 1)}>Move down</button><button className="bt d sm" onClick={() => { if (window.confirm(`Delete slide ${i + 1}?`)) upd(a => a.filter((_, j) => j !== i)) }}>Delete</button></div></div></div>
     })}
     {!s.length && <p className="mut cd">No slides. Add one, or save to let the store use its default banner.</p>}
