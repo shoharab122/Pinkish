@@ -688,7 +688,7 @@ html.adm-on body{position:fixed;inset:0;width:100%}
 .sw button{width:38px;height:38px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 10px #4a16682e;transition:transform .25s var(--spring)}
 .sw button.on{outline:3px solid var(--p2);outline-offset:2px;transform:scale(1.08)}
 .in.col{padding:4px;min-height:48px;cursor:pointer}
-.pv{display:grid;gap:2px;margin:6px 0 14px;padding:12px 14px;border-radius:14px;border:1px solid #f3b4cb;background:#fff7fa}.pv b{font-size:14px}.pv small{opacity:.7;overflow-wrap:anywhere}
+
 /* ---------- send notification: preview + mobile ---------- */
 .ntp-l{margin:6px 2px 8px;font-size:.78rem;font-weight:700;letter-spacing:.04em;color:var(--mut)}
 .ntp{display:flex;gap:12px;align-items:flex-start;margin:0 0 16px;padding:14px;border-radius:20px;border:1px solid #f3b4cb;background:linear-gradient(145deg,#fff7fa,#fdeef6);color:var(--ink);box-shadow:0 8px 20px -12px #8e2a8c66}
@@ -700,3 +700,12 @@ html.adm-on body{position:fixed;inset:0;width:100%}
 .ntp-t p{margin:0;font-size:.84rem;line-height:1.45;opacity:.85;overflow-wrap:anywhere;white-space:pre-line}
 .ntp-go{font-size:.8rem;font-weight:700;color:var(--p2)}
 @media(max-width:899px){.ntp-send{width:100%;min-height:52px}}
+
+/* ---------- hero editor ---------- */
+.img.wide>img,.img.wide>span{width:150px;height:88px}
+.img.wide>img{object-fit:contain;background:linear-gradient(145deg,#f6e3ff,#ffe0ec)}
+.hs .pv{min-height:130px;width:100%;overflow:hidden}
+.hs .pv>div{min-width:0}
+.hs .pv>div>span{overflow-wrap:anywhere}
+.hs .hnote{margin:0;padding:10px 12px;border-radius:14px;background:#fff7fa;border:1px solid #f3b4cb;font-size:.82rem;line-height:1.45;color:var(--ink)}
+@media(max-width:899px){.hs .pv{min-height:110px}.img.wide>img,.img.wide>span{width:120px;height:76px}}
