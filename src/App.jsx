@@ -354,6 +354,7 @@ const LIQUID_CSS = `
 .bs::after{content:'';position:absolute;width:190px;height:190px;right:-50px;top:-70px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#ffffff40,#fff0 70%);pointer-events:none}
 /* phones: text and picture never overlap; the picture gets its own column */
 @media (max-width:719px){.bw .bs.pic .bt{max-width:60%}.bw .bs.pic .bart{right:12px;top:14px;bottom:14px;height:calc(100% - 28px);max-width:34%}.bw .bs.pic .bt h3{font-size:clamp(16px,5vw,20px)}}
+@media (max-width:719px){.bw .banner.hb{transition:aspect-ratio .3s var(--ease)}.bw .banner.hb.fit{height:auto;aspect-ratio:var(--ar)}}
 .bs.full{padding:0;display:block}.bs.full::after{display:none}
 .bfull-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(24px) saturate(1.15) brightness(.92);transform:scale(1.25);pointer-events:none}
 .bfull{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;object-position:center;display:block;pointer-events:none}
@@ -959,8 +960,11 @@ function BannerImpl({ shop, go, open, cats, prods }) {
     if (s.m && n > 1 && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) setI(k => (k % n + (dx < 0 ? 1 : -1) + n) % n)
   }
   const x0 = list[cur]
+  // On phones the banner takes the shape of a whole-picture slide, so the full picture shows with no empty bars.
+  const ar0 = x0.image && x0.layout !== 'cover' ? ars[x0.image] : 0
+  const fit = !!ar0 && (x0.layout === 'full' || ar0 >= 1.25)
   return <div className="bw" role="region" aria-roledescription="carousel" aria-label="Offers">
-    <div className={'banner hb' + (live(x0) ? ' lk' : '')} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={e => { if (sw.current) sw.current.m = true; setHold(false) }} onClick={() => { if (!sw.current?.m && live(x0)) act(x0) }}>
+    <div className={'banner hb' + (live(x0) ? ' lk' : '') + (fit ? ' fit' : '')} style={fit ? { '--ar': Math.min(3, Math.max(1.15, ar0)) } : undefined} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={e => { if (sw.current) sw.current.m = true; setHold(false) }} onClick={() => { if (!sw.current?.m && live(x0)) act(x0) }}>
       {list.map((x, k) => {
         const cov = x.layout === 'cover' && !!x.image, art = x.image || x.emoji || '🛡️', btn = x.cta === undefined ? 'Shop Now' : x.cta
         // "Picture only": the whole picture is always visible (never cropped); a blurred copy fills any spare space
