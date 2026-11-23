@@ -352,6 +352,8 @@ const LIQUID_CSS = `
 .bs.on{opacity:1;visibility:visible;transition:opacity .5s var(--ease),visibility 0s}
 .bs.dk{color:var(--ink)}
 .bs::after{content:'';position:absolute;width:190px;height:190px;right:-50px;top:-70px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#ffffff40,#fff0 70%);pointer-events:none}
+/* phones: text and picture never overlap; the picture gets its own column */
+@media (max-width:719px){.bw .bs.pic .bt{max-width:60%}.bw .bs.pic .bart{right:12px;top:14px;bottom:14px;height:calc(100% - 28px);max-width:34%}.bw .bs.pic .bt h3{font-size:clamp(16px,5vw,20px)}}
 .bs.full{padding:0;display:block}.bs.full::after{display:none}
 .bfull-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(24px) saturate(1.15) brightness(.92);transform:scale(1.25);pointer-events:none}
 .bfull{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;object-position:center;display:block;pointer-events:none}
@@ -922,6 +924,19 @@ function BannerImpl({ shop, go, open, cats, prods }) {
   const [i, setI] = useState(0), [hold, setHold] = useState(false), sw = useRef(null)
   useEffect(() => { let on = true; api.getHeroFull().then(h => { if (on && h) { setCfg(h); setI(0) } }).catch(() => {}); return () => { on = false } }, [])
   const list = cfg.slides, n = list.length, cur = i % n
+  // Picture shapes: a wide (landscape) picture next to text never fits on a phone, so it is shown as a whole-picture slide instead.
+  const [ars, setArs] = useState({})
+  useEffect(() => {
+    let on = true
+    list.forEach(x => {
+      if (!x.image || x.layout === 'cover') return
+      const im = new Image()
+      im.onload = () => { if (on) setArs(a => a[x.image] ? a : { ...a, [x.image]: (im.naturalWidth || 1) / (im.naturalHeight || 1) }) }
+      im.onerror = () => { if (on) setArs(a => a[x.image] ? a : { ...a, [x.image]: 1 }) }
+      im.src = x.image
+    })
+    return () => { on = false }
+  }, [list])
   const reduce = useMemo(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches, [])
   useEffect(() => {
     if (!cfg.auto || n < 2 || hold || reduce) return
@@ -949,15 +964,16 @@ function BannerImpl({ shop, go, open, cats, prods }) {
       {list.map((x, k) => {
         const cov = x.layout === 'cover' && !!x.image, art = x.image || x.emoji || '🛡️', btn = x.cta === undefined ? 'Shop Now' : x.cta
         // "Picture only": the whole picture is always visible (never cropped); a blurred copy fills any spare space
-        if (x.layout === 'full' && x.image) return <div key={k} className={'bs full' + (k === cur ? ' on' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
+        const wide = !!x.image && x.layout !== 'cover' && (x.layout === 'full' || ars[x.image] >= 1.25)
+        if (wide) return <div key={k} className={'bs full' + (k === cur ? ' on' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
           <img className="bfull-bg" src={x.image} alt="" aria-hidden="true" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />
           <img className="bfull" src={x.image} alt="Special offer" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />
         </div>
-        return <div key={k} className={'bs' + (k === cur ? ' on' : '') + (cov ? ' cov' : '') + (x.tone === 'dark' ? ' dk' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
+        return <div key={k} className={'bs' + (k === cur ? ' on' : '') + (cov ? ' cov' : '') + (!cov && x.image ? ' pic' : '') + (x.tone === 'dark' ? ' dk' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
           {cov && <img className="bcov" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />}
           <div className="bt">{x.chip && <span className="bchip">{x.chip}</span>}<h3>{x.lines.split('|').map((l, j) => <span key={j}>{l}</span>)}</h3>{x.sub && <p className="bsub">{x.sub}</p>}
             {btn && <button type="button" className="bshop" tabIndex={k === cur ? 0 : -1} onClick={e => { e.stopPropagation(); act(x) }}>{btn}<i>↗</i></button>}</div>
-          {!cov && (x.image ? <img className="bart" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} /> : <div className="be"><Glyph v={art} /></div>)}
+          {!cov && (x.image ? (ars[x.image] === undefined ? null : <img className="bart" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />) : <div className="be"><Glyph v={art} /></div>)}
         </div>
       })}
     </div>
