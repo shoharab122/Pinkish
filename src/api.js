@@ -72,10 +72,12 @@ const toUser = (u, admin = false) => {
 // NOTE: is_admin here (and in the cached ms_user) is for showing/hiding UI only.
 // Real protection is the database: RLS policies use is_admin() on the server, so a tampered flag grants nothing.
 async function buildUser(au) {
-  let admin = false, prof = null
-  try { const { data } = await supabase.from('admins').select('user_id').eq('user_id', au.id).maybeSingle(); admin = !!data } catch {}
+  // The two lookups are independent, so they run at the same time (one round-trip instead of two).
   // Needs the "profiles" table (created by supabasesecurity.sql). If it is missing this is ignored.
-  try { const { data } = await supabase.from('profiles').select('name,phone').eq('user_id', au.id).maybeSingle(); prof = data } catch {}
+  const [admin, prof] = await Promise.all([
+    (async () => { try { const { data } = await supabase.from('admins').select('user_id').eq('user_id', au.id).maybeSingle(); return !!data } catch { return false } })(),
+    (async () => { try { const { data } = await supabase.from('profiles').select('name,phone').eq('user_id', au.id).maybeSingle(); return data } catch { return null } })(),
+  ])
   const u = toUser(au, admin)
   if (prof?.phone) { u.mobile = prof.phone; u.phone = prof.phone }
   sv('ms_user', u); return u
