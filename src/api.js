@@ -43,7 +43,7 @@ export async function deleteCategory(id) {
 }
 export async function getProducts() {
   if (supabase) {
-    try { const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false }); if (!error && data) return data.filter(p => p.is_active !== false) } catch {}
+    try { const { data, error } = await supabase.from('products').select('*').or('is_active.is.null,is_active.eq.true').order('created_at', { ascending: false }); if (!error && data) return data.filter(p => p.is_active !== false) } catch {}
     return null
   }
   return DEV ? ls('ms_prods', []) : null
@@ -72,10 +72,12 @@ const toUser = (u, admin = false) => {
 // NOTE: is_admin here (and in the cached ms_user) is for showing/hiding UI only.
 // Real protection is the database: RLS policies use is_admin() on the server, so a tampered flag grants nothing.
 async function buildUser(au) {
-  let admin = false, prof = null
-  try { const { data } = await supabase.from('admins').select('user_id').eq('user_id', au.id).maybeSingle(); admin = !!data } catch {}
+  // The two lookups are independent, so they run at the same time (one round-trip instead of two).
   // Needs the "profiles" table (created by supabasesecurity.sql). If it is missing this is ignored.
-  try { const { data } = await supabase.from('profiles').select('name,phone').eq('user_id', au.id).maybeSingle(); prof = data } catch {}
+  const [admin, prof] = await Promise.all([
+    (async () => { try { const { data } = await supabase.from('admins').select('user_id').eq('user_id', au.id).maybeSingle(); return !!data } catch { return false } })(),
+    (async () => { try { const { data } = await supabase.from('profiles').select('name,phone').eq('user_id', au.id).maybeSingle(); return data } catch { return null } })(),
+  ])
   const u = toUser(au, admin)
   if (prof?.phone) { u.mobile = prof.phone; u.phone = prof.phone }
   sv('ms_user', u); return u
@@ -199,6 +201,17 @@ export async function getHero() {
   } catch { return null }
 }
 
+// Full hero config (slides + autoplay settings) controlled from the admin panel.
+export async function getHeroFull() {
+  if (!supabase) return null
+  try {
+    const { data } = await supabase.from('site_settings').select('value').eq('key', 'hero').maybeSingle()
+    const v = data?.value || {}
+    const slides = (v.slides || []).filter(x => x.on !== false && ((x.lines || '').trim() || (x.layout === 'full' && x.image))).map(x => ({ ...x, lines: String(x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('|') }))
+    return slides.length ? { slides, auto: v.auto !== false, speed: Math.min(10, Math.max(2, Number(v.speed) || 4)) } : null
+  } catch { return null }
+}
+
 // Online payments (bKash / Nagad). The server prices the cart from the database and talks to the gateway;
 // the browser only receives a payment-page URL to redirect to.
 export async function startOnlinePayment({ provider, items, promo, address }) {
@@ -246,16 +259,107 @@ export async function placeBkashOrder(o) {
   if (error) { const m = String(error.message || ''); throw new Error(/Transaction ID|bKash number|amount|sign in|deliver inside/i.test(m) ? m : friendlyOrder(error)) }
   return data
 }
-// Public shop info for the storefront (name + logo only; never NID or documents).
-// Reads the safe view "shops_public" (see supabaseshopspublic.sql); falls back to the shops table's public columns.
+// Public shop info for the storefront (name, logo, cover, city only; never phone, NID or documents).
+// Sellers cannot be contacted directly: every order goes through Pinkish and our riders.
 export async function getShops() {
   if (!supabase) return null
-  const cols = 'id,name,logo_url,slug,city'
-  for (const [t, q] of [['shops_public', s => s], ['shops', s => s.eq('status', 'approved')]]) {
-    try {
-      const { data, error } = await q(supabase.from(t).select(cols))
-      if (!error && data) return Object.fromEntries(data.map(x => [x.id, x]))
-    } catch { /* try the next source */ }
-  }
+  // cover_url is optional: if the column is not added yet, fall back to the original columns.
+  for (const cols of ['id,name,logo_url,cover_url,slug,city', 'id,name,logo_url,slug,city'])
+    for (const [t, q] of [['shops_public', s => s], ['shops', s => s.eq('status', 'approved')]]) {
+      try {
+        const { data, error } = await q(supabase.from(t).select(cols))
+        if (!error && data) return Object.fromEntries(data.map(x => [x.id, x]))
+      } catch { /* try the next source */ }
+    }
   return null
+}
+// ---------------- Marketplace features (deals, best sellers, notifications, follow, Q&A) ----------------
+// A deal is "live" only while deal_ends_at is in the future. The server (pg_cron) puts the price back afterwards.
+export const dealLive = p => !!(p && p.old_price && p.deal_ends_at && Number(p.old_price) > Number(p.price) && new Date(p.deal_ends_at).getTime() > Date.now())
+export const dealPct = p => dealLive(p) ? Math.max(1, Math.round((1 - Number(p.price) / Number(p.old_price)) * 100)) : 0
+
+export async function getBestSellers(limit = 12) {
+  if (!supabase) return []
+  try { const { data, error } = await supabase.rpc('best_sellers', { p_limit: limit }); return error ? [] : (data || []).map(r => String(r.product_id)) } catch { return [] }
+}
+export async function getAlsoBought(id, limit = 8) {
+  if (!supabase || !id) return []
+  try { const { data, error } = await supabase.rpc('also_bought', { p_id: String(id), p_limit: limit }); return error ? [] : (data || []).map(r => String(r.product_id)) } catch { return [] }
+}
+export async function getNotifications(uid) {
+  if (!supabase || !isUuid(uid)) return []
+  const { data, error } = await supabase.from('notifications').select('id,title,body,link,is_read,created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(50)
+  if (error) throw error
+  return data || []
+}
+export async function markNotificationsRead(uid, ids) {
+  if (!supabase || !isUuid(uid)) return
+  let q = supabase.from('notifications').update({ is_read: true }).eq('user_id', uid).eq('is_read', false)
+  if (ids?.length) q = q.in('id', ids)
+  const { error } = await q; if (error) throw error
+}
+// Live: a new notification appears without reloading. Returns an unsubscribe function.
+export function onNotification(uid, cb) {
+  if (!supabase || !isUuid(uid)) return () => {}
+  const ch = supabase.channel('notif-' + uid).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + uid }, e => e?.new && cb(e.new)).subscribe()
+  return () => { try { supabase.removeChannel(ch) } catch { /* already closed */ } }
+}
+export async function getFollowing(uid) {
+  if (!supabase || !isUuid(uid)) return []
+  const { data, error } = await supabase.from('shop_follows').select('shop_id').eq('user_id', uid)
+  if (error) throw error
+  return (data || []).map(r => r.shop_id)
+}
+export async function setFollow(uid, shopId, on) {
+  if (!supabase || !isUuid(uid) || !isUuid(shopId)) throw new Error('Please sign in.')
+  if (on) { const { error } = await supabase.from('shop_follows').insert({ user_id: uid, shop_id: shopId }); if (error && error.code !== '23505') throw error }
+  else { const { error } = await supabase.from('shop_follows').delete().eq('user_id', uid).eq('shop_id', shopId); if (error) throw error }
+}
+export async function getFollowerCount(shopId) {
+  if (!supabase || !isUuid(shopId)) return null
+  try { const { data, error } = await supabase.rpc('shop_follower_count', { p_shop: shopId }); return error ? null : Number(data) } catch { return null }
+}
+export async function getQuestions(productId) {
+  if (!supabase || !isUuid(productId)) return []
+  try { const { data, error } = await supabase.from('product_questions').select('id,question,answer,user_name,created_at,answered_at').eq('product_id', productId).order('created_at', { ascending: false }).limit(30); return error ? [] : (data || []) } catch { return [] }
+}
+export async function askQuestion(uid, productId, text) {
+  if (!supabase || !isUuid(uid) || !isUuid(productId)) throw new Error('Please sign in to ask a question.')
+  const question = str(text, 300)
+  if (question.length < 5) throw new Error('Write your question (at least 5 characters).')
+  const { data, error } = await supabase.from('product_questions').insert({ product_id: productId, user_id: uid, question }).select('id,question,answer,user_name,created_at,answered_at').single()
+  if (error) throw new Error(/up to 10/i.test(error.message) ? error.message : 'Could not send your question. Please try again.')
+  return data
+}
+// Shareable product link (the storefront opens ?p=<id> straight on the product page)
+export const productUrl = p => { try { const u = new URL(location.origin + '/'); u.searchParams.set('p', String(p.id)); return u.toString() } catch { return '' } }
+
+// ---------------- Returns & refunds ----------------
+export const RETURN_DAYS = 14
+export const RETURN_REASONS = ['Damaged or broken', 'Wrong item sent', 'Not as described', 'Missing parts or items', 'Expired or poor quality', 'Changed my mind', 'Other']
+export const RETURN_STEPS = ['Requested', 'Approved', 'Received', 'Completed']
+export const returnStep = r => r?.status === 'rejected' ? -1 : Math.max(0, ['requested', 'approved', 'received', 'completed'].indexOf(r?.status))
+export const returnLabel = r => !r ? '' : r.status === 'rejected' ? 'Not approved' : r.status === 'completed' ? (r.kind === 'replace' ? 'Replaced' : 'Refunded') : RETURN_STEPS[returnStep(r)]
+// open for delivered (status 3) server orders, within RETURN_DAYS of the order date (same rule as request_return())
+export const canReturn = o => !!o && (o.status || 0) === 3 && isUuid(String(o.id)) && Date.now() - new Date(o.created_at).getTime() < RETURN_DAYS * 864e5
+export const returnDaysLeft = o => Math.max(0, Math.ceil((new Date(o.created_at).getTime() + RETURN_DAYS * 864e5 - Date.now()) / 864e5))
+const RCOLS = 'id,order_id,order_no,items,kind,reason,details,refund_to,amount,status,seller_response,admin_note,refund_amount,created_at,updated_at'
+export async function getMyReturns(uid) {
+  if (!supabase || !isUuid(uid)) return []
+  const { data, error } = await supabase.from('return_requests').select(RCOLS).eq('user_id', uid).order('created_at', { ascending: false }).limit(100)
+  if (error) throw error
+  return data || []
+}
+// The server re-reads the order: prices, quantities and the seller come from the database, not from here.
+export async function requestReturn({ order, items, kind, reason, details, refundTo }) {
+  if (!supabase) throw new Error('Returns are unavailable right now.')
+  const list = (Array.isArray(items) ? items : []).map(i => ({ id: String(i.id), variant: i.variant || null, qty: Math.max(1, parseInt(i.qty, 10) || 1) }))
+  if (!list.length) throw new Error('Choose at least one item to return.')
+  const { data, error } = await supabase.rpc('request_return', { p_order: String(order?.id || ''), p_items: list, p_kind: kind === 'replace' ? 'replace' : 'refund', p_reason: str(reason, 80), p_details: str(details, 600) || null, p_refund_to: str(refundTo, 20) || null })
+  if (error) {
+    const m = String(error.message || '')
+    if (/function .* does not exist|schema cache/i.test(m)) throw new Error('Returns are not set up yet. Please contact support.')
+    throw new Error(/return|order|item|reason|refund|sign in|delivered|window|support/i.test(m) ? m : 'Could not send your request. Please try again.')
+  }
+  return Array.isArray(data) ? data[0] : data
 }

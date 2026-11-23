@@ -8,22 +8,69 @@ const slugify = n => (s(n, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace
 export const validNid = n => /^(\d{10}|\d{13}|\d{17})$/.test(String(n || '').replace(/[\s-]/g, ''))
 const nidOf = f => s(f?.nid, 20).replace(/[\s-]/g, '')
 export const validPhone = p => /^(\+?88)?01[3-9]\d{8}$/.test(String(p || '').replace(/[\s-]/g, ''))
-
-function checkFile(f, { doc = false } = {}) {
-  const ok = ['image/jpeg', 'image/png', 'image/webp', ...(doc ? ['application/pdf'] : [])]
-  if (!f || !ok.includes(f.type)) throw new Error(doc ? 'Upload a JPG, PNG, WebP or PDF file.' : 'Upload a JPG, PNG or WebP image.')
-  if (f.size > (doc ? 5 : 3) * 1024 * 1024) throw new Error(`File is too large (max ${doc ? 5 : 3} MB).`)
+// Sellers sell only through Pinkish: no phone numbers, messenger names or links in public text.
+// The same rule runs in the database (supabase-seller-ops.sql), this just gives a quick, friendly message.
+const BN = '০১২৩৪৫৬৭৮৯'
+export const hasContact = t => {
+  const x = String(t || '').toLowerCase().replace(/[০-৯]/g, d => BN.indexOf(d))
+  return /01[3-9]\d{8}/.test(x.replace(/(\d)[\s.()-]+(?=\d)/g, '$1')) || /(whats ?app|wa\.me|viber|telegram|t\.me\/|\bimo\b|messenger|m\.me\/|facebook\.com|fb\.com|instagram\.com|https?:\/\/|www\.|হোয়াটস|ইমো)/.test(x)
 }
+const noContact = (what, ...v) => { if (v.some(hasContact)) throw new Error(`${what} cannot include phone numbers, WhatsApp or links. Customers order and pay through Pinkish.`) }
+
+const isImg = f => !!f && (/^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(f.name || ''))
+function checkFile(f, { doc = false } = {}) {
+  if (doc) {
+    if (!f || !(isImg(f) || f.type === 'application/pdf')) throw new Error('Upload a photo or PDF file.')
+    if (f.size > 10 * 1024 * 1024) throw new Error('File is too large (max 10 MB).')
+    return
+  }
+  if (!isImg(f)) throw new Error('Choose a picture (any photo or image).')
+  if (f.size > 30 * 1024 * 1024) throw new Error('Picture is too large (max 30 MB).')
+}
+// Any picture in, a small optimised WebP out: resized to maxDim, EXIF-rotated, white behind transparency.
+// If the browser cannot decode the file (e.g. HEIC on some devices) the original is uploaded as-is when small enough.
+async function prepareImage(file, maxDim = 1600, quality = 0.84) {
+  try {
+    let bmp
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }) } catch { bmp = await createImageBitmap(file) }
+    const r = Math.min(1, maxDim / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas')
+    c.width = Math.max(1, Math.round(bmp.width * r)); c.height = Math.max(1, Math.round(bmp.height * r))
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height)
+    if (bmp.close) bmp.close()
+    const enc = (t, q) => new Promise(res => c.toBlob(res, t, q))
+    // Some phones (iPhone Safari, older Android browsers) cannot encode WebP and silently hand back a PNG.
+    // Trust the type the browser really produced, and fall back to JPEG, which every device and browser can show.
+    let blob = await enc('image/webp', quality)
+    if (!blob || !blob.size || blob.type !== 'image/webp') blob = await enc('image/jpeg', Math.min(0.9, quality + 0.04))
+    if (blob && blob.size && /^image\/(webp|jpeg)$/.test(blob.type)) return { blob, type: blob.type, ext: blob.type === 'image/webp' ? 'webp' : 'jpg' }
+  } catch { /* fall through */ }
+  if (file.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('This picture format is not supported on your device. Try a JPG or PNG.')
+  return { blob: file, type: file.type, ext: ext(file) }
+}
+// Photos are compressed the moment they are picked (while the seller fills in the form), so Save only has to upload.
+const READY = new WeakSet()
+export async function preparePhoto(file) {
+  checkFile(file)
+  const o = await prepareImage(file, 1000)
+  const out = new File([o.blob], 'photo.' + o.ext, { type: o.type })
+  READY.add(out)
+  return out
+}
+// Tells any open store tab (same browser) to refresh its product list right now.
+let bc
+const announce = () => { try { bc = bc || new BroadcastChannel('pk-products'); bc.postMessage(Date.now()) } catch { /* not supported */ } }
 const cleanShop = f => ({ name: s(f.name, 60), description: s(f.description, 500), phone: s(f.phone, 20), address: s(f.address, 300), city: s(f.city, 60) })
 function checkShop(c) {
   if (c.name.length < 3) throw new Error('Shop name must be at least 3 characters.')
+  noContact('Shop name and description', c.name, c.description)
   if (!validPhone(c.phone)) throw new Error('Enter a valid Bangladeshi mobile number.')
   if (c.address.length < 8) throw new Error('Enter your full business address.')
 }
 async function uploadDoc(uid, file) {
   checkFile(file, { doc: true })
-  const path = `${uid}/${Date.now()}-id.${ext(file)}`
-  const { error } = await supabase.storage.from('seller-docs').upload(path, file, { contentType: file.type })
+  const o = file.type === 'application/pdf' ? { blob: file, type: file.type, ext: 'pdf' } : await prepareImage(file, 2000, 0.9)
+  const path = `${uid}/${Date.now()}-id.${o.ext}`
+  const { error } = await supabase.storage.from('seller-docs').upload(path, o.blob, { contentType: o.type })
   if (error) throw error
   return path
 }
@@ -52,20 +99,41 @@ export async function resubmitShop(uid, shop, form, docFile) {
   if (error) throw error
   return data
 }
-export async function updateShop(shop, form, logoFile) {
+// logoFile / coverFile: a File to replace the picture, or null to leave it. removeCover() clears the cover.
+export async function updateShop(shop, form, logoFile, coverFile) {
   need(); const c = cleanShop(form); checkShop(c)
   const patch = { ...c }
-  if (logoFile) patch.logo_url = await uploadImage(shop.id, logoFile)
+  // direct customer contact is not allowed: the switch stays off
+  if ('contact_ok' in shop) patch.contact_ok = false
+  // logo and cover upload at the same time
+  const [logo, cover] = await Promise.all([logoFile ? uploadImage(shop.id, logoFile, 600) : null, coverFile ? uploadImage(shop.id, coverFile, 1800) : null])
+  if (logo) patch.logo_url = logo
+  if (cover) patch.cover_url = cover
   const { data, error } = await supabase.from('shops').update(patch).eq('id', shop.id).select().single()
   if (error) throw error
   return data
 }
-export async function uploadImage(shopId, file) {
-  need(); checkFile(file)
-  const path = `shops/${shopId}/${Date.now()}-${rand()}.${ext(file)}`
-  const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type, cacheControl: '31536000' })
+export async function removeCover(shop) {
+  need()
+  const { data, error } = await supabase.from('shops').update({ cover_url: null }).eq('id', shop.id).select().single()
   if (error) throw error
-  return supabase.storage.from('media').getPublicUrl(path).data.publicUrl
+  return data
+}
+export async function uploadImage(shopId, file, maxDim = 1000) {
+  need(); checkFile(file)
+  const o = READY.has(file) ? { blob: file, type: file.type, ext: (file.name.split('.').pop() || 'jpg') } : await prepareImage(file, maxDim)
+  const path = `shops/${shopId}/${Date.now()}-${rand()}.${o.ext}`
+  // a flaky mobile connection is the usual reason a photo goes missing: retry before giving up
+  let err
+  for (let a = 0; a < 3; a++) {
+    const { error } = await supabase.storage.from('media').upload(path, o.blob, { contentType: o.type, cacheControl: '31536000' })
+    if (!error) { err = null; break }
+    err = error; await new Promise(r => setTimeout(r, 600 * (a + 1)))
+  }
+  if (err) throw new Error('Could not upload the picture. Check your internet and try again.')
+  const url = supabase.storage.from('media').getPublicUrl(path).data.publicUrl
+  if (!url) throw new Error('Could not upload the picture. Please try again.')
+  return url
 }
 export async function getCategoriesList() {
   need(); const { data } = await supabase.from('categories').select('id,name,icon').order('created_at'); return data || []
@@ -76,27 +144,121 @@ export async function myProducts(shopId) {
   if (error) throw error
   return data || []
 }
-export async function saveProduct(shop, form, imageFile, existing) {
+export const PHOTOS = 4
+// Photos already saved on a product (older products only have the single cover image_url).
+export const existingImages = p => (Array.isArray(p?.images) && p.images.filter(Boolean).length ? p.images.filter(Boolean) : p?.image_url ? [p.image_url] : [])
+// photos: array of 4 slots (File or null). Pass null to leave a product's photos untouched (e.g. hide/show toggle).
+// base: a product whose saved photos fill empty slots of a NEW product (used by "Duplicate").
+export async function saveProduct(shop, form, photos, existing, base = null) {
   need()
   const price = Number(form.price), stock = parseInt(form.stock, 10)
   if (s(form.name, 120).length < 2) throw new Error('Product name is required.')
   if (!form.category_id) throw new Error('Choose a category.')
+  noContact('Product details', form.name, form.brand, form.tag)
   if (!Number.isFinite(price) || price <= 0 || price > 10000000) throw new Error('Enter a valid price.')
   if (!Number.isInteger(stock) || stock < 0 || stock > 100000) throw new Error('Enter a valid stock quantity.')
   const row = { name: s(form.name, 120), brand: s(form.brand, 60) || null, tag: s(form.tag, 30) || null, category_id: form.category_id, price, stock, is_active: form.is_active !== false }
-  if (imageFile) row.image_url = await uploadImage(shop.id, imageFile)
+  if (photos) {
+    const old = existingImages(existing || base)
+    const slots = Array.from({ length: PHOTOS }, (_, i) => photos[i] || null)
+    if (slots.some((f, i) => !f && !old[i])) throw new Error(`Add all ${PHOTOS} product photos.`)
+    slots.forEach(f => f && checkFile(f))
+    const urls = await Promise.all(slots.map((f, i) => (f ? uploadImage(shop.id, f) : old[i])))
+    row.images = urls
+    row.image_url = urls[0]
+  }
+  // Flash deal: only touched when the form sends dealPrice (so the hide/show toggle never resets a running deal).
+  // price = live price, old_price = regular price shown crossed out, deal_ends_at = when the price goes back.
+  if ('dealPrice' in form) {
+    const dp = form.dealPrice === '' || form.dealPrice == null ? null : Number(form.dealPrice)
+    if (dp == null) { row.old_price = null; row.deal_ends_at = null }
+    else {
+      const end = new Date(form.dealEnds)
+      if (!Number.isFinite(dp) || dp <= 0 || dp >= price) throw new Error('Deal price must be lower than the regular price.')
+      if (!form.dealEnds || isNaN(end) || end.getTime() <= Date.now() + 60000) throw new Error('Choose a deal end time in the future.')
+      if (end.getTime() > Date.now() + 30 * 864e5) throw new Error('A deal can run for up to 30 days.')
+      row.old_price = price; row.price = dp; row.deal_ends_at = end.toISOString()
+    }
+  }
   if (existing) {
     const { data, error } = await supabase.from('products').update(row).eq('id', existing.id).eq('shop_id', shop.id).select().single()
-    if (error) throw error; return data
+    if (error) throw error; announce(); return data
   }
-  if (!imageFile) throw new Error('Add a product photo.')
+  if (!photos) throw new Error(`Add ${PHOTOS} product photos.`)
   const { data, error } = await supabase.from('products').insert({ ...row, shop_id: shop.id, variants: [{ label: 'Standard', mult: 1 }], features: [] }).select().single()
   if (error) throw error
+  announce()
   return data
 }
 export async function deleteProduct(shop, id) {
   need(); const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', shop.id); if (error) throw error
+  announce()
 }
 export async function sellerOrders() {
   need(); const { data, error } = await supabase.rpc('seller_orders'); if (error) throw error; return data || []
+}
+export async function sellerQuestions() {
+  need(); const { data, error } = await supabase.rpc('seller_questions'); if (error) throw error; return data || []
+}
+export async function answerQuestion(id, answer) {
+  need(); noContact('Answers', answer)
+  const { error } = await supabase.rpc('answer_question', { p_id: id, p_answer: s(answer, 600) })
+  if (error) throw new Error(/answer must|answers cannot|own products|not found|sign in/i.test(error.message) ? error.message : 'Could not save your answer. Please try again.')
+}
+// ---------------- Returns (only this seller's items; no customer details) ----------------
+export async function sellerReturns() {
+  need(); const { data, error } = await supabase.rpc('seller_returns')
+  if (error) throw new Error(/does not exist|schema cache/i.test(error.message) ? 'Returns are not set up yet. Ask Pinkish to run the returns update.' : error.message)
+  return data || []
+}
+export async function respondReturn(id, response, note) {
+  need(); const { error } = await supabase.rpc('seller_respond_return', { p_id: id, p_response: response, p_note: s(note, 400) || null })
+  if (error) throw new Error(/disagree|agree or dispute|not found|closed/i.test(error.message) ? error.message : 'Could not save your response. Please try again.')
+}
+// ---------------- Stock (quick restock from the product list) ----------------
+export async function setStock(shop, id, stock) {
+  need()
+  const n = parseInt(stock, 10)
+  if (!Number.isInteger(n) || n < 0 || n > 100000) throw new Error('Enter a valid stock quantity.')
+  const { data, error } = await supabase.from('products').update({ stock: n }).eq('id', id).eq('shop_id', shop.id).select().single()
+  if (error) throw error
+  announce(); return data
+}
+
+// ---------------- Handover to the Pinkish rider ----------------
+// Seller packs → marks ready → a Pinkish rider comes and tells the 4-digit pickup code → seller confirms.
+// The code is never sent to the seller's device, so items can only be handed to a real Pinkish rider.
+const notSetUp = e => /does not exist|schema cache|could not find/i.test(String(e?.message))
+export async function sellerHandovers() {
+  need()
+  const { data, error } = await supabase.rpc('seller_handovers')
+  if (error) { if (notSetUp(error)) return null; throw error } // null = feature not installed yet
+  return data || []
+}
+export async function markPacked(orderId, packed = true) {
+  need()
+  const { error } = await supabase.rpc('seller_mark_packed', { p_order: orderId, p_packed: packed })
+  if (error) throw new Error(notSetUp(error) ? 'Pickups are not set up yet. Ask Pinkish to run the seller update.' : error.message)
+}
+export async function confirmPickup(orderId, code) {
+  need()
+  const c = String(code || '').replace(/\D/g, '')
+  if (c.length !== 4) throw new Error('Enter the 4-digit code the rider tells you.')
+  const { data, error } = await supabase.rpc('seller_confirm_pickup', { p_order: orderId, p_code: c })
+  if (error) throw new Error(notSetUp(error) ? 'Pickups are not set up yet. Ask Pinkish to run the seller update.' : error.message)
+  if (data === 'wrong') throw new Error('That code is not right. Do not hand over the parcel. Ask the rider to check the code in the Pinkish rider app.')
+  if (data === 'locked') throw new Error('Too many wrong codes. Keep the parcel and contact Pinkish support.')
+  if (data === 'closed') throw new Error('This order was cancelled. Keep the parcel.')
+}
+
+// ---------------- Seller rules set by Pinkish (admin) ----------------
+export const OPS0 = { mode: 'pickup', hub_address: '', hours: 'Sat–Thu, 10am–6pm', pack_hours: 24, commission: 10, notice: '' }
+export async function getSellerOps() {
+  if (!supabase) return OPS0
+  try { const { data } = await supabase.from('site_settings').select('value').eq('key', 'seller_ops').maybeSingle(); return { ...OPS0, ...(data?.value || {}) } } catch { return OPS0 }
+}
+// wishlist saves per product (optional; empty when the update has not been run)
+export async function productStats() {
+  if (!supabase) return {}
+  try { const { data, error } = await supabase.rpc('seller_product_stats'); return error ? {} : Object.fromEntries((data || []).map(r => [String(r.product_id), Number(r.saves) || 0])) } catch { return {} }
 }

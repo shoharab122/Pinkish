@@ -12,7 +12,12 @@ const STEPS = ['Placed', 'Processing', 'Out for delivery', 'Delivered']
 const IDLE = 20 * 60 * 1000
 const fmt = d => new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 const wa = (p, t) => { const n = (p || '').replace(/\D/g, ''); return 'https://wa.me/' + (n.startsWith('0') ? '88' + n : n) + (t ? '?text=' + encodeURIComponent(t) : '') }
-const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['cats', 'Categories'], ['hero', 'Hero']]
+// Seller handovers: sellers pack, a Pinkish rider collects with the pickup code. Admin controls riders and rules.
+const HO = { new: ['Seller packing', 's0'], packed: ['Ready for pickup', 's1'], picked: ['Picked up', 's3'], cancelled: ['Cancelled', 'bad'] }
+const OPS0 = { mode: 'pickup', hub_address: '', hours: 'Sat–Thu, 10am–6pm', pack_hours: 24, commission: 10, notice: '' }
+const hoOpen = (o, hs) => (o.status || 0) < 2 && o.status !== 4 && (hs || []).some(h => h.status === 'new' || h.status === 'packed')
+const readRiders = () => { try { const a = JSON.parse(localStorage.getItem('adm-riders') || '[]'); return Array.isArray(a) ? a.slice(0, 12) : [] } catch { return [] } }
+const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['returns', 'Returns'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['cats', 'Categories'], ['notify', 'Notify'], ['hero', 'Hero']]
 
 const ICN = {
   dash: <><rect x="3" y="3" width="7.5" height="9" rx="2.2" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="2.2" /><rect x="13.5" y="12" width="7.5" height="9" rx="2.2" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="2.2" /></>,
@@ -24,6 +29,10 @@ const ICN = {
   hero: <><rect x="3" y="4" width="18" height="16" rx="3.5" /><circle cx="9" cy="9.8" r="1.7" /><path d="M21 16l-4.8-4.8L7 20" /></>,
   bell: <><path d="M6.2 9.4a5.8 5.8 0 0 1 11.6 0c0 4.4 1.9 5.9 1.9 5.9H4.3s1.9-1.5 1.9-5.9z" /><path d="M10 19a2.1 2.1 0 0 0 4 0" /></>,
   refresh: <><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20 4.5V9h-4.5" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M4 8l8 6 8-6" /></>,
+  lock: <><rect x="5" y="10.5" width="14" height="10" rx="3" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 15v2" /></>,
+  eye: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></>,
+  eyeoff: <><path d="M3 3l18 18M10.6 5.7A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-3.2 4M6.5 7.6A16 16 0 0 0 2.5 12S6 18.5 12 18.5c1.5 0 2.8-.4 4-1M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>,
   out: <><path d="M9.5 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h3" /><path d="M15.5 8l4 4-4 4M19.5 12H9.5" /></>,
   rev: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a1 1 0 0 1 1 1v2" /><path d="M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5.5A2.5 2.5 0 0 1 3 7.5z" /><circle cx="16.5" cy="13.5" r="1.2" /></>,
   avg: <path d="M4 20V11M10 20V4M16 20v-6M21 20H3" />,
@@ -45,7 +54,11 @@ const ICN = {
   shops: <><path d="M4 9.5L5.6 4h12.8L20 9.5" /><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0" /><path d="M5.5 12.5V20h13v-7.5" /><path d="M10 20v-4.5h4V20" /></>,
   shield: <><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8-7.5 9.5-4.3-1.5-7.5-4.9-7.5-9.5V6z" /><path d="M8.7 12.2l2.2 2.2 4.4-4.6" /></>,
   doc: <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4M10 12h5M10 16h5" /></>,
-  ban: <><circle cx="12" cy="12" r="9" /><path d="M5.7 5.7l12.6 12.6" /></>
+  ban: <><circle cx="12" cy="12" r="9" /><path d="M5.7 5.7l12.6 12.6" /></>,
+  returns: <><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></>,
+  key: <><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" /></>,
+  pkg: <><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M7.5 5.5l9 5" /></>,
+  gear: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>
 }
 const Ic = ({ n, s = 22 }) => <svg viewBox="0 0 24 24" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{ICN[n]}</svg>
 
@@ -64,8 +77,12 @@ function Count({ to, f = v => Math.round(v).toLocaleString() }) {
 }
 
 async function upload(file, folder) {
-  if (!/^image\/(png|jpe?g|webp)$/.test(file.type) || file.size > 8e6) throw new Error('Use a PNG, JPG or WebP image under 8 MB')
-  const bmp = await createImageBitmap(file), r = Math.min(1, 1200 / Math.max(bmp.width, bmp.height))
+  if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name || '')) throw new Error('Choose a picture (any photo or image)')
+  if (file.size > 30e6) throw new Error('Picture is too large (max 30 MB)')
+  let bmp
+  try { try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }) } catch { bmp = await createImageBitmap(file) } } catch { throw new Error('This picture format is not supported on your device. Try a JPG or PNG.') }
+  // hero pictures keep more detail (they are shown large); everything else stays small
+  const r = Math.min(1, (folder === 'hero' ? 2400 : 1200) / Math.max(bmp.width, bmp.height))
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * r); c.height = Math.round(bmp.height * r)
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height)
   const blob = await new Promise(res => c.toBlob(res, 'image/webp', 0.85))
@@ -81,10 +98,10 @@ function Modal({ title, onClose, children, footer, cls = '' }) {
   const host = useMemo(() => document.querySelector('.adm') || document.body, [])
   return createPortal(<div className={'mb ' + cls} onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="md" role="dialog" aria-modal="true" aria-label={title}><div className="mh"><b>{title}</b><button className="x" aria-label="Close" onClick={onClose}><Ic n="close" s={18} /></button></div><div className="mc">{children}</div>{footer && <div className="mf">{footer}</div>}</div></div>, host)
 }
-function Img({ value, onChange, folder, say, onBusy }) {
+function Img({ value, onChange, folder, say, onBusy, wide }) {
   const [b, setB] = useState(false)
   const pick = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setB(true); onBusy?.(true); try { onChange(await upload(f, folder)) } catch (x) { say(x.message || 'Upload failed') } setB(false); onBusy?.(false) }
-  return <div className="img">{value ? <img src={value} alt="" /> : <span>No image</span>}<div><label className="bt g sm">{b ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}<input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pick} /></label>{value && <button className="bt g sm" onClick={() => onChange('')}>Remove</button>}</div></div>
+  return <div className={'img' + (wide ? ' wide' : '')}>{value ? <img src={value} alt="" /> : <span>No image</span>}<div><label className="bt g sm">{b ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}<input type="file" accept="image/*" hidden onChange={pick} /></label>{value && <button className="bt g sm" onClick={() => onChange('')}>Remove</button>}</div></div>
 }
 
 export default function Admin() {
@@ -116,7 +133,12 @@ export default function Admin() {
 }
 
 function Login() {
-  const [f, setF] = useState({ e: '', p: '' }), [err, setErr] = useState(''), [busy, setBusy] = useState(false), fails = useRef(0), lock = useRef(0)
+  const [f, setF] = useState({ e: '', p: '' }), [err, setErr] = useState(''), [busy, setBusy] = useState(false), [show, setShow] = useState(false), [caps, setCaps] = useState(false), fails = useRef(0), lock = useRef(0)
+  useEffect(() => {
+    const t = document.querySelector('meta[name="theme-color"]'), old = t?.content
+    if (t) t.content = '#4a1668'
+    return () => { if (t && old != null) t.content = old }
+  }, [])
   const go = async e => {
     e.preventDefault()
     if (Date.now() < lock.current) return setErr('Too many attempts. Wait a minute and try again.')
@@ -125,10 +147,29 @@ function Login() {
     setBusy(false)
     if (error) { if (++fails.current >= 5) { lock.current = Date.now() + 60000; fails.current = 0 } setErr('Email or password is incorrect.') }
   }
-  return <div className="adm"><div className="ctr"><form className="lg" onSubmit={go}><div className="lgo"><img className="bmk" src="/logo-mark.webp?v=2" width="150" height="129" alt="Pinkish" decoding="async" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span><small>Admin</small></div><h1>Sign in</h1>
-    <F l="Email"><input className="in" type="email" autoComplete="username" required value={f.e} onChange={e => setF({ ...f, e: e.target.value })} /></F>
-    <F l="Password"><input className="in" type="password" autoComplete="current-password" required value={f.p} onChange={e => setF({ ...f, p: e.target.value })} /></F>
-    {err && <p className="er" role="alert">{err}</p>}<button className="bt" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></div></div>
+  const ck = e => setCaps(!!e.getModifierState?.('CapsLock'))
+  return <div className="adm"><div className="al">
+    <aside className="al-hero">
+      <div className="al-brand"><span className="al-lg"><img className="bmk" src="/logo-mark.webp?v=2" width="30" height="26" alt="" decoding="async" /></span>Pinkish <span>Admin</span></div>
+      <h1>Run your store from one place</h1>
+      <p>Orders, merchants and your catalogue, all in one private dashboard.</p>
+      <ul>
+        <li><i><Ic n="orders" s={22} /></i><span><b>Every order, live</b>Confirm, pack and deliver with one tap.</span></li>
+        <li><i><Ic n="shops" s={22} /></i><span><b>Verify merchants</b>Review NID documents and approve shops.</span></li>
+        <li><i><Ic n="products" s={22} /></i><span><b>Control the catalogue</b>Products, categories and the home banner.</span></li>
+      </ul>
+    </aside>
+    <main className="al-main"><form className="al-card" onSubmit={go}>
+      <span className="al-pill"><Ic n="shield" s={15} />Admin sign-in</span>
+      <h2>Welcome back</h2>
+      <p className="al-mut">Sign in to manage your store.</p>
+      <label className="al-f"><span>Email</span><input type="email" inputMode="email" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" enterKeyHint="next" placeholder="you@example.com" required value={f.e} onChange={e => setF({ ...f, e: e.target.value })} /></label>
+      <label className="al-f"><span>Password</span><span className="al-pw"><input type={show ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck="false" enterKeyHint="go" placeholder="Your password" required value={f.p} onChange={e => setF({ ...f, p: e.target.value })} onKeyUp={ck} onKeyDown={ck} onBlur={() => setCaps(false)} /><button type="button" aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show} onClick={() => setShow(v => !v)}>{show ? 'Hide' : 'Show'}</button></span>{caps && <em className="al-caps">Caps Lock is on</em>}</label>
+      {err && <div className="al-err" role="alert">{err}</div>}
+      <button className="bt al-go" disabled={busy}>{busy ? <><i className="spin sm" aria-hidden="true" />Signing in…</> : 'Sign in'}</button>
+      <p className="al-note"><Ic n="lock" s={15} />Private admin area. You are signed out after 20 minutes idle.</p>
+    </form></main>
+  </div></div>
 }
 
 const first = o => (o.address?.name || 'there').trim().split(/\s+/)[0]
@@ -163,22 +204,24 @@ function Invoice({ o, onClose }) {
     </article></div></div>, document.body)
 }
 
-const KIND = { order: ['bag', 'o'], pay: ['rev', 'p'], wish: ['wish', 'w'], shop: ['shops', 'w'] }
-function Notifs({ orders, shops, onShop, notes, onClose, onOrder, onWish, onRead, onClear }) {
+const KIND = { order: ['bag', 'o'], pay: ['rev', 'p'], wish: ['wish', 'w'], shop: ['shops', 'w'], ret: ['returns', 'p'] }
+function Notifs({ orders, shops, rets = [], ho = [], onShop, onReturn, notes, onClose, onOrder, onWish, onRead, onClear }) {
   const [tab, setTab] = useState('act'), [snap] = useState(() => new Set(notes.filter(n => !n.read).map(n => n.id)))
   useEffect(() => { onRead() }, [onRead])
   const ptodo = useMemo(() => shops.filter(s => s.status === 'pending'), [shops])
+  const rtodo = useMemo(() => rets.filter(r => r.status === 'requested'), [rets])
+  const htodo = useMemo(() => { const om = new Map(orders.map(o => [String(o.id), o])), sm = new Map(shops.map(s => [s.id, s])); return ho.filter(h => h.status === 'packed' && !h.rider_name).map(h => ({ h, o: om.get(String(h.order_id)), s: sm.get(h.shop_id) })).filter(x => x.o) }, [ho, orders, shops])
   const todo = useMemo(() => orders.filter(o => !o.status || o.payment_status === 'verifying').sort((a, b) => (b.payment_status === 'verifying') - (a.payment_status === 'verifying') || new Date(b.created_at) - new Date(a.created_at)), [orders])
   return <Modal cls="np" title="Notifications" onClose={onClose} footer={tab === 'log' && notes.length > 0 ? <button className="bt g sm" onClick={onClear}>Clear activity</button> : null}>
     <div className="seg nt" role="tablist" aria-label="Notification type">
-      <button role="tab" aria-selected={tab === 'act'} className={tab === 'act' ? 'on' : ''} onClick={() => setTab('act')}>Action needed{todo.length + ptodo.length > 0 && <em>{todo.length + ptodo.length}</em>}</button>
+      <button role="tab" aria-selected={tab === 'act'} className={tab === 'act' ? 'on' : ''} onClick={() => setTab('act')}>Action needed{todo.length + ptodo.length + rtodo.length + htodo.length > 0 && <em>{todo.length + ptodo.length + rtodo.length + htodo.length}</em>}</button>
       <button role="tab" aria-selected={tab === 'log'} className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>Activity{notes.length > 0 && <em className="g">{notes.length}</em>}</button></div>
-    {tab === 'act' ? (todo.length + ptodo.length ? <div className="nl">{ptodo.map(s => <button key={s.id} className="nr" onClick={onShop}><span className="nk w"><Ic n="shops" s={19} /></span><span className="g1"><b>Verify new merchant</b><small>{s.name} · {s.city || s.phone}</small></span><span className="tm"><small>{ago(s.created_at)}</small><Ic n="chev" s={16} /></span></button>)}{todo.map(o => { const v = o.payment_status === 'verifying'; return <button key={o.id} className="nr" onClick={() => onOrder(o.id)}>
+    {tab === 'act' ? (todo.length + ptodo.length + rtodo.length + htodo.length ? <div className="nl">{htodo.map(({ h, o, s }) => <button key={h.id} className="nr" onClick={() => onOrder(o.id)}><span className="nk w"><Ic n="truck" s={19} /></span><span className="g1"><b>Assign a rider for pickup</b><small>#{o.order_no} · {s?.name || 'Seller'} packed it{s?.city ? ' · ' + s.city : ''}</small></span><span className="tm"><small>{ago(h.packed_at || h.created_at)}</small><Ic n="chev" s={16} /></span></button>)}{rtodo.map(r => <button key={r.id} className="nr" onClick={() => onReturn(r.id)}><span className="nk p"><Ic n="returns" s={19} /></span><span className="g1"><b>Review return request</b><small>#{r.order_no} · {r.reason} · {taka(r.amount)}</small></span><span className="tm"><small>{ago(r.created_at)}</small><Ic n="chev" s={16} /></span></button>)}{ptodo.map(s => <button key={s.id} className="nr" onClick={onShop}><span className="nk w"><Ic n="shops" s={19} /></span><span className="g1"><b>Verify new merchant</b><small>{s.name} · {s.city || s.phone}</small></span><span className="tm"><small>{ago(s.created_at)}</small><Ic n="chev" s={16} /></span></button>)}{todo.map(o => { const v = o.payment_status === 'verifying'; return <button key={o.id} className="nr" onClick={() => onOrder(o.id)}>
       <span className={'nk ' + (v ? 'p' : 'o')}><Ic n={v ? 'rev' : 'bag'} s={19} /></span>
       <span className="g1"><b>{v ? 'Verify bKash payment' : 'New order to process'}</b><small>#{o.order_no} · {o.address?.name || 'Customer'} · {taka(o.total)}</small></span>
       <span className="tm"><small>{ago(o.created_at)}</small><Ic n="chev" s={16} /></span></button> })}</div>
       : <div className="ne"><i><Ic n="check" s={28} /></i><b>You're all caught up</b><small>New orders and payments to verify show up here.</small></div>)
-      : (notes.length ? <div className="nl">{notes.map(n => { const [ic, c] = KIND[n.k] || KIND.order; return <button key={n.id} className="nr" onClick={() => n.k === 'shop' ? onShop() : n.oid ? onOrder(n.oid) : n.k === 'wish' ? onWish() : onClose()}>
+      : (notes.length ? <div className="nl">{notes.map(n => { const [ic, c] = KIND[n.k] || KIND.order; return <button key={n.id} className="nr" onClick={() => n.k === 'shop' ? onShop() : n.rid ? onReturn(n.rid) : n.oid ? onOrder(n.oid) : n.k === 'wish' ? onWish() : onClose()}>
         <span className={'nk ' + c}><Ic n={ic} s={19} /></span>
         <span className="g1"><b>{n.title}</b><small>{n.sub}</small></span>
         <span className="tm"><small>{ago(n.t)}</small>{snap.has(n.id) ? <i className="udot" aria-label="New" /> : <Ic n="chev" s={16} />}</span></button> })}</div>
@@ -190,18 +233,23 @@ const readNotes = () => { try { const a = JSON.parse(localStorage.getItem('adm-n
 const stab = (m, rows) => rows.map(r => { const s = JSON.stringify(r), h = m.get(r.id); if (h && h.s === s) return h.r; m.set(r.id, { s, r }); return r })
 
 function Shell({ user }) {
-  const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false, shops: [], shopsErr: false }), [toast, setToast] = useState(''), [ld, setLd] = useState(true), [rf, setRf] = useState(false), tt = useRef(0), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({ o: new Map(), p: new Map() })
+  const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false, shops: [], shopsErr: false, returns: [], retErr: false, ho: [], hoErr: false, ops: OPS0 }), [toast, setToast] = useState(''), [ld, setLd] = useState(true), [rf, setRf] = useState(false), tt = useRef(0), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({ o: new Map(), p: new Map() })
   const say = useCallback(m => { setToast(m); clearTimeout(tt.current); tt.current = setTimeout(() => setToast(''), 2400) }, [])
   const push = useCallback(n => { setNotes(a => [{ id: Date.now() + Math.random(), t: Date.now(), read: false, ...n }, ...a].slice(0, 40)); if (n.k !== 'wish') navigator.vibrate?.(60) }, [])
   const readAll = useCallback(() => setNotes(a => a.some(n => !n.read) ? a.map(n => n.read ? n : { ...n, read: true }) : a), [])
   const openOrder = useCallback(id => { setFocus(id); setNOpen(false); setTab('orders'); history.replaceState(null, '', '#orders') }, [])
   const clearFocus = useCallback(() => setFocus(null), [])
+  const [rfocus, setRfocus] = useState(null), [opre, setOpre] = useState(null), hoSeen = useRef(new Map())
+  const openPickups = useCallback(() => { setOpre('pick'); setTab('orders'); history.replaceState(null, '', '#orders') }, [])
+  const clearPre = useCallback(() => setOpre(null), [])
+  const openReturn = useCallback(id => { setRfocus(id); setNOpen(false); setTab('returns'); history.replaceState(null, '', '#returns') }, [])
+  const clearRfocus = useCallback(() => setRfocus(null), [])
   useEffect(() => { try { localStorage.setItem('adm-notes', JSON.stringify(notes)) } catch { /* storage unavailable */ } }, [notes])
   const go = t => { setTab(t); history.replaceState(null, '', '#' + t); document.querySelector('.scr')?.scrollTo?.(0, 0) }
   const load = useCallback(async () => {
-    const [o, p, c, w, sp] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false })])
+    const [o, p, c, w, sp, rr, hv, so] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false }), sb.from('return_requests').select('*').order('created_at', { ascending: false }).limit(500), sb.from('seller_handovers').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'seller_ops').maybeSingle()])
     const er = o.error || p.error || c.error; if (er) say(er.message)
-    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error }); setLd(false)
+    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error, returns: rr.data || [], retErr: !!rr.error, ho: hv.data || [], hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) } }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); setLd(false)
   }, [say])
   useEffect(() => {
     const later = () => { clearTimeout(lt.current); lt.current = setTimeout(load, 400) } // coalesce bursts of realtime events
@@ -212,6 +260,10 @@ function Shell({ user }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wishlists' }, p => { say('♡ Item added to a wishlist'); push({ k: 'wish', title: 'Saved to wishlist', sub: p.new?.product_name || 'A product' }); later() })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'shops' }, p => { const r = p.new || {}; say('🏪 New merchant: ' + (r.name || 'shop')); push({ k: 'shop', title: 'New merchant to verify', sub: (r.name || 'Shop') + (r.city ? ' · ' + r.city : '') }); later() })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shops' }, later)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'seller_handovers' }, later)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'seller_handovers' }, p => { const r = p.new || {}, was = hoSeen.current.get(r.id); hoSeen.current.set(r.id, r.status); if (was !== r.status) { if (r.status === 'packed') { say('📦 A seller packed an order'); push({ k: 'shop', title: 'Seller packed an order', sub: r.rider_name ? 'Rider ' + r.rider_name + ' can collect it' : 'Assign a rider to collect it', oid: r.order_id }) } else if (r.status === 'picked') push({ k: 'order', title: 'Parcel handed to rider', sub: 'Seller confirmed with the pickup code', oid: r.order_id }) } later() })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'return_requests' }, p => { const r = p.new || {}; say('↩ Return requested #' + r.order_no); push({ k: 'ret', title: 'Return requested #' + r.order_no, sub: (r.reason || 'Return') + ' · ' + taka(r.amount), rid: r.id }); later() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'return_requests' }, p => { const r = p.new || {}; if (r.seller_response && r.seller_response !== p.old?.seller_response) push({ k: 'ret', title: (r.seller_response === 'dispute' ? 'Seller disputed return #' : 'Seller agreed to return #') + r.order_no, sub: r.seller_note || r.reason || '', rid: r.id }); later() })
       .subscribe()
     return () => { clearTimeout(lt.current); sb.removeChannel(ch) }
   }, [load, say, push])
@@ -221,17 +273,17 @@ function Shell({ user }) {
     ev.forEach(e => addEventListener(e, reset, { passive: true, capture: true })); reset()
     return () => { clearTimeout(t); ev.forEach(e => removeEventListener(e, reset, { capture: true })) }
   }, [])
-  const pend = d.orders.filter(o => !o.status).length, pshop = (d.shops || []).filter(s => s.status === 'pending').length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length + pshop, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
+  const pend = d.orders.filter(o => !o.status).length, pshop = (d.shops || []).filter(s => s.status === 'pending').length, pret = (d.returns || []).filter(r => r.status === 'requested').length, prider = (d.ho || []).filter(h => h.status === 'packed' && !h.rider_name).length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length + pshop + pret + prider, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
   const nm = user.user_metadata?.full_name || (user.email || 'admin').split('@')[0]
-  const p = { d, reload: load, say, go, focus, clearFocus }
+  const p = { d, reload: load, say, go, focus, clearFocus, openOrder, openReturn, openPickups }
   return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
     <div className="me"><span className="mav" aria-hidden="true">{ini(nm)}</span><b>{nm}</b><small>Store admin</small></div>
-    <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}</button>)}</div>
+    <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k === 'notify' ? 'bell' : k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}{k === 'returns' && pret > 0 && <em>{pret}</em>}</button>)}</div>
     <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
     <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => sb.auth.signOut()}><Ic n="out" s={20} /></button></div></header>
       <div className="scr">
-      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'hero' ? <Hero say={say} /> : <Dash {...p} />}</div></main></div>
-    {nOpen && <Notifs orders={d.orders} shops={d.shops || []} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
+      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
+    {nOpen && <Notifs orders={d.orders} shops={d.shops || []} rets={d.returns || []} ho={d.ho || []} onReturn={openReturn} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
     {toast && <div className="toast" role="status">{toast}</div>}</div>
 }
 
@@ -274,8 +326,9 @@ function Activity({ orders }) {
     </div></section>
 }
 
-function Dash({ d, go }) {
-  const { orders, products } = d, pshops = (d.shops || []).filter(s => s.status === 'pending')
+function Dash({ d, go, openPickups }) {
+  const { orders, products } = d, hby = useMemo(() => { const m = new Map(); (d.ho || []).forEach(h => { const k = String(h.order_id); m.set(k, [...(m.get(k) || []), h]) }); return m }, [d.ho])
+  const pick = useMemo(() => { let ready = 0, packing = 0, n = 0; orders.forEach(o => { const hs = hby.get(String(o.id)); if (!hoOpen(o, hs)) return; n++; hs.forEach(h => { if (h.status === 'packed') ready++; else if (h.status === 'new') packing++ }) }); return { n, ready, packing } }, [orders, hby]), pshops = (d.shops || []).filter(s => s.status === 'pending'), prets = (d.returns || []).filter(r => r.status === 'requested')
   const S = useMemo(() => {
     const T = new Date().setHours(0, 0, 0, 0), D = 864e5, at = o => +new Date(o.created_at)
     const sum = (a, b) => orders.reduce((s, o) => at(o) >= a && at(o) < b ? s + (+o.total || 0) : s, 0), cnt = (a, b) => orders.filter(o => at(o) >= a && at(o) < b).length
@@ -292,6 +345,8 @@ function Dash({ d, go }) {
     <div className="promo"><div><small>Needs attention</small><h2><em><Count to={pend} /></em> order{pend === 1 ? '' : 's'} waiting</h2><p>{pend ? 'Start processing to keep customers happy.' : 'You are all caught up. Nice work!'}</p><button className="bt sm" onClick={() => go('orders')}>{pend ? 'Review now' : 'View orders'}</button></div>
       <div className="ring" aria-hidden="true"><svg viewBox="0 0 130 100" fill="none" strokeLinecap="round"><path d="M10 96A55 55 0 0 1 65 41" stroke="#ffb3d5" strokeWidth="9" /><path d="M24 96A41 41 0 0 1 65 55" stroke="#8e2a8c" strokeWidth="9" /><path d="M38 96A27 27 0 0 1 65 69" stroke="#e0457b" strokeWidth="9" /><path d="M65 41A55 55 0 0 1 120 96" stroke="#c9b6f7" strokeWidth="9" /></svg><b><Count to={pend} /></b></div></div>
     {pshops.length > 0 && <button className="mq" onClick={() => go('shops')}><span className="mq-i"><Ic n="shops" s={22} /></span><span className="g1"><b>{pshops.length} merchant{pshops.length === 1 ? '' : 's'} waiting for verification</b><small>{pshops.slice(0, 2).map(s => s.name).join(', ')}{pshops.length > 2 ? ' +' + (pshops.length - 2) : ''}</small></span><Ic n="chev" s={18} /></button>}
+    {prets.length > 0 && <button className="mq rq2" onClick={() => go('returns')}><span className="mq-i"><Ic n="returns" s={22} /></span><span className="g1"><b>{prets.length} return request{prets.length === 1 ? '' : 's'} to review</b><small>{prets.slice(0, 2).map(r => '#' + r.order_no + ' · ' + r.reason).join(', ')}{prets.length > 2 ? ' +' + (prets.length - 2) : ''}</small></span><Ic n="chev" s={18} /></button>}
+    {pick.n > 0 && <button className="mq pk" onClick={openPickups}><span className="mq-i"><Ic n="truck" s={22} /></span><span className="g1"><b>{pick.ready} parcel{pick.ready === 1 ? '' : 's'} ready to collect from sellers</b><small>{pick.packing} still packing · {pick.n} order{pick.n === 1 ? '' : 's'} waiting for seller pickup</small></span><Ic n="chev" s={18} /></button>}
     <Activity orders={orders} />
     <section className="sec"><div className="sh"><h2>Top sellers</h2></div>
       <div className="tp">{S.best.length ? S.best.map(x => <div className="tpr" key={x.name}><span className="th">{x.img ? <img src={x.img} alt="" loading="lazy" /> : x.em || '🛍️'}</span><div className="g1"><b>{x.name}</b><small>{x.q} sold · {taka(x.v)}</small></div><b className="pc">{x.p}%</b></div>) : <p className="mut">Your best sellers will show up after the first orders.</p>}</div>
@@ -304,7 +359,8 @@ function Dash({ d, go }) {
 }
 
 const PAGE = 25
-const OrderCard = memo(function OrderCard({ o, onOpen, onNext }) {
+const OrderCard = memo(function OrderCard({ o, hs, onOpen, onNext }) {
+  const hr = (hs || []).filter(h => h.status !== 'cancelled'), hReady = hr.filter(h => h.status !== 'new').length, hDone = hr.length > 0 && hr.every(h => h.status === 'picked')
   const st = o.status || 0, its = o.items || [], n = its.reduce((a, i) => a + i.qty, 0), ph = o.address?.phone
   return <article className={'oc s' + st}>
     <button className="ob-main" onClick={() => onOpen(o.id)}>
@@ -312,7 +368,7 @@ const OrderCard = memo(function OrderCard({ o, onOpen, onNext }) {
       <span className="g1"><b>{o.address?.name || 'Customer'} {st === 0 && <i className="nw">NEW</i>}</b><small>#{o.order_no} · {ago(o.created_at)}</small></span>
       <span className="rt"><b>{taka(o.total)}</b><span className={'pl s' + st}>{STEPS[st]}</span></span>
       <span className="its">{its.map(i => `${i.name}${i.qty > 1 ? ' ×' + i.qty : ''}`).join(', ') || 'No items'}</span>
-      <span className="pm"><span>{n} item{n === 1 ? '' : 's'}</span><span>{o.payment}</span>{o.payment_status === 'paid' && <span className="pd">✓ Paid</span>}{o.payment_status === 'verifying' && <span className="vf">⏳ Verify</span>}</span>
+      <span className="pm"><span>{n} item{n === 1 ? '' : 's'}</span><span>{o.payment}</span>{o.payment_status === 'paid' && <span className="pd">✓ Paid</span>}{o.payment_status === 'verifying' && <span className="vf">⏳ Verify</span>}{hr.length > 0 && st < 2 && <span className={hDone ? 'pd' : 'hv'}>{hDone ? '✓ Collected from sellers' : `📦 ${hReady}/${hr.length} seller${hr.length === 1 ? '' : 's'} ready`}</span>}</span>
     </button>
     <div className="oa"><small><Ic n="pin" s={13} /> {o.address?.address || 'No address'}</small>
       <div className="oq">{ph && <a className="ib3" href={'tel:' + ph} aria-label="Call customer"><Ic n="phone" s={17} /></a>}{ph && <a className="ib3 wa" href={wa(ph, WA[defTpl(o)][2](o))} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp customer"><Ic n="chat" s={17} /></a>}
@@ -320,8 +376,11 @@ const OrderCard = memo(function OrderCard({ o, onOpen, onNext }) {
   </article>
 })
 
-function Orders({ d: { orders }, reload, say, focus, clearFocus }) {
+function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [] }, reload, say, focus, clearFocus, openReturn, pre, clearPre }) {
   const [f, setF] = useState('all'), [q, setQ] = useState(''), [rg, setRg] = useState('all'), [sel, setSel] = useState(null), [busy, setBusy] = useState(false), [vo, setVo] = useState(false), [lim, setLim] = useState(PAGE), [inv, setInv] = useState(false), bz = useRef(false)
+  const [po, setPo] = useState(false)
+  const hby = useMemo(() => { const m = new Map(); ho.forEach(h => { const k = String(h.order_id); m.set(k, [...(m.get(k) || []), h]) }); return m }, [ho])
+  useEffect(() => { if (pre === 'pick') { setPo(true); setF('all'); clearPre() } }, [pre, clearPre])
   const dq = useDeferredValue(q)
   const base = useMemo(() => {
     const k = dq.trim().toLowerCase(), now = new Date()
@@ -333,17 +392,19 @@ function Orders({ d: { orders }, reload, say, focus, clearFocus }) {
   }, [orders, dq, rg])
   const cnt = useMemo(() => { const m = [0, 0, 0, 0]; base.forEach(o => { m[o.status || 0]++ }); return m }, [base])
   const vcnt = useMemo(() => base.filter(o => o.payment_status === 'verifying').length, [base])
-  const list = useMemo(() => base.filter(o => (f === 'all' || (o.status || 0) === +f) && (!vo || o.payment_status === 'verifying')), [base, f, vo])
-  useEffect(() => { setLim(PAGE) }, [f, dq, rg, vo])
+  const pcnt = useMemo(() => base.filter(o => hoOpen(o, hby.get(String(o.id)))).length, [base, hby])
+  const list = useMemo(() => base.filter(o => (f === 'all' || (o.status || 0) === +f) && (!vo || o.payment_status === 'verifying') && (!po || hoOpen(o, hby.get(String(o.id))))), [base, f, vo, po, hby])
+  useEffect(() => { setLim(PAGE) }, [f, dq, rg, vo, po])
   useEffect(() => { if (focus) { setF('all'); setVo(false); setSel(focus); clearFocus() } }, [focus, clearFocus])
   const sum = useMemo(() => list.reduce((a, o) => a + (+o.total || 0), 0), [list])
   const setStatus = useCallback(async (o, s) => {
     if (bz.current || s === (o.status || 0)) return
+    if (s >= 2 && s < 4 && hoOpen(o, hby.get(String(o.id))) && !confirm('Some sellers have not handed over their items yet. Mark this order as ' + STEPS[s] + ' anyway? Their pickups will be marked as collected.')) return
     bz.current = true; setBusy(true)
     const { error } = await sb.from('orders').update({ status: s }).eq('id', o.id)
     bz.current = false; setBusy(false)
     if (error) return say(error.message); say(`#${o.order_no} → ${STEPS[s]}`); reload()
-  }, [reload, say])
+  }, [reload, say, hby])
   const next = useCallback(o => setStatus(o, (o.status || 0) + 1), [setStatus])
   const openSel = useCallback(id => setSel(id), [])
   const closeSel = useCallback(() => { setSel(null); setInv(false) }, [])
@@ -365,18 +426,22 @@ function Orders({ d: { orders }, reload, say, focus, clearFocus }) {
   const cur = sel && orders.find(o => o.id === sel)
   const st = cur ? cur.status || 0 : 0, ph = cur?.address?.phone
   const sub = cur ? (cur.items || []).reduce((a, i) => a + i.price * i.qty, 0) : 0
+  const curRet = cur ? returns.find(r => r.order_id === String(cur.id)) : null
   return <div className="pg">
     <div className="ob">{STEPS.map((l, i) => <button key={l} className={'s' + i + (f === String(i) ? ' on' : '')} aria-pressed={f === String(i)} onClick={() => setF(f === String(i) ? 'all' : String(i))}><span className="oi"><Ic n={IC[i]} s={16} /></span><small>{l}</small><b><Count to={cnt[i]} /></b></button>)}</div>
     <div className="tl"><label className="sr"><Ic n="search" s={18} /><input className="in" type="search" inputMode="search" enterKeyHint="search" placeholder="Search order, name, phone, address" aria-label="Search orders" value={q} onChange={e => setQ(e.target.value)} /></label>
       <select className="in rg" aria-label="Date range" value={rg} onChange={e => setRg(e.target.value)}>{RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+      {(pcnt > 0 || po) && <button className={'vchip pk' + (po ? ' on' : '')} aria-pressed={po} onClick={() => setPo(v => !v)}><Ic n="truck" s={15} />Seller pickups<em>{pcnt}</em></button>}
       {(vcnt > 0 || vo) && <button className={'vchip' + (vo ? ' on' : '')} aria-pressed={vo} onClick={() => setVo(v => !v)}><Ic n="alert" s={15} />Verify payment<em>{vcnt}</em></button>}
       <button className="bt g sm csvb" onClick={csv}>Export CSV</button></div>
-    <p className="sum"><b>{list.length}</b> order{list.length === 1 ? '' : 's'} · <b>{taka(sum)}</b>{f !== 'all' && <> · <button className="lk" onClick={() => setF('all')}>Clear filter</button></>}</p>
-    <div className="ol">{list.slice(0, lim).map(o => <OrderCard key={o.id} o={o} onOpen={openSel} onNext={next} />)}{!list.length && <p className="mut pad cd">No orders match. Orders placed in the store appear here instantly.</p>}</div>
+    <p className="sum"><b>{list.length}</b> order{list.length === 1 ? '' : 's'} · <b>{taka(sum)}</b>{(f !== 'all' || po) && <> · <button className="lk" onClick={() => { setF('all'); setPo(false) }}>Clear filter</button></>}</p>
+    <div className="ol">{list.slice(0, lim).map(o => <OrderCard key={o.id} o={o} hs={hby.get(String(o.id))} onOpen={openSel} onNext={next} />)}{!list.length && <p className="mut pad cd">No orders match. Orders placed in the store appear here instantly.</p>}</div>
     {list.length > lim && <button className="bt g more" onClick={() => setLim(l => l + PAGE)}>Show {Math.min(PAGE, list.length - lim)} more · {list.length - lim} left</button>}
     {cur && <Modal title={'Order #' + cur.order_no} onClose={closeSel} footer={<>{st < 3 && <button className="bt" disabled={busy} onClick={() => setStatus(cur, st + 1)}>{NEXT[st]} →</button>}<button className={'bt' + (st < 3 ? ' g' : '')} onClick={() => setInv(true)}><Ic n="receipt" s={17} />Invoice</button></>}>
       <div className="steps">{STEPS.map((s, i) => <button key={s} disabled={busy} className={st === i ? 'on' : st > i ? 'dn' : ''} onClick={() => setStatus(cur, i)}>{st > i ? '✓ ' : ''}{s}</button>)}</div>
+      {curRet && <button className={'mq rq2 rlink ' + curRet.status} onClick={() => { closeSel(); openReturn(curRet.id) }}><span className="mq-i"><Ic n="returns" s={20} /></span><span className="g1"><b>Return {RLBL[curRet.status].toLowerCase()}</b><small>{curRet.kind === 'replace' ? 'Replacement' : 'Refund'} · {curRet.reason} · {taka(curRet.amount)}</small></span><Ic n="chev" s={18} /></button>}
       <div className="cu"><span className="av lg">{ini(cur.address?.name)}</span><span className="g1"><b>{cur.address?.name}</b><small>{ph}</small></span><span className={'pl s' + st}>{STEPS[st]}</span></div>
+      {(hby.get(String(cur.id)) || []).length > 0 && <Pickups o={cur} hs={hby.get(String(cur.id))} shops={shops} products={products} reload={reload} say={say} />}
       <div className="qa">{ph && <a className="bt g sm" href={'tel:' + ph}><Ic n="phone" s={16} />Call</a>}{ph && <a className="bt sm wa" href={wa(ph, WA[defTpl(cur)][2](cur))} target="_blank" rel="noopener noreferrer"><Ic n="chat" s={16} />WhatsApp</a>}</div>
       {ph && <div className="cd wcd"><h3>Message on WhatsApp</h3><div className="wcs">{WA.map(([l, ic, fn]) => <a key={l} className="wc" href={wa(ph, fn(cur))} target="_blank" rel="noopener noreferrer"><Ic n={ic} s={15} />{l}</a>)}</div></div>}
       {cur.payment === 'bKash' && <><h3>bKash payment</h3>
@@ -397,6 +462,41 @@ function Orders({ d: { orders }, reload, say, focus, clearFocus }) {
     {cur && inv && <Invoice o={cur} onClose={closeInv} />}</div>
 }
 
+// Seller pickups for one order: assign a rider, give them the code, track the handover.
+function Pickups({ o, hs, shops, products, reload, say }) {
+  const sm = useMemo(() => new Map(shops.map(s => [s.id, s])), [shops]), pm = useMemo(() => new Map(products.map(p => [String(p.id), p.shop_id])), [products])
+  const [rd, setRd] = useState({}), [busy, setBusy] = useState(''), [riders, setRiders] = useState(readRiders)
+  const upd = async (h, patch, ok) => {
+    setBusy(h.id)
+    const { data, error } = await sb.from('seller_handovers').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', h.id).select()
+    setBusy('')
+    if (error) return say(error.message); if (!data?.length) return say('Not saved. Run supabase-seller-ops.sql and check admin access.')
+    say(ok); reload()
+  }
+  const assign = h => {
+    const r = rd[h.id] || {}, name = (r.name ?? h.rider_name ?? '').trim(), phone = (r.phone ?? h.rider_phone ?? '').replace(/[^\d+]/g, '')
+    if (name.length < 2) return say('Enter the rider name')
+    const next = [{ name, phone }, ...riders.filter(x => x.name !== name)].slice(0, 12); setRiders(next); try { localStorage.setItem('adm-riders', JSON.stringify(next)) } catch { /* storage unavailable */ }
+    upd(h, { rider_name: name, rider_phone: phone || null }, 'Rider assigned · seller notified')
+  }
+  const brief = (h, s, its) => `Pinkish pickup · order #${o.order_no}\nFrom: ${s?.name || 'Seller'}\n${s?.address || ''}${s?.city ? ', ' + s.city : ''}\nSeller phone: ${s?.phone || '—'}\nItems: ${its.map(i => i.name + ' ×' + i.qty).join(', ')}\nPICKUP CODE: ${h.pickup_code}\nTell the seller this code. They enter it before handing over the parcel.`
+  return <><h3>Seller pickups</h3><div className="pks">{hs.map(h => {
+    const s = sm.get(h.shop_id), its = (o.items || []).filter(i => (i.shop_id || pm.get(String(i.id))) === h.shop_id), [lb, cls] = HO[h.status] || HO.new, r = rd[h.id] || {}, open = h.status === 'new' || h.status === 'packed'
+    const msg = brief(h, s, its), phone = (h.rider_phone || '').replace(/\D/g, '')
+    return <div className={'cd pk-c ' + h.status} key={h.id}>
+      <div className="pk-h"><span className="sc-av">{s?.logo_url ? <img src={s.logo_url} alt="" loading="lazy" /> : ini(s?.name)}</span><span className="g1"><b>{s?.name || 'Seller'}</b><small>{[s?.address, s?.city].filter(Boolean).join(', ') || 'No address'}</small></span><span className={'pl ' + cls}>{lb}</span></div>
+      <div className="pk-its">{its.length ? its.map((i, k) => <span key={k}>{i.name}{i.variant && i.variant !== 'Standard' ? ' (' + i.variant + ')' : ''} ×{i.qty}</span>) : <span>Items from this seller</span>}</div>
+      <div className="pk-meta">{h.packed_at && <span>Packed {ago(h.packed_at)}</span>}{h.picked_at && <span className="ok">Handed over {ago(h.picked_at)}</span>}{h.attempts > 0 && h.status !== 'picked' && <span className="er">{h.attempts} wrong code{h.attempts === 1 ? '' : 's'}{h.attempts >= 5 ? ' · locked' : ''}</span>}</div>
+      {open && <div className="pk-code"><span><small>Pickup code (give it to the rider only)</small><b>{h.pickup_code}</b></span><button className="ib3" aria-label="Copy pickup brief" onClick={() => navigator.clipboard?.writeText(msg).then(() => say('Pickup brief copied'), () => say('Could not copy'))}><Ic n="copy" s={17} /></button>{phone && <a className="ib3 wa" href={wa(phone, msg)} target="_blank" rel="noopener noreferrer" aria-label="Send brief to rider"><Ic n="chat" s={17} /></a>}</div>}
+      {open && <div className="pk-r"><input className="in" list="adm-riders" placeholder="Rider name" value={r.name ?? h.rider_name ?? ''} onChange={e => { const v = e.target.value, k = riders.find(x => x.name === v); setRd(x => ({ ...x, [h.id]: { ...r, name: v, ...(k ? { phone: k.phone } : {}) } })) }} /><input className="in" type="tel" inputMode="tel" placeholder="Rider phone" value={r.phone ?? h.rider_phone ?? ''} onChange={e => setRd(x => ({ ...x, [h.id]: { ...r, phone: e.target.value } }))} /><button className="bt sm" disabled={busy === h.id} onClick={() => assign(h)}>{h.rider_name ? 'Update rider' : 'Assign rider'}</button></div>}
+      <div className="acts">{open && <button className="bt g sm" disabled={busy === h.id} onClick={() => upd(h, { status: 'picked', picked_at: new Date().toISOString() }, 'Marked as collected')}><Ic n="check" s={15} />Mark collected</button>}
+        {h.attempts >= 5 && open && <button className="bt g sm" disabled={busy === h.id} onClick={() => upd(h, { attempts: 0 }, 'Code unlocked')}>Unlock code</button>}
+        {h.status === 'picked' && (o.status || 0) < 2 && <button className="bt g sm" disabled={busy === h.id} onClick={() => upd(h, { status: 'packed', picked_at: null }, 'Pickup reopened')}>Reopen pickup</button>}
+        {s?.phone && <a className="bt g sm" href={'tel:' + s.phone}><Ic n="phone" s={15} />Call seller</a>}</div>
+    </div>
+  })}</div><datalist id="adm-riders">{riders.map(x => <option key={x.name} value={x.name}>{x.phone}</option>)}</datalist></>
+}
+
 function Wish({ d: { wish, products, wishErr, orders } }) {
   const pm = useMemo(() => Object.fromEntries(products.map(p => [String(p.id), p])), [products])
   const rows = useMemo(() => {
@@ -413,6 +513,88 @@ function Wish({ d: { wish, products, wishErr, orders } }) {
       <section className="cd"><h2>Recent activity</h2>{wish.slice(0, 20).map(w => <div className="ln" key={w.id}><span><b>{w.user_label || 'Guest'}</b> saved <b>{pm[w.product_id]?.name || w.product_name || 'a product'}</b></span><small>{ago(w.created_at)}</small></div>)}{!wish.length && <p className="mut">No activity yet.</p>}</section></div></div>
 }
 
+// ---------------- Returns & refunds ----------------
+const RLBL = { requested: 'Requested', approved: 'Approved', received: 'Received', completed: 'Completed', rejected: 'Rejected' }
+const RCLS = { requested: 's0', approved: 's2', received: 's1', completed: 's3', rejected: '' }
+const RPL = { requested: '', approved: 's2', received: 's1', completed: 's3', rejected: 'bad' }
+const RTABS = [['requested', 'Requested', 'inbox', 0], ['approved', 'Approved', 'truck', 2], ['received', 'Received', 'clock', 1], ['completed', 'Completed', 'check', 3]]
+const RREJ = ['Outside the return window', 'Item was used or opened', 'Photos do not show a problem', 'Not eligible for return']
+const doneLbl = r => r.kind === 'replace' ? 'Replaced' : 'Refunded'
+
+const ReturnCard = memo(function ReturnCard({ r, o, onOpen }) {
+  const n = (r.items || []).reduce((a, i) => a + (+i.qty || 1), 0), name = o?.address?.name || 'Customer'
+  return <article className={'oc rc ' + RCLS[r.status]}>
+    <button className="ob-main" onClick={() => onOpen(r.id)}>
+      <span className="av">{ini(name)}</span>
+      <span className="g1"><b>{name} {r.status === 'requested' && <i className="nw">NEW</i>}</b><small>#{r.order_no} · {ago(r.created_at)}</small></span>
+      <span className="rt"><b>{taka(r.refund_amount ?? r.amount)}</b><span className={'pl ' + RPL[r.status]}>{r.status === 'completed' ? doneLbl(r) : RLBL[r.status]}</span></span>
+      <span className="its">{(r.items || []).map(i => `${i.name}${i.qty > 1 ? ' ×' + i.qty : ''}`).join(', ')}</span>
+      <span className="pm"><span>{r.kind === 'replace' ? '↻ Replacement' : '৳ Refund'}</span><span>{n} item{n === 1 ? '' : 's'}</span><span>{r.reason}</span>{r.seller_response === 'agree' && <span className="pd">Seller agrees</span>}{r.seller_response === 'dispute' && <span className="vf">Seller disputes</span>}</span>
+    </button>
+  </article>
+})
+
+function Returns({ d: { returns = [], orders, retErr }, reload, say, focus, clearFocus, openOrder }) {
+  const [f, setF] = useState(() => returns.some(r => r.status === 'requested') ? 'requested' : ''), [q, setQ] = useState(''), [sel, setSel] = useState(null), [busy, setBusy] = useState(false), [note, setNote] = useState(''), [amt, setAmt] = useState(''), [rej, setRej] = useState(false), bz = useRef(false)
+  const dq = useDeferredValue(q)
+  const om = useMemo(() => new Map(orders.map(o => [String(o.id), o])), [orders])
+  useEffect(() => { if (focus) { setF(''); setSel(focus); clearFocus() } }, [focus, clearFocus])
+  const cur = sel && returns.find(r => r.id === sel), co = cur ? om.get(cur.order_id) : null
+  useEffect(() => { setNote(''); setRej(false); setAmt(cur ? String(cur.refund_amount ?? cur.amount ?? '') : '') }, [sel]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cnt = useMemo(() => { const c = { requested: 0, approved: 0, received: 0, completed: 0, rejected: 0 }; returns.forEach(r => { if (r.status in c) c[r.status]++ }); return c }, [returns])
+  const list = useMemo(() => {
+    const k = dq.trim().toLowerCase()
+    return returns.filter(r => (!f || r.status === f) && (!k || `${r.order_no} ${r.reason} ${om.get(r.order_id)?.address?.name || ''} ${om.get(r.order_id)?.address?.phone || ''} ${(r.items || []).map(i => i.name).join(' ')}`.toLowerCase().includes(k)))
+      .sort((a, b) => (b.status === 'requested') - (a.status === 'requested') || new Date(b.created_at) - new Date(a.created_at))
+  }, [returns, f, dq, om])
+  const act = async status => {
+    if (bz.current || !cur) return
+    if (status === 'rejected' && note.trim().length < 3) return say('Tell the customer why')
+    const refund = cur.kind === 'refund' && status === 'completed' ? +amt : null
+    if (refund != null && !(refund >= 0 && refund <= Math.max(+cur.amount || 0, 0) * 2 + 1)) return say('Enter a valid refund amount')
+    bz.current = true; setBusy(true)
+    const { error } = await sb.rpc('admin_set_return', { p_id: cur.id, p_status: status, p_note: note.trim() || null, p_refund: refund })
+    bz.current = false; setBusy(false)
+    if (error) return say(error.message)
+    say(`#${cur.order_no} → ${status === 'completed' ? doneLbl(cur) : RLBL[status]} · customer notified`); setNote(''); setRej(false); reload()
+  }
+  if (retErr) return <div className="cd"><h2>Returns are not set up yet</h2><p className="mut">Run <b>supabase-returns-contact.sql</b> in the Supabase SQL editor, then press Refresh.</p></div>
+  const ph = co?.address?.phone, first = (co?.address?.name || 'there').trim().split(/\s+/)[0]
+  const waTxt = cur ? `Hi ${first}, this is Pinkish about your return for order #${cur.order_no}. ` + (cur.status === 'approved' ? 'Our rider will collect the item(s). When is a good time?' : cur.status === 'completed' && cur.kind === 'refund' ? `We have sent ${taka(cur.refund_amount ?? cur.amount)}${cur.refund_to ? ' to ' + cur.refund_to : ''}.` : '') : ''
+  const step = cur ? Math.max(0, ['requested', 'approved', 'received', 'completed'].indexOf(cur.status)) : 0
+  const foot = !cur ? null : rej ? null
+    : cur.status === 'requested' ? <><button className="bt" disabled={busy} onClick={() => act('approved')}>✓ Approve return</button><button className="bt g" disabled={busy} onClick={() => setRej(true)}>Reject</button></>
+    : cur.status === 'approved' ? <><button className="bt" disabled={busy} onClick={() => act('received')}>Mark item received</button><button className="bt g" disabled={busy} onClick={() => act('completed')}>{cur.kind === 'replace' ? 'Replace without pick-up' : 'Refund without pick-up'}</button></>
+    : cur.status === 'received' ? <><button className="bt" disabled={busy} onClick={() => act('completed')}>{cur.kind === 'replace' ? '✓ Mark replaced' : `✓ Mark refunded${+amt >= 0 && amt !== '' ? ' · ' + taka(+amt) : ''}`}</button><button className="bt g" disabled={busy} onClick={() => setRej(true)}>Reject</button></>
+    : null
+  return <div className="pg">
+    <div className="ob">{RTABS.map(([k, l, ic, s]) => <button key={k} className={'s' + s + (f === k ? ' on' : '')} aria-pressed={f === k} onClick={() => setF(f === k ? '' : k)}><span className="oi"><Ic n={ic} s={16} /></span><small>{l}</small><b><Count to={cnt[k]} /></b></button>)}</div>
+    <div className="tl"><label className="sr"><Ic n="search" s={18} /><input className="in" type="search" inputMode="search" enterKeyHint="search" placeholder="Search order, customer, item, reason" aria-label="Search returns" value={q} onChange={e => setQ(e.target.value)} /></label>
+      {cnt.rejected > 0 && <button className={'vchip' + (f === 'rejected' ? ' on' : '')} aria-pressed={f === 'rejected'} onClick={() => setF(f === 'rejected' ? '' : 'rejected')}><Ic n="ban" s={15} />Rejected<em>{cnt.rejected}</em></button>}</div>
+    <p className="sum"><b>{list.length}</b> return{list.length === 1 ? '' : 's'} · <b>{taka(list.reduce((a, r) => a + (+(r.refund_amount ?? r.amount) || 0), 0))}</b>{f && <> · <button className="lk" onClick={() => setF('')}>Show all ({returns.length})</button></>}</p>
+    <div className="ol">{list.map(r => <ReturnCard key={r.id} r={r} o={om.get(r.order_id)} onOpen={setSel} />)}{!list.length && <p className="mut pad cd">{returns.length ? 'No returns match.' : 'No return requests yet. Customers can ask for a return on delivered orders, within 14 days.'}</p>}</div>
+    {cur && <Modal cls="pm" title={'Return · #' + cur.order_no} onClose={() => setSel(null)} footer={foot}>
+      <div className="steps rsteps">{(cur.status === 'rejected' ? ['Rejected'] : ['Requested', 'Approved', 'Received', doneLbl(cur)]).map((l, i) => <button key={l} disabled className={cur.status === 'rejected' ? 'on' : step === i ? 'on' : step > i ? 'dn' : ''}>{cur.status !== 'rejected' && step > i ? '✓ ' : ''}{l}</button>)}</div>
+      {rej && <div className="rsn"><b>Why are you rejecting this return?</b><textarea className="in" rows="3" autoFocus placeholder="The customer sees this in their notifications" value={note} onChange={e => setNote(e.target.value)} />
+        <div className="rq">{RREJ.map(x => <button key={x} type="button" onClick={() => setNote(x)}>{x}</button>)}</div>
+        <div className="acts"><button className="bt d sm" disabled={busy} onClick={() => act('rejected')}>Confirm rejection</button><button className="bt g sm" onClick={() => setRej(false)}>Cancel</button></div></div>}
+      <div className="cu"><span className="av lg">{ini(co?.address?.name)}</span><span className="g1"><b>{co?.address?.name || 'Customer'}</b><small>{ph || 'Order not in the recent list'}</small></span><span className={'pl ' + RPL[cur.status]}>{cur.status === 'completed' ? doneLbl(cur) : RLBL[cur.status]}</span></div>
+      <div className="qa">{ph && <a className="bt g sm" href={'tel:' + ph}><Ic n="phone" s={16} />Call</a>}{ph && <a className="bt sm wa" href={wa(ph, waTxt)} target="_blank" rel="noopener noreferrer"><Ic n="chat" s={16} />WhatsApp</a>}{co && <button className="bt g sm" onClick={() => { setSel(null); openOrder(co.id) }}><Ic n="receipt" s={16} />Open order</button>}</div>
+      <h3>What happened</h3>
+      <div className="cd sd-info"><div><span>Request</span><b>{cur.kind === 'replace' ? 'Replacement' : 'Refund'}</b></div><div><span>Reason</span><b>{cur.reason}</b></div>{cur.details && <div><span>Details</span><b>{cur.details}</b></div>}{cur.kind === 'refund' && <div><span>Refund to</span><b>{cur.refund_to || 'Not given'}</b></div>}<div><span>Order payment</span><b>{co ? `${co.payment || '—'} · ${payLabel(co)}` : '—'}</b></div><div><span>Requested</span><b>{fmt(cur.created_at)}</b></div>{cur.updated_at && cur.updated_at !== cur.created_at && <div><span>Last update</span><b>{fmt(cur.updated_at)}</b></div>}</div>
+      <h3>Items to return</h3>
+      {(cur.items || []).map((i, ix) => <div className="ln it" key={ix}><span className="th">{i.image_url ? <img src={i.image_url} alt="" loading="lazy" decoding="async" /> : '🛍️'}</span><span className="g1"><b>{i.name}</b><small>{i.variant ? i.variant + ' · ' : ''}{taka(i.price)} × {i.qty}{i.shop_id ? '' : ' · Pinkish'}</small></span><b>{taka(i.price * i.qty)}</b></div>)}
+      {cur.seller_response && <div className={'cd sd-note rs-' + cur.seller_response}><small>{cur.seller_response === 'agree' ? 'Seller agrees with this return' : 'Seller disputes this return'}</small>{cur.seller_note && <p>{cur.seller_note}</p>}</div>}
+      {!cur.seller_response && (cur.items || []).some(i => i.shop_id) && cur.status === 'requested' && <p className="mut">Waiting for the seller to agree or dispute. You can decide without them.</p>}
+      {cur.admin_note && <div className="cd"><small>Note sent to the customer</small><p>{cur.admin_note}</p></div>}
+      {!rej && cur.status !== 'completed' && cur.status !== 'rejected' && <>
+        {cur.kind === 'refund' && <F l={`Refund amount (৳) · items worth ${taka(cur.amount)}`}><span className="pf"><i>৳</i><input className="in" type="number" min="0" inputMode="decimal" value={amt} onChange={e => setAmt(e.target.value)} /></span></F>}
+        <F l="Note to the customer (optional)"><textarea className="in" rows="2" maxLength={600} placeholder="e.g. Our rider will come tomorrow between 2 and 5 pm" value={note} onChange={e => setNote(e.target.value)} /></F></>}
+      {cur.status === 'completed' && cur.kind === 'refund' && <p className="ok">✓ {taka(cur.refund_amount ?? cur.amount)} refunded{cur.refund_to ? ' to ' + cur.refund_to : ''}</p>}
+    </Modal>}
+  </div>
+}
+
 // ---------------- Merchants (marketplace sellers) ----------------
 const SHOP_TABS = [['pending', 'Pending', 'clock', 1], ['approved', 'Verified', 'shield', 3], ['rejected', 'Rejected', 'alert', 0], ['suspended', 'Suspended', 'ban', 2]]
 const SHOP_LBL = { pending: 'Pending review', approved: 'Verified', rejected: 'Rejected', suspended: 'Suspended' }
@@ -425,23 +607,54 @@ const ShopCard = memo(function ShopCard({ s, n, onOpen, onVerify }) {
       <span className="sc-av">{s.logo_url ? <img src={s.logo_url} alt="" loading="lazy" decoding="async" /> : ini(s.name)}</span>
       <span className="sc-t"><b>{s.name}</b><small>{[s.city, s.phone].filter(Boolean).join(' · ') || '—'}</small></span>
       <span className={'pl ' + SHOP_PL[s.status]}>{SHOP_LBL[s.status]}</span>
-      <span className="sc-meta"><span>{n.p} product{n.p === 1 ? '' : 's'}</span><span>{n.sold} sold</span><span>Applied {ago(s.created_at)}</span></span>
+      <span className="sc-meta"><span>{n.p} product{n.p === 1 ? '' : 's'}</span><span>{n.sold} sold</span>{n.pend > 0 && <span className="hv">📦 {n.pend} to collect</span>}{n.timed > 0 && <span>{Math.round(n.onTime / n.timed * 100)}% packed on time</span>}<span>Applied {ago(s.created_at)}</span></span>
     </button>
     {s.status === 'pending' && <div className="sc-act"><small>Check the ID, then verify</small><button className="bt sm" onClick={() => onVerify(s)}>✓ Verify</button></div>}
   </article>
 })
 
-function Shops({ d: { shops = [], products, orders, shopsErr }, reload, say }) {
+// Seller rules: how parcels reach Pinkish, packing time, commission and a notice shown in every Seller Centre.
+function SellerOps({ ops, say, reload, hoErr }) {
+  const [f, setF] = useState(() => ({ ...OPS0, ...ops })), [busy, setBusy] = useState(false), [open, setOpen] = useState(false)
+  useEffect(() => { setF({ ...OPS0, ...ops }) }, [ops])
+  const set = k => e => setF(x => ({ ...x, [k]: e.target.value }))
+  const dirty = JSON.stringify({ ...OPS0, ...ops }) !== JSON.stringify(f)
+  const save = async () => {
+    const v = { mode: f.mode === 'dropoff' ? 'dropoff' : 'pickup', hub_address: String(f.hub_address || '').trim().slice(0, 200), hours: String(f.hours || '').trim().slice(0, 80), pack_hours: Math.min(168, Math.max(1, Math.round(+f.pack_hours || 24))), commission: Math.min(60, Math.max(0, +f.commission || 0)), notice: String(f.notice || '').trim().slice(0, 400) }
+    if (v.mode === 'dropoff' && v.hub_address.length < 6) return say('Enter the hub address for drop-off')
+    setBusy(true)
+    const { error } = await sb.from('site_settings').upsert({ key: 'seller_ops', value: v, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    setBusy(false); if (error) return say(error.message)
+    say('Seller rules saved. Sellers see them now.'); reload()
+  }
+  return <section className="cd sop"><button className="sop-h" aria-expanded={open} onClick={() => setOpen(v => !v)}><span className="mq-i"><Ic n="gear" s={20} /></span><span className="g1"><b>Seller rules</b><small>{ops.mode === 'dropoff' ? 'Sellers drop off at the hub' : 'Riders collect from sellers'} · pack within {ops.pack_hours || 24}h · {+ops.commission || 0}% commission</small></span><Ic n="chev" s={18} /></button>
+    {open && <div className="sop-b">
+      {hoErr && <p className="wn">Pickups are not set up yet. Run <b>supabase-seller-ops.sql</b> in the Supabase SQL editor.</p>}
+      <div className="fg"><F l="How parcels reach Pinkish"><select className="in" value={f.mode} onChange={set('mode')}><option value="pickup">A Pinkish rider collects from the seller</option><option value="dropoff">Seller drops off at the Pinkish hub</option></select></F>
+        <F l="Pickup / hub hours"><input className="in" maxLength={80} value={f.hours} onChange={set('hours')} placeholder="Sat–Thu, 10am–6pm" /></F></div>
+      <F l={f.mode === 'dropoff' ? 'Hub address (sellers see this) *' : 'Hub address (optional)'}><input className="in" maxLength={200} value={f.hub_address} onChange={set('hub_address')} placeholder="e.g. Pinkish Hub, House 12, Road 3, Nasirabad, Chattogram" /></F>
+      <div className="fg"><F l="Sellers must pack within (hours)"><input className="in" type="number" min="1" max="168" inputMode="numeric" value={f.pack_hours} onChange={set('pack_hours')} /></F>
+        <F l="Pinkish commission (%)"><span className="pf"><i>%</i><input className="in" type="number" min="0" max="60" step="0.5" inputMode="decimal" value={f.commission} onChange={set('commission')} /></span></F></div>
+      <F l={`Notice to all sellers (optional) · ${String(f.notice || '').length}/400`}><textarea className="in" rows="2" maxLength={400} value={f.notice} onChange={set('notice')} placeholder="e.g. Eid rush: pack orders within 12 hours this week." /></F>
+      <p className="mut">Sellers can only hand parcels to a Pinkish rider who tells them the pickup code. Customer details are never shown to sellers, and phone numbers or links are blocked in their shop, products and answers.</p>
+      <div className="acts"><button className="bt" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save seller rules'}</button>{dirty && <button className="bt g" onClick={() => setF({ ...OPS0, ...ops })}>Undo changes</button>}</div>
+    </div>}
+  </section>
+}
+
+function Shops({ d: { shops = [], products, orders, shopsErr, ho = [], hoErr, ops = OPS0 }, reload, say }) {
   const [f, setF] = useState(() => shops.some(s => s.status === 'pending') ? 'pending' : ''), [q, setQ] = useState(''), [sel, setSel] = useState(null), [busy, setBusy] = useState(false), [rej, setRej] = useState(null), [doc, setDoc] = useState(null), bz = useRef(false)
   const dq = useDeferredValue(q)
   useEffect(() => { setRej(null); setDoc(null) }, [sel])
   const stat = useMemo(() => {
     const m = {}, pm = new Map()
-    shops.forEach(s => { m[s.id] = { p: 0, live: 0, sold: 0, rev: 0 } })
+    shops.forEach(s => { m[s.id] = { p: 0, live: 0, sold: 0, rev: 0, pend: 0, timed: 0, onTime: 0 } })
+    const ph = (+ops.pack_hours || 24) * 36e5
+    ho.forEach(h => { const e = m[h.shop_id]; if (!e) return; if (h.status === 'new' || h.status === 'packed') e.pend++; const t = h.packed_at || h.picked_at; if (t) { e.timed++; if (new Date(t) - new Date(h.created_at) <= ph) e.onTime++ } })
     products.forEach(p => { if (p.shop_id && m[p.shop_id]) { m[p.shop_id].p++; if (p.is_active !== false) m[p.shop_id].live++; pm.set(String(p.id), p.shop_id) } })
     orders.forEach(o => (o.items || []).forEach(i => { const e = m[pm.get(String(i.id))]; if (e) { e.sold += +i.qty || 0; e.rev += (+i.price || 0) * (+i.qty || 0) } }))
     return m
-  }, [shops, products, orders])
+  }, [shops, products, orders, ho, ops.pack_hours])
   const cnt = useMemo(() => { const c = { pending: 0, approved: 0, rejected: 0, suspended: 0 }; shops.forEach(s => { if (s.status in c) c[s.status]++ }); return c }, [shops])
   const list = useMemo(() => { const k = dq.trim().toLowerCase(); return shops.filter(s => (!f || s.status === f) && (!k || `${s.name} ${s.phone} ${s.city || ''} ${s.address || ''}`.toLowerCase().includes(k))).sort((a, b) => (b.status === 'pending') - (a.status === 'pending') || new Date(b.created_at) - new Date(a.created_at)) }, [shops, f, dq])
   const setStatus = useCallback(async (s, status, reason) => {
@@ -457,7 +670,7 @@ function Shops({ d: { shops = [], products, orders, shopsErr }, reload, say }) {
   const verify = useCallback(s => setStatus(s, 'approved'), [setStatus])
   const open = useCallback(id => setSel(id), [])
   const cur = sel && shops.find(s => s.id === sel)
-  const n = cur ? stat[cur.id] || { p: 0, live: 0, sold: 0, rev: 0 } : null
+  const n = cur ? stat[cur.id] || { p: 0, live: 0, sold: 0, rev: 0, pend: 0, timed: 0, onTime: 0 } : null
   const mine = useMemo(() => cur ? products.filter(p => p.shop_id === cur.id).slice(0, 5) : [], [cur, products])
   const showDoc = async () => {
     setDoc({ busy: true })
@@ -475,6 +688,7 @@ function Shops({ d: { shops = [], products, orders, shopsErr }, reload, say }) {
     : cur.status === 'rejected' ? <><button className="bt" disabled={busy} onClick={() => verify(cur)}>✓ Verify anyway</button></>
     : <button className="bt" disabled={busy} onClick={() => verify(cur)}>Reinstate shop</button>
   return <div className="pg">
+    <SellerOps ops={ops} say={say} reload={reload} hoErr={hoErr} />
     <div className="ob">{SHOP_TABS.map(([k, l, ic, s]) => <button key={k} className={'s' + s + (f === k ? ' on' : '')} aria-pressed={f === k} onClick={() => setF(f === k ? '' : k)}><span className="oi"><Ic n={ic} s={16} /></span><small>{l}</small><b><Count to={cnt[k]} /></b></button>)}</div>
     <div className="tl"><label className="sr"><Ic n="search" s={18} /><input className="in" type="search" inputMode="search" enterKeyHint="search" placeholder="Search shop, phone, city" aria-label="Search merchants" value={q} onChange={e => setQ(e.target.value)} /></label></div>
     <p className="sum"><b>{list.length}</b> merchant{list.length === 1 ? '' : 's'}{f && <> · <button className="lk" onClick={() => setF('')}>Show all ({shops.length})</button></>}</p>
@@ -488,6 +702,7 @@ function Shops({ d: { shops = [], products, orders, shopsErr }, reload, say }) {
       {cur.status === 'rejected' && cur.reject_reason && <div className="cd sd-note"><small>Rejection reason</small><p>{cur.reject_reason}</p></div>}
       {ph && <div className="qa"><a className="bt g sm" href={'tel:' + ph}><Ic n="phone" s={16} />Call</a><a className="bt sm wa" href={wa(ph, `Hi, this is Pinkish about your shop "${cur.name}".`)} target="_blank" rel="noopener noreferrer"><Ic n="chat" s={16} />WhatsApp</a></div>}
       <div className="sd-stats"><div><b>{n.p}</b><small>Products</small></div><div><b>{n.live}</b><small>Live</small></div><div><b>{n.sold}</b><small>Sold</small></div><div><b>{taka(n.rev)}</b><small>Sales</small></div></div>
+      {(n.pend > 0 || n.timed > 0) && <p className="sum">Pickups: <b>{n.pend}</b> waiting{n.timed > 0 && <> · <b className={n.onTime / n.timed < 0.8 ? 'wn' : ''}>{Math.round(n.onTime / n.timed * 100)}%</b> packed within {ops.pack_hours || 24}h</>}</p>}
       <h3>Business details</h3>
       <div className="cd sd-info"><div><span>Phone</span><b>{cur.phone || '—'}</b></div><div><span>City</span><b>{cur.city || '—'}</b></div><div><span>Address</span><b>{cur.address || '—'}</b></div><div><span>NID number</span><b>{cur.nid_number || '—'}</b></div><div><span>Applied</span><b>{fmt(cur.created_at)}</b></div>{cur.verified_at && <div><span>Verified</span><b>{fmt(cur.verified_at)}</b></div>}<div><span>Shop link</span><b>{cur.slug}</b></div></div>
       {cur.description && <><h3>About</h3><div className="cd"><p>{cur.description}</p></div></>}
@@ -593,17 +808,69 @@ function Cats({ d, reload, say }) {
     <div className="cd lst">{d.cats.map(c => <div className="rw" key={c.id}>{e?.id === c.id ? <><input className="in ic" aria-label="Icon" value={e.icon} onChange={x => setE({ ...e, icon: x.target.value })} /><input className="in g1" aria-label="Name" value={e.name} onChange={x => setE({ ...e, name: x.target.value })} /><button className="bt sm" onClick={async () => { if (!e.name.trim()) return say('Enter a category name'); if (await run(sb.from('categories').update({ name: e.name.trim(), icon: e.icon || '🛍️' }).eq('id', c.id), 'Category saved')) setE(null) }}>Save</button><button className="bt g sm" onClick={() => setE(null)}>Cancel</button></> : <><span className="th">{c.icon}</span><span className="g1"><b>{c.name}</b><small>{cnt[c.id] || 0} products</small></span><button className="bt g sm" onClick={() => setE({ ...c })}>Edit</button><button className="bt d sm" aria-label={'Delete ' + c.name} onClick={() => del(c)}>Delete</button></>}</div>)}{!d.cats.length && <p className="mut pad">No categories yet.</p>}</div></div>
 }
 
-const DEF = [{ chip: 'Limited Offer', lines: 'Privacy. Confidence.\nComfort. Wellness.', emoji: '🛡️', image: '', on: true }, { chip: 'Delivery from ৳40', lines: 'Discreet delivery\nacross Chattogram', emoji: '🚚', image: '', on: true }, { chip: 'Use code SHIELD10', lines: 'Get 10% off\nyour first order', emoji: '🎁', image: '', on: true }]
+// Send a push-style notification to customers (shows in the bell on the storefront, live).
+function Notify({ d, say }) {
+  const [f, setF] = useState({ title: '', body: '', aud: 'all', pid: '' }), [busy, setBusy] = useState(false), [last, setLast] = useState(null)
+  const prods = useMemo(() => d.products.filter(p => p.is_active !== false).slice(0, 300), [d.products])
+  const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
+  const send = async () => {
+    const title = f.title.trim()
+    if (title.length < 2) return say('Enter a title')
+    if (!window.confirm(`Send this notification to ${f.aud === 'buyers' ? 'customers who have ordered' : 'ALL customers'}? This cannot be undone.`)) return
+    setBusy(true)
+    const { data, error } = await sb.rpc('admin_broadcast', { p_title: title, p_body: f.body.trim() || null, p_link: f.pid ? 'product:' + f.pid : null, p_audience: f.aud })
+    setBusy(false)
+    if (error) return say(error.message)
+    setLast({ n: data, title }); setF(p => ({ ...p, title: '', body: '', pid: '' })); say(`Sent to ${data} ${data === 1 ? 'person' : 'people'}`)
+  }
+  return <div className="pg"><div className="cd"><h2>Send a notification</h2>
+    <p style={{ opacity: .7, margin: '0 0 12px' }}>Customers see it in the bell on the store, instantly. Use it for offers, new arrivals and announcements.</p>
+    <F l={`Title · ${f.title.length}/80`}><input className="in" maxLength={80} enterKeyHint="next" placeholder="e.g. Weekend sale is live" value={f.title} onChange={set('title')} /></F>
+    <F l={`Message (optional) · ${f.body.length}/300`}><textarea className="in" rows={3} maxLength={300} placeholder="Short and clear works best" value={f.body} onChange={set('body')} /></F>
+    <div className="tl"><F l="Send to"><select className="in" value={f.aud} onChange={set('aud')}><option value="all">All customers</option><option value="buyers">Customers who have ordered</option></select></F>
+      <F l="Open product when tapped (optional)"><select className="in" value={f.pid} onChange={set('pid')}><option value="">Just open notifications</option>{prods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F></div>
+    <div className="ntp-l">Preview · how it looks on a customer's phone</div>
+    <div className="ntp"><span className="ntp-ic" aria-hidden="true">🔔</span><div className="ntp-t"><div className="ntp-h"><b>{f.title.trim() || 'Your title appears here'}</b><em>now</em></div>{f.body.trim() && <p>{f.body.trim()}</p>}{f.pid && <span className="ntp-go">View ›</span>}</div></div>
+    <button className="bt ntp-send" disabled={busy || f.title.trim().length < 2} onClick={send}>{busy ? 'Sending…' : 'Send notification'}</button>
+    {last && <p style={{ margin: '12px 0 0', color: '#1a7f4b' }}>✓ “{last.title}” sent to {last.n} {last.n === 1 ? 'person' : 'people'}.</p>}</div></div>
+}
+
+const HERO_BG = { purple: ['#2d0b4a', '#8e2a8c', '#c2377f'], pink: ['#7a1648', '#e0457b', '#ff8fb8'], ocean: ['#0b2a5b', '#1f6fd1', '#38c6e0'], sunset: ['#7a1f2b', '#e8542f', '#ffb347'], forest: ['#0d3b2e', '#1f8a5b', '#7bd88f'], night: ['#0c0713', '#2a1a3a', '#4a1668'] }
+const BG_NAMES = { purple: 'Purple', pink: 'Pink', ocean: 'Ocean', sunset: 'Sunset', forest: 'Forest', night: 'Night', custom: 'Custom' }
+const heroBg = x => {
+  if (x.bg === 'custom' && /^#[0-9a-f]{6}$/i.test(x.c1 || '') && /^#[0-9a-f]{6}$/i.test(x.c2 || '')) return `linear-gradient(120deg,${x.c1},${x.c2})`
+  const c = HERO_BG[x.bg] || HERO_BG.purple
+  return `linear-gradient(120deg,${c[0]},${c[1]} 70%,${c[2]})`
+}
+const SPEEDS = [3, 4, 5, 6, 8, 10]
+const SLIDE0 = { chip: '', lines: '', sub: '', emoji: '', image: '', on: true, cta: 'Shop Now', link: '', bg: 'purple', c1: '#2d0b4a', c2: '#c2377f', layout: 'side', tone: 'light' }
+const DEF = [{ ...SLIDE0, chip: 'Limited Offer', lines: 'Privacy. Confidence.\nComfort. Wellness.', emoji: '🛡️' }, { ...SLIDE0, chip: 'Delivery from ৳40', lines: 'Discreet delivery\nacross Chattogram', emoji: '🚚' }, { ...SLIDE0, chip: 'Use code SHIELD10', lines: 'Get 10% off\nyour first order', emoji: '🎁' }]
 const isLogo = v => v === '🛡️' || v === '🛡'
-function Hero({ say }) {
-  const [s, setS] = useState(null), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false)
+function Hero({ say, d }) {
+  const [s, setS] = useState(null), [cfg, setCfg] = useState({ auto: true, speed: 4 }), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false)
+  const cats = d?.cats || [], prods = d?.products || []
+  // picture shapes: the store shows a wide picture as a whole-picture slide, so the preview does the same
+  const [ars, setArs] = useState({}), asked = useRef(new Set())
+  useEffect(() => {
+    let on = true
+    ;(s || []).forEach(x => {
+      if (!x.image || asked.current.has(x.image)) return
+      asked.current.add(x.image)
+      const im = new Image()
+      im.onload = () => { if (on) setArs(a => ({ ...a, [x.image]: (im.naturalWidth || 1) / (im.naturalHeight || 1) })) }
+      im.onerror = () => { if (on) setArs(a => ({ ...a, [x.image]: 1 })) }
+      im.src = x.image
+    })
+    return () => { on = false }
+  }, [s])
   useEffect(() => {
     let live = true
     sb.from('site_settings').select('value').eq('key', 'hero').maybeSingle().then(({ data, error }) => {
       if (!live) return
       if (error) say(error.message)
       const v = data?.value?.slides
-      setS(Array.isArray(v) && v.length ? v.map(x => ({ chip: '', lines: '', emoji: '', image: '', on: true, ...x })) : DEF)
+      setCfg({ auto: data?.value?.auto !== false, speed: SPEEDS.includes(+data?.value?.speed) ? +data.value.speed : 4 })
+      setS(Array.isArray(v) && v.length ? v.map(x => ({ ...SLIDE0, ...x })) : DEF)
     })
     return () => { live = false }
   }, [say])
@@ -616,23 +883,47 @@ function Hero({ say }) {
   const upd = fn => { setS(fn); setDirty(true) }
   const set = (i, k, v) => upd(a => a.map((x, j) => j === i ? { ...x, [k]: v } : x))
   const mv = (i, d) => upd(a => { const b = [...a], j = i + d; if (j < 0 || j >= b.length) return a;[b[i], b[j]] = [b[j], b[i]]; return b })
+  const setC = p => { setCfg(c => ({ ...c, ...p })); setDirty(true) }
   const save = async () => {
-    const bad = s.findIndex(x => x.on !== false && !(x.lines || '').trim())
+    const bad = s.findIndex(x => x.on !== false && !(x.lines || '').trim() && !(x.layout === 'full' && x.image))
     if (bad >= 0) return say(`Slide ${bad + 1} is shown but has no text. Add text, hide it or delete it.`)
     if (!s.some(x => x.on !== false)) return say('Show at least one slide, or the store uses its default banner.')
-    const slides = s.map(x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false }))
+    const badUrl = s.findIndex(x => (x.link || '').startsWith('url:') && !/^https?:\/\/\S+\.\S+/i.test(x.link.slice(4).trim()))
+    if (badUrl >= 0) return say(`Slide ${badUrl + 1}: the web link must start with https://`)
+    const slides = s.map(x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), sub: (x.sub || '').trim().slice(0, 90), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false, cta: (x.cta || '').trim().slice(0, 24), link: (x.link || '').startsWith('url:') ? 'url:' + x.link.slice(4).trim() : x.link || '', bg: x.bg || 'purple', c1: x.c1 || '#2d0b4a', c2: x.c2 || '#c2377f', layout: x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side', tone: x.tone === 'dark' ? 'dark' : 'light' }))
     setBusy(true)
-    const { error } = await sb.from('site_settings').upsert({ key: 'hero', value: { slides }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    const { error } = await sb.from('site_settings').upsert({ key: 'hero', value: { slides, auto: cfg.auto, speed: cfg.speed }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
     setBusy(false)
     if (error) return say(error.message)
     setS(slides); setDirty(false); say('Hero saved. It is live on the storefront.')
   }
   return <div className="pg"><p className="mut">The slides on the storefront home banner. Customers see slides marked Show, in this order. {dirty && <b className="wn">Unsaved changes</b>}</p>
-    {s.map((x, i) => <div className="cd hs" key={i}><div className="pv"><div>{x.chip && <span style={{ fontSize: '.7rem', opacity: .85, letterSpacing: '.08em', textTransform: 'uppercase' }}>{x.chip}</span>}{(x.lines || '').split('\n').filter(Boolean).map((l, k) => <span key={k}>{l}</span>)}</div><i>{x.image ? <img src={x.image} alt="" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji}</i></div>
-      <div><F l="Text (one line per row)"><textarea className="in" rows="3" value={x.lines} onChange={e => set(i, 'lines', e.target.value)} /></F>
-        <div className="fg"><F l="Badge (small label above the text)"><input className="in" maxLength={30} value={x.chip} onChange={e => set(i, 'chip', e.target.value)} /></F><F l="Emoji (used when there is no image)"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set(i, 'emoji', e.target.value)} /></F></div>
-        <Img value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
-        <div className="acts"><label className="ck"><input type="checkbox" checked={x.on !== false} onChange={e => set(i, 'on', e.target.checked)} /> Show</label><button className="bt g sm" disabled={!i} onClick={() => mv(i, -1)}>Move up</button><button className="bt g sm" disabled={i === s.length - 1} onClick={() => mv(i, 1)}>Move down</button><button className="bt d sm" onClick={() => { if (window.confirm(`Delete slide ${i + 1}?`)) upd(a => a.filter((_, j) => j !== i)) }}>Delete</button></div></div></div>)}
+    <div className="cd"><div className="fg"><label className="ck"><input type="checkbox" checked={cfg.auto} onChange={e => setC({ auto: e.target.checked })} /> Slide automatically</label><F l="Time on each slide"><select className="in" disabled={!cfg.auto} value={cfg.speed} onChange={e => setC({ speed: +e.target.value })}>{SPEEDS.map(v => <option key={v} value={v}>{v} seconds</option>)}</select></F></div></div>
+    {s.map((x, i) => {
+      const cov = x.layout === 'cover' && !!x.image, full = !!x.image && x.layout !== 'cover' && (x.layout === 'full' || ars[x.image] >= 1.25), autoWide = full && x.layout !== 'full', lk = x.link || '', lt = lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : ''
+      const pv = { background: heroBg(x), color: x.tone === 'dark' ? '#2a1a3a' : '#fff' }
+      if (cov) pv.background = `linear-gradient(90deg,${x.tone === 'dark' ? '#fffd' : '#000b'},#0000), url(${JSON.stringify(x.image)}) center/cover`
+      if (full) { pv.background = `url(${JSON.stringify(x.image)}) center/contain no-repeat, ${heroBg(x)}`; pv.aspectRatio = '2.4/1'; pv.minHeight = 0 }
+      return <div className="cd hs" key={i}><div className="pv" style={pv}>{!full && <div>{x.chip && <span style={{ fontSize: '.7rem', opacity: .85, letterSpacing: '.08em', textTransform: 'uppercase' }}>{x.chip}</span>}{(x.lines || '').split('\n').filter(Boolean).map((l, k) => <span key={k}>{l}</span>)}{x.sub && <span className="pvs">{x.sub}</span>}{x.cta && <span className="pvb">{x.cta} ↗</span>}</div>}{!cov && !full && <i>{x.image ? <img src={x.image} alt="" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji}</i>}</div>
+        <div><F l="Headline (one line per row)"><textarea className="in" rows="3" value={x.lines} onChange={e => set(i, 'lines', e.target.value)} /></F>
+          <div className="fg"><F l="Small text under the headline (optional)"><input className="in" maxLength={90} value={x.sub} onChange={e => set(i, 'sub', e.target.value)} /></F><F l="Badge (small label above the headline)"><input className="in" maxLength={30} value={x.chip} onChange={e => set(i, 'chip', e.target.value)} /></F></div>
+          <div className="fg"><F l="Button text (empty = no button)"><input className="in" maxLength={24} value={x.cta} onChange={e => set(i, 'cta', e.target.value)} /></F>
+            <F l="Tapping the slide opens"><select className="in" value={lt} onChange={e => set(i, 'link', e.target.value === 'cat' ? 'cat:' + (cats[0]?.id ?? '') : e.target.value === 'prod' ? 'prod:' + (prods[0]?.id ?? '') : e.target.value === 'url' ? 'url:https://' : '')}><option value="">All categories</option>{cats.length > 0 && <option value="cat">One category</option>}{prods.length > 0 && <option value="prod">One product</option>}<option value="url">A web link</option></select></F></div>
+          {lt === 'cat' && <F l="Category"><select className="in" value={lk.slice(4)} onChange={e => set(i, 'link', 'cat:' + e.target.value)}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></F>}
+          {lt === 'prod' && <F l="Product"><select className="in" value={lk.slice(5)} onChange={e => set(i, 'link', 'prod:' + e.target.value)}>{prods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F>}
+          {lt === 'url' && <F l="Web link (opens in a new tab)"><input className="in" inputMode="url" placeholder="https://" value={lk.slice(4)} onChange={e => set(i, 'link', 'url:' + e.target.value)} /></F>}
+          <F l="Background colour"><div className="sw">{Object.keys(BG_NAMES).map(k => <button key={k} type="button" title={BG_NAMES[k]} aria-label={BG_NAMES[k]} aria-pressed={(x.bg || 'purple') === k} className={(x.bg || 'purple') === k ? 'on' : ''} style={{ background: k === 'custom' ? 'conic-gradient(#e0457b,#f5c542,#3fbf7f,#2f80ed,#8e2a8c,#e0457b)' : heroBg({ bg: k }) }} onClick={() => set(i, 'bg', k)} />)}</div></F>
+          {x.bg === 'custom' && <div className="fg"><F l="Colour 1"><input className="in col" type="color" value={x.c1 || '#2d0b4a'} onChange={e => set(i, 'c1', e.target.value)} /></F><F l="Colour 2"><input className="in col" type="color" value={x.c2 || '#c2377f'} onChange={e => set(i, 'c2', e.target.value)} /></F></div>}
+          <div className="fg"><F l="Picture style"><select className="in" value={x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side'} onChange={e => set(i, 'layout', e.target.value)}><option value="side">Picture on the right</option><option value="cover">Picture behind the text</option><option value="full">Picture only (whole picture, no text)</option></select></F>
+            <F l="Text colour"><select className="in" value={x.tone === 'dark' ? 'dark' : 'light'} onChange={e => set(i, 'tone', e.target.value)}><option value="light">White (for dark backgrounds)</option><option value="dark">Dark (for light backgrounds)</option></select></F></div>
+          <F l="Emoji (used when there is no picture)"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set(i, 'emoji', e.target.value)} /></F>
+          <Img wide value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
+          <p className="mut">Best picture: wide, 2400 × 1000 px (2.4:1). It is shown whole across the banner. Square or tall pictures sit beside the text.</p>
+          {autoWide && <p className="hnote">This picture is wide, so the store shows it as a whole-picture slide and hides the headline and button. To keep the text, choose "Picture behind the text".</p>}
+          {x.layout === 'cover' && !x.image && <p className="mut">Upload a picture to use this style. Wide photos (3:2) with the subject on the right work best.</p>}
+          {x.layout === 'full' && <p className="mut">{x.image ? 'The whole picture is shown on the banner, nothing is cut. Tapping it opens the link above.' : 'Upload a wide picture, best 2400 × 1000 px (about 2.4:1). Put any text inside the picture itself.'}</p>}
+          <div className="acts"><label className="ck"><input type="checkbox" checked={x.on !== false} onChange={e => set(i, 'on', e.target.checked)} /> Show</label><button className="bt g sm" disabled={!i} onClick={() => mv(i, -1)}>Move up</button><button className="bt g sm" disabled={i === s.length - 1} onClick={() => mv(i, 1)}>Move down</button><button className="bt d sm" onClick={() => { if (window.confirm(`Delete slide ${i + 1}?`)) upd(a => a.filter((_, j) => j !== i)) }}>Delete</button></div></div></div>
+    })}
     {!s.length && <p className="mut cd">No slides. Add one, or save to let the store use its default banner.</p>}
-    <div className="acts"><button className="bt g" onClick={() => upd(a => [...a, { chip: '', lines: '', emoji: '✨', image: '', on: true }])}>Add slide</button><button className="bt g" onClick={() => { if (window.confirm('Reset to the default slides? Nothing is saved until you press Save hero.')) upd(() => DEF) }}>Reset to defaults</button><button className="bt" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save hero'}</button></div></div>
+    <div className="acts"><button className="bt g" onClick={() => upd(a => [...a, { ...SLIDE0, emoji: '✨' }])}>Add slide</button><button className="bt g" onClick={() => { if (window.confirm('Reset to the default slides? Nothing is saved until you press Save hero.')) upd(() => DEF) }}>Reset to defaults</button><button className="bt" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save hero'}</button></div></div>
 }
