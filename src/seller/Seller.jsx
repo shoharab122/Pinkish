@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import './seller.css'
-import { signIn, signUp, signOut, restoreUser, onAuthChange, resetPassword, signInWithGoogle, supabase, dealLive } from '../api.js'
-import { getMyShop, createShop, resubmitShop, updateShop, removeCover, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion } from './sellerApi.js'
+import { signIn, signUp, signOut, onAuthChange, resetPassword, signInWithGoogle, supabase, dealLive } from '../api.js'
+import { getMyShop, createShop, resubmitShop, updateShop, removeCover, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion, preparePhoto } from './sellerApi.js'
 
 const taka = n => '৳' + Number(n || 0).toLocaleString('en-BD')
 const when = d => { try { return new Date(d).toLocaleString('en-BD', { dateStyle: 'medium', timeStyle: 'short' }) } catch { return '' } }
@@ -9,6 +9,18 @@ const msg = e => e?.message || 'Something went wrong. Please try again.'
 const okEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim())
 const strength = p => (p.length >= 8) + (/[a-z]/.test(p) && /[A-Z]/.test(p)) + /\d/.test(p) + (/[^A-Za-z0-9]/.test(p) || p.length >= 12)
 const toLocalInput = x => { const d = new Date(x); if (isNaN(d)) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
+// In-memory cache: switching tabs shows the last data instantly, then refreshes quietly in the background.
+const MEM = {}, PCACHE = {}, CCACHE = { v: null }
+const wipe = () => { Object.keys(MEM).forEach(k => delete MEM[k]); Object.keys(PCACHE).forEach(k => delete PCACHE[k]); CCACHE.v = null }
+function useCached(key, fn) {
+  const [rows, setRows] = useState(() => MEM[key] ?? null), [err, setErr] = useState('')
+  useEffect(() => {
+    let on = true
+    fn().then(r => { MEM[key] = r; on && setRows(r) }).catch(x => { if (on) { setErr(msg(x)); setRows(p => p ?? []) } })
+    return () => { on = false }
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  return [rows, err]
+}
 const DRAFT = 'sl_draft'
 const readDraft = () => { try { return JSON.parse(localStorage.getItem(DRAFT)) || {} } catch { return {} } }
 const saveDraft = d => { try { localStorage.setItem(DRAFT, JSON.stringify(d)) } catch { /* storage unavailable */ } }
@@ -238,12 +250,19 @@ function PhotoSlot({ n, file, saved, onPick }) {
 
 function ProductForm({ shop, cats, product, onSaved, onCancel }) {
   const [f, setF] = useState({ name: product?.name || '', brand: product?.brand || '', tag: product?.tag || '', category_id: product?.category_id || '', price: (dealLive(product) ? product.old_price : product?.price) ?? '', stock: product?.stock ?? '', is_active: product?.is_active !== false, dealPrice: dealLive(product) ? product.price : '', dealEnds: dealLive(product) ? toLocalInput(product.deal_ends_at) : '' })
-  const [files, setFiles] = useState(() => Array(PHOTOS).fill(null)), [err, setErr] = useState(''), [busy, setBusy] = useState(false)
+  const [files, setFiles] = useState(() => Array(PHOTOS).fill(null)), [err, setErr] = useState(''), [busy, setBusy] = useState(false), [prep, setPrep] = useState(0)
+  const pick = async (i, file) => {
+    if (!file) return setFiles(a => a.map((x, k) => (k === i ? null : x)))
+    setErr(''); setPrep(n => n + 1)
+    try { const out = await preparePhoto(file); setFiles(a => a.map((x, k) => (k === i ? out : x))) } catch (x) { setErr(msg(x)) }
+    setPrep(n => n - 1)
+  }
   const saved = useMemo(() => existingImages(product), [product])
   const filled = files.filter((f, i) => f || saved[i]).length
   const set = k => v => setF(p => ({ ...p, [k]: v }))
   const go = async e => {
     e.preventDefault(); setErr('')
+    if (prep) return setErr('Photos are still being prepared. Wait a second.')
     if (filled < PHOTOS) return setErr(`Add all ${PHOTOS} product photos (${filled}/${PHOTOS} added).`)
     setBusy(true)
     try { onSaved(await saveProduct(shop, f, files, product)) } catch (x) { setErr(msg(x)) }
@@ -253,8 +272,8 @@ function ProductForm({ shop, cats, product, onSaved, onCancel }) {
     <form className="sl-card" onSubmit={go}>
       <h2>{product ? 'Edit product' : 'Add product'}</h2>
       {err && <div className="sl-err">{err}</div>}
-      <div className="sl-f"><span>Product photos: add {PHOTOS} (JPG/PNG/WebP, max 3 MB each) · {filled}/{PHOTOS} added</span>
-        <div className="sl-photos">{files.map((f, i) => <PhotoSlot key={i} n={i + 1} file={f} saved={saved[i]} onPick={nf => setFiles(a => a.map((x, k) => (k === i ? nf : x)))} />)}</div></div>
+      <div className="sl-f"><span>Product photos: add {PHOTOS} (any photo, resized automatically) · {filled}/{PHOTOS} added</span>
+        <div className="sl-photos">{files.map((f, i) => <PhotoSlot key={i} n={i + 1} file={f} saved={saved[i]} onPick={nf => pick(i, nf)} />)}</div></div>
       <Inp label="Product name" value={f.name} onChange={set('name')} maxLength={120} required />
       <div className="sl-row">
         <Field label="Category"><select value={f.category_id} onChange={e => set('category_id')(e.target.value)} required><option value="">Select…</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></Field>
@@ -272,18 +291,30 @@ function ProductForm({ shop, cats, product, onSaved, onCancel }) {
         </div>
         {f.dealPrice !== '' && <button type="button" className="sl-btn ghost sm" onClick={() => setF(p => ({ ...p, dealPrice: '', dealEnds: '' }))}>Remove deal</button>}</div>
       <label className="sl-f"><input type="checkbox" checked={f.is_active} onChange={e => set('is_active')(e.target.checked)} /> Visible in the store</label>
-      <div className="sl-acts"><button className="sl-btn" disabled={busy}>{busy ? 'Saving…' : 'Save product'}</button><button type="button" className="sl-btn ghost" onClick={onCancel}>Cancel</button></div>
+      <div className="sl-acts"><button className="sl-btn" disabled={busy || prep > 0}>{busy ? 'Saving…' : prep ? 'Preparing photos…' : 'Save product'}</button><button type="button" className="sl-btn ghost" onClick={onCancel}>Cancel</button></div>
     </form>
   )
 }
 
 function Products({ shop }) {
-  const [list, setList] = useState(null), [cats, setCats] = useState([]), [edit, setEdit] = useState(null), [err, setErr] = useState('')
-  const load = useCallback(async () => { try { const [p, c] = await Promise.all([myProducts(shop.id), getCategoriesList()]); setList(p); setCats(c) } catch (x) { setErr(msg(x)); setList([]) } }, [shop.id])
+  const [list, setList] = useState(() => PCACHE[shop.id] || null), [cats, setCats] = useState(() => CCACHE.v || []), [edit, setEdit] = useState(null), [err, setErr] = useState(''), [ok, setOk] = useState('')
+  const seq = useRef(0)
+  const put = useCallback(fn => setList(l => { const n = fn(l || []); PCACHE[shop.id] = n; return n }), [shop.id])
+  // Loads products (and categories only the first time). A slow older load can never overwrite a newer change.
+  const load = useCallback(async () => {
+    const my = ++seq.current
+    try {
+      const [p, c] = await Promise.all([myProducts(shop.id), CCACHE.v || getCategoriesList()])
+      CCACHE.v = c; setCats(c)
+      if (my === seq.current) put(() => p)
+    } catch (x) { setErr(msg(x)); setList(l => l || []) }
+  }, [shop.id, put])
   useEffect(() => { load() }, [load])
-  const del = async p => { if (!confirm(`Delete "${p.name}"?`)) return; try { await deleteProduct(shop, p.id); setList(l => l.filter(x => x.id !== p.id)) } catch (x) { setErr(msg(x)) } }
-  const toggle = async p => { try { const n = await saveProduct(shop, { ...p, price: p.price, stock: p.stock ?? 0, is_active: !(p.is_active !== false) }, null, p); setList(l => l.map(x => x.id === p.id ? n : x)) } catch (x) { setErr(msg(x)) } }
-  if (edit) return <ProductForm shop={shop} cats={cats} product={edit === 'new' ? null : edit} onCancel={() => setEdit(null)} onSaved={() => { setEdit(null); load() }} />
+  const del = async p => { if (!confirm(`Delete "${p.name}"?`)) return; try { await deleteProduct(shop, p.id); seq.current++; put(l => l.filter(x => x.id !== p.id)) } catch (x) { setErr(msg(x)) } }
+  const toggle = async p => { try { const n = await saveProduct(shop, { ...p, price: p.price, stock: p.stock ?? 0, is_active: !(p.is_active !== false) }, null, p); seq.current++; put(l => l.map(x => x.id === p.id ? n : x)) } catch (x) { setErr(msg(x)) } }
+  // The saved product appears in the list immediately; the store is told to refresh at the same moment.
+  const saved = n => { seq.current++; put(l => (l.some(x => x.id === n.id) ? l.map(x => (x.id === n.id ? n : x)) : [n, ...l])); setEdit(null); setErr(''); setOk(n.is_active !== false ? 'Saved. It is live in the store now.' : 'Saved. It is hidden from the store.'); setTimeout(() => setOk(''), 4000); load() }
+  if (edit) return <ProductForm shop={shop} cats={cats} product={edit === 'new' ? null : edit} onCancel={() => setEdit(null)} onSaved={saved} />
   return (
     <>
       <div className="sl-stats">
@@ -291,7 +322,7 @@ function Products({ shop }) {
         <div className="sl-stat ok"><span className="ic" aria-hidden="true"><Ico n="check" s={22} /></span><div><b>{list?.filter(p => p.is_active !== false).length ?? '–'}</b><span className="sl-mut">Live</span></div></div>
         <div className="sl-stat warn"><span className="ic" aria-hidden="true"><Ico n="alert" s={22} /></span><div><b>{list?.filter(p => (p.stock ?? 0) <= 5).length ?? '–'}</b><span className="sl-mut">Low stock</span></div></div>
       </div>
-      {err && <div className="sl-err">{err}</div>}
+      {err && <div className="sl-err">{err}</div>}{ok && <div className="sl-ok" role="status">{ok}</div>}
       <div className="sl-head"><div><h2>Your products</h2><p className="sl-mut">Manage what customers see in the store.</p></div><button className="sl-btn" onClick={() => setEdit('new')}>+ Add product</button></div>
       {list === null ? <p className="sl-mut">Loading…</p> : !list.length ? <div className="sl-empty"><i><Ico n="bag" s={34} /></i><b>No products yet</b><p>Add your first product and it appears in the store instantly.</p></div> : (
         <div className="sl-grid">{list.map(p => (
@@ -346,8 +377,7 @@ function Questions() {
 // Sales overview: built only from this seller's own orders (the seller_orders RPC is already scoped to the seller).
 const dayKey = d => { const x = new Date(d); return x.getFullYear() + '-' + x.getMonth() + '-' + x.getDate() }
 function Overview({ shop, go }) {
-  const [rows, setRows] = useState(null), [err, setErr] = useState('')
-  useEffect(() => { sellerOrders().then(setRows).catch(x => { setErr(msg(x)); setRows([]) }) }, [])
+  const [rows, err] = useCached('orders', sellerOrders)
   const s = useMemo(() => {
     const all = rows || [], live = all.filter(o => o.status !== 4), now = new Date()
     const sum = a => a.reduce((t, o) => t + Number(o.subtotal || 0), 0)
@@ -408,8 +438,7 @@ const areaOf = a => {
 }
 const STATUS = ['New', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled']
 function Orders() {
-  const [rows, setRows] = useState(null), [err, setErr] = useState('')
-  useEffect(() => { sellerOrders().then(setRows).catch(x => { setErr(msg(x)); setRows([]) }) }, [])
+  const [rows, err] = useCached('orders', sellerOrders)
   if (rows === null) return <p className="sl-mut">Loading…</p>
   return (
     <>
@@ -501,17 +530,18 @@ export default function Seller() {
   useEffect(() => {
     document.title = 'Seller Centre · Pinkish'
     try { sessionStorage.removeItem('pk_seller') } catch { /* storage unavailable */ }
-    restoreUser().then(u => setUser(u || null)).catch(() => setUser(null))
-    return onAuthChange((u, ev) => { if (ev === 'SIGNED_OUT') { setUser(null); setShop(undefined) } else if (u && !lock.current) setUser(u) })
+    // session comes straight from local storage: no extra admin/profile lookups for sellers
+    supabase?.auth.getSession().then(({ data }) => { const a = data?.session?.user; setUser(a ? { id: a.id, email: a.email, name: a.user_metadata?.full_name || a.email?.split('@')[0] || 'Seller', mobile: a.user_metadata?.phone || '' } : null) }).catch(() => setUser(null))
+    return onAuthChange((u, ev) => { if (ev === 'SIGNED_OUT') { wipe(); setUser(null); setShop(undefined) } else if (u && !lock.current) setUser(u) })
   }, [])
   const loadShop = useCallback(async u => { setErr(''); try { setShop(await getMyShop(u.id)) } catch (x) { setErr(msg(x)); setShop(null) } }, [])
-  useEffect(() => { if (user) loadShop(user) }, [user, loadShop])
+  useEffect(() => { if (user) loadShop(user) }, [user?.id, loadShop]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!supabase) return <div className="slx"><div className="sl-wrap"><div className="sl-err">The store is not configured.</div></div></div>
   if (user === undefined) return <div className="slx"><div className="sl-wrap sl-mut">Loading…</div></div>
   if (!user) return <div className="slx"><Auth onUser={setUser} lock={lock} /></div>
 
-  const logout = () => signOut().then(() => { setUser(null); setShop(undefined) })
+  const logout = () => signOut().then(() => { wipe(); setUser(null); setShop(undefined) })
   const top = (
     <div className="sl-top"><div className="sl-top-in">
       <div className="sl-who"><span className="sl-logo" aria-label="Pinkish Seller Centre"><img className="bmk" src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span><em className="sl-tag">Seller</em></span>{shop && <span className="sl-shopname"><span className="sl-av">{shop.logo_url ? <img src={shop.logo_url} alt="" /> : initial(shop.name)}</span><span className="sl-mut">{shop.name}</span> <span className={'sl-badge ' + shop.status}>{shop.status}</span></span>}</div>
