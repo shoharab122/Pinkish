@@ -158,7 +158,7 @@ a{touch-action:manipulation}
 .sec{display:flex;justify-content:space-between;font-weight:700;margin:6px 0 10px}.sec a{color:var(--p2);font-size:12px;font-weight:600;cursor:pointer}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px}
 .card{border-radius:20px;padding:10px;cursor:pointer;content-visibility:auto;contain-intrinsic-size:auto 220px}
-.pic{height:96px;border-radius:14px;background:linear-gradient(135deg,#f3e9fb,#fde7f0);box-shadow:inset 0 1px 6px #8e2a8c14;display:grid;place-items:center;font-size:48px;overflow:hidden;position:relative;z-index:0}.pic img{width:100%;height:100%;object-fit:cover}
+.pic{height:96px;border-radius:14px;background:linear-gradient(135deg,#f3e9fb,#fde7f0);box-shadow:inset 0 1px 6px #8e2a8c14;display:grid;place-items:center;font-size:48px;overflow:hidden;position:relative;z-index:0}.pic img{width:100%;height:100%;object-fit:contain;object-position:center}
 .card h4{font-size:13px;margin-top:8px;position:relative}.card small{color:var(--mute);font-size:11px;position:relative}.card b{display:block;color:var(--p1);margin-top:2px;position:relative}
 .heart{left:14px;top:14px;z-index:2;width:32px;height:32px;border-radius:50%;background:#ffffffcc;box-shadow:0 4px 10px #4a166822;display:grid;place-items:center;font-size:17px;color:var(--mute);transition:color .2s,transform .3s var(--spring)}
 .heart.on{color:var(--p3);animation:beat .4s}.heart.inl{position:relative;background:var(--pink);flex:none}.heart:active{transform:scale(.8)}
@@ -170,7 +170,7 @@ a{touch-action:manipulation}
 
 /* ---------- product ---------- */
 .pdp{display:grid;gap:18px}
-.big{height:230px;border-radius:28px;background:linear-gradient(135deg,#f3e9fb,#fde7f0);border:1px solid var(--edge);box-shadow:var(--sh);display:grid;place-items:center;font-size:110px;margin-bottom:16px;overflow:hidden}.big img{width:100%;height:100%;object-fit:cover}
+.big{height:230px;border-radius:28px;background:linear-gradient(135deg,#f3e9fb,#fde7f0);border:1px solid var(--edge);box-shadow:var(--sh);display:grid;place-items:center;font-size:110px;margin-bottom:16px;overflow:hidden}.big img{width:100%;height:100%;object-fit:contain;object-position:center}
 .price{font-size:24px;font-weight:800;color:var(--p1);margin:6px 0 14px}
 .var{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .var button{flex:1;min-width:70px;padding:11px;border-radius:14px;background:var(--glass);border:1.5px solid var(--edge);box-shadow:var(--sh);transition:transform .3s var(--spring)}
