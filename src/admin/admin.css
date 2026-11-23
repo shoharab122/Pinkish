@@ -689,3 +689,14 @@ html.adm-on body{position:fixed;inset:0;width:100%}
 .sw button.on{outline:3px solid var(--p2);outline-offset:2px;transform:scale(1.08)}
 .in.col{padding:4px;min-height:48px;cursor:pointer}
 .pv{display:grid;gap:2px;margin:6px 0 14px;padding:12px 14px;border-radius:14px;border:1px solid #f3b4cb;background:#fff7fa}.pv b{font-size:14px}.pv small{opacity:.7;overflow-wrap:anywhere}
+/* ---------- send notification: preview + mobile ---------- */
+.ntp-l{margin:6px 2px 8px;font-size:.78rem;font-weight:700;letter-spacing:.04em;color:var(--mut)}
+.ntp{display:flex;gap:12px;align-items:flex-start;margin:0 0 16px;padding:14px;border-radius:20px;border:1px solid #f3b4cb;background:linear-gradient(145deg,#fff7fa,#fdeef6);color:var(--ink);box-shadow:0 8px 20px -12px #8e2a8c66}
+.ntp-ic{flex:none;width:42px;height:42px;border-radius:14px;display:grid;place-items:center;font-size:1.15rem;background:var(--grad);box-shadow:0 6px 14px #8e2a8c40}
+.ntp-t{min-width:0;flex:1;display:grid;gap:4px}
+.ntp-h{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.ntp-h b{min-width:0;font-size:.92rem;line-height:1.3;color:var(--p1);overflow-wrap:anywhere}
+.ntp-h em{flex:none;font-style:normal;font-size:.72rem;color:var(--mut)}
+.ntp-t p{margin:0;font-size:.84rem;line-height:1.45;opacity:.85;overflow-wrap:anywhere;white-space:pre-line}
+.ntp-go{font-size:.8rem;font-weight:700;color:var(--p2)}
+@media(max-width:899px){.ntp-send{width:100%;min-height:52px}}
