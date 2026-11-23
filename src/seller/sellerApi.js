@@ -29,8 +29,12 @@ async function prepareImage(file, maxDim = 1600, quality = 0.84) {
     c.width = Math.max(1, Math.round(bmp.width * r)); c.height = Math.max(1, Math.round(bmp.height * r))
     const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height)
     if (bmp.close) bmp.close()
-    const blob = await new Promise(res => c.toBlob(res, 'image/webp', quality))
-    if (blob && blob.size) return { blob, type: 'image/webp', ext: 'webp' }
+    const enc = (t, q) => new Promise(res => c.toBlob(res, t, q))
+    // Some phones (iPhone Safari, older Android browsers) cannot encode WebP and silently hand back a PNG.
+    // Trust the type the browser really produced, and fall back to JPEG, which every device and browser can show.
+    let blob = await enc('image/webp', quality)
+    if (!blob || !blob.size || blob.type !== 'image/webp') blob = await enc('image/jpeg', Math.min(0.9, quality + 0.04))
+    if (blob && blob.size && /^image\/(webp|jpeg)$/.test(blob.type)) return { blob, type: blob.type, ext: blob.type === 'image/webp' ? 'webp' : 'jpg' }
   } catch { /* fall through */ }
   if (file.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('This picture format is not supported on your device. Try a JPG or PNG.')
   return { blob: file, type: file.type, ext: ext(file) }
@@ -106,11 +110,19 @@ export async function removeCover(shop) {
 }
 export async function uploadImage(shopId, file, maxDim = 1000) {
   need(); checkFile(file)
-  const o = READY.has(file) ? { blob: file, type: file.type, ext: 'webp' } : await prepareImage(file, maxDim)
+  const o = READY.has(file) ? { blob: file, type: file.type, ext: (file.name.split('.').pop() || 'jpg') } : await prepareImage(file, maxDim)
   const path = `shops/${shopId}/${Date.now()}-${rand()}.${o.ext}`
-  const { error } = await supabase.storage.from('media').upload(path, o.blob, { contentType: o.type, cacheControl: '31536000' })
-  if (error) throw error
-  return supabase.storage.from('media').getPublicUrl(path).data.publicUrl
+  // a flaky mobile connection is the usual reason a photo goes missing: retry before giving up
+  let err
+  for (let a = 0; a < 3; a++) {
+    const { error } = await supabase.storage.from('media').upload(path, o.blob, { contentType: o.type, cacheControl: '31536000' })
+    if (!error) { err = null; break }
+    err = error; await new Promise(r => setTimeout(r, 600 * (a + 1)))
+  }
+  if (err) throw new Error('Could not upload the picture. Check your internet and try again.')
+  const url = supabase.storage.from('media').getPublicUrl(path).data.publicUrl
+  if (!url) throw new Error('Could not upload the picture. Please try again.')
+  return url
 }
 export async function getCategoriesList() {
   need(); const { data } = await supabase.from('categories').select('id,name,icon').order('created_at'); return data || []
