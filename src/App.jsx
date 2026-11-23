@@ -598,7 +598,12 @@ function useLiquid() {
   }, [])
 }
 
-const Pic = memo(({ p, big }) => <div className={big ? 'big' : 'pic'}>{p.image_url ? <img src={p.image_url} alt={p.name} loading="lazy" decoding="async" /> : p.emoji || '🛍️'}</div>)
+// Picture warm-up: start downloading pictures before they are needed, so they are already in the browser cache when shown.
+const warmed = new Set()
+const saveData = () => { try { return !!navigator.connection?.saveData } catch { return false } }
+const warm = urls => { if (saveData()) return; for (const u of urls) { if (!u || warmed.has(u)) continue; warmed.add(u); try { const im = new Image(); im.decoding = 'async'; im.src = u } catch { /* ignore */ } } }
+// eager = the first products on screen: load at once with high priority (no lazy wait); the rest stay lazy.
+const Pic = memo(({ p, big, eager }) => <div className={big ? 'big' : 'pic'}>{p.image_url ? <img src={p.image_url} alt={p.name} loading={eager ? 'eager' : 'lazy'} fetchpriority={eager ? 'high' : undefined} decoding="async" /> : p.emoji || '🛍️'}</div>)
 const imgsOf = p => { const a = Array.isArray(p.images) ? p.images.filter(Boolean) : []; return a.length ? a : p.image_url ? [p.image_url] : [] }
 const SV = (d, extra) => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}{extra}</svg>
 const clampT = (s, x, y, w, h) => { const mx = (s - 1) * w / 2, my = (s - 1) * h / 2; return { s, x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) } }
@@ -667,12 +672,13 @@ const Lightbox = ({ list, start, name, onClose }) => {
 const Gallery = ({ p }) => {
   const list = useMemo(() => imgsOf(p), [p]), [k, setK] = useState(0), [open, setOpen] = useState(false)
   useEffect(() => { setK(0); setOpen(false) }, [p.id])
+  useEffect(() => { warm(list) }, [list])
   if (!list.length) return <Pic p={p} big />
   const show = () => setOpen(true)
   return <div className="gal"><div className="big zm" role="button" tabIndex={0} aria-label="View full photo and zoom" onClick={show} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show() } }}>
-    <img key={k} src={list[k] || list[0]} alt={p.name} decoding="async" draggable="false" />
+    <img key={k} src={list[k] || list[0]} alt={p.name} loading="eager" fetchpriority="high" decoding="async" draggable="false" />
     <span className="gzoom">{SV(<><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2M11 8.5v5M8.5 11h5" /></>)}</span></div>
-    {list.length > 1 && <div className="gth" role="group" aria-label="Product photos">{list.map((u, i) => <button key={i} className={i === k ? 'on' : ''} aria-label={'Photo ' + (i + 1)} aria-current={i === k} onClick={() => setK(i)}><img src={u} alt="" loading="lazy" decoding="async" draggable="false" /></button>)}</div>}
+    {list.length > 1 && <div className="gth" role="group" aria-label="Product photos">{list.map((u, i) => <button key={i} className={i === k ? 'on' : ''} aria-label={'Photo ' + (i + 1)} aria-current={i === k} onClick={() => setK(i)}><img src={u} alt="" loading="eager" decoding="async" draggable="false" /></button>)}</div>}
     {open && <Lightbox list={list} start={k} name={p.name} onClose={n => { setK(n); setOpen(false) }} />}</div>
 }
 // Brand-aware icon: the 🛡️ emoji (or an image URL) renders as the real Pinkish logo mark
@@ -1036,7 +1042,7 @@ function QA({ p, user, say, login }) {
   </section>
 }
 
-const ProductCard = memo(({ p, i, add, open, liked, like }) => <div className="card rise" style={{ '--i': Math.min(i, 12) }} onClick={() => open(p)}><Heart on={liked} toggle={() => like(p.id)} />{api.dealLive(p) && <span className="dl">-{api.dealPct(p)}%</span>}<Pic p={p} />
+const ProductCard = memo(({ p, i, add, open, liked, like, eager }) => <div className="card rise" style={{ '--i': Math.min(i, 12) }} onPointerDown={() => warm(imgsOf(p))} onClick={() => open(p)}><Heart on={liked} toggle={() => like(p.id)} />{api.dealLive(p) && <span className="dl">-{api.dealPct(p)}%</span>}<Pic p={p} eager={eager} />
   <div className="cinfo"><small>{p.tag || p.brand}</small><h4>{p.name}</h4><div className="cfoot"><b>{taka(p.price)}{api.dealLive(p) && <s>{taka(p.old_price)}</s>}</b><button className="add" aria-label="Add to cart" onClick={e => { e.stopPropagation(); add(p) }}>+</button></div></div></div>)
 
 const CHUNK = 24
@@ -1054,7 +1060,7 @@ const Grid = memo(({ list, loading, add, open, wish, like }) => {
   if (loading) return <div className="grid">{[...Array(6)].map((_, i) => <div key={i} className="skel" />)}</div>
   if (!list.length) return <p className="empty">No products found.</p>
   const shown = n >= list.length ? list : list.slice(0, n)
-  return <><div className="grid">{shown.map((p, i) => <ProductCard key={p.id} {...{ p, i, add, open, like }} liked={wish.has(p.id)} />)}</div>{n < list.length && <div ref={end} aria-hidden="true" style={{ height: 400, marginTop: -400, pointerEvents: 'none' }} />}</>
+  return <><div className="grid">{shown.map((p, i) => <ProductCard key={p.id} {...{ p, i, add, open, like }} eager={i < 6} liked={wish.has(p.id)} />)}</div>{n < list.length && <div ref={end} aria-hidden="true" style={{ height: 400, marginTop: -400, pointerEvents: 'none' }} />}</>
 })
 
 /* ---------- Location: chip + map picker ---------- */
@@ -1357,6 +1363,14 @@ export default function App() {
   }, [say])
 
   useEffect(() => { load(); return () => clearTimeout(toastT.current) }, [load])
+  // while the person looks at the first products, quietly fetch the next pictures so scrolling shows them instantly
+  useEffect(() => {
+    if (!prods.length) return
+    const run = () => warm(prods.slice(0, 24).map(x => x.image_url))
+    const ric = typeof requestIdleCallback === 'function'
+    const id = ric ? requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 400)
+    return () => { ric ? cancelIdleCallback(id) : clearTimeout(id) }
+  }, [prods])
   // best sellers: separate from load() because it is heavier and changes slowly
   const [best, setBest] = useState([]), [notifs, setNotifs] = useState([]), [following, setFollowing] = useState(() => new Set())
   useEffect(() => {
