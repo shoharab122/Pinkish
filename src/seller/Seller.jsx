@@ -205,7 +205,7 @@ function ShopForm({ user, shop, onDone }) {
 }
 
 function Waiting({ shop, onRefresh }) {
-  useEffect(() => { if (shop.status !== 'pending') return; const t = setInterval(onRefresh, 15000); return () => clearInterval(t) }, [shop.status, onRefresh])
+  useEffect(() => { if (shop.status !== 'pending') return; const t = setInterval(() => { if (!document.hidden) onRefresh() }, 15000); return () => clearInterval(t) }, [shop.status, onRefresh])
   const sus = shop.status === 'suspended'
   return (
     <div className="sl-wrap"><div style={{ maxWidth: 520, margin: '20px auto 0' }}><Steps at={2} /></div><div className="sl-card" style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
