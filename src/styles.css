@@ -590,7 +590,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .topbar{justify-content:space-between}.topbar .tbr{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none}
 .hstick .topbar .loc{max-width:calc(100% - 108px)}
 .bellb{position:relative}
-.bellb .bdg{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:grid;place-items:center;font:700 10.5px/1 inherit;font-style:normal;color:#fff;background:linear-gradient(135deg,#ff5a7a,#ff3358);box-shadow:0 0 0 2px #fff,0 3px 8px #ff335866;animation:beat .4s}
+.bellb .bdg{position:absolute;top:4px;right:3px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;display:grid;place-items:center;font:700 10px/1 inherit;font-style:normal;color:#fff;background:linear-gradient(135deg,#ff5a7a,#ff3358);box-shadow:0 0 0 2px #fff,0 3px 8px #ff335866;animation:beat .4s}
 .bellb.ring svg{transform-origin:50% 0;animation:bellRing 3.2s ease-in-out 1s infinite}
 @keyframes bellRing{0%,8%,100%{transform:rotate(0)}2%{transform:rotate(14deg)}4%{transform:rotate(-12deg)}6%{transform:rotate(7deg)}}
 @media(prefers-reduced-motion:reduce){.bellb.ring svg{animation:none}}
