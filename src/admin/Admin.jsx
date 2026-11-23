@@ -90,10 +90,10 @@ function Modal({ title, onClose, children, footer, cls = '' }) {
   const host = useMemo(() => document.querySelector('.adm') || document.body, [])
   return createPortal(<div className={'mb ' + cls} onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="md" role="dialog" aria-modal="true" aria-label={title}><div className="mh"><b>{title}</b><button className="x" aria-label="Close" onClick={onClose}><Ic n="close" s={18} /></button></div><div className="mc">{children}</div>{footer && <div className="mf">{footer}</div>}</div></div>, host)
 }
-function Img({ value, onChange, folder, say, onBusy }) {
+function Img({ value, onChange, folder, say, onBusy, wide }) {
   const [b, setB] = useState(false)
   const pick = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setB(true); onBusy?.(true); try { onChange(await upload(f, folder)) } catch (x) { say(x.message || 'Upload failed') } setB(false); onBusy?.(false) }
-  return <div className="img">{value ? <img src={value} alt="" /> : <span>No image</span>}<div><label className="bt g sm">{b ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}<input type="file" accept="image/*" hidden onChange={pick} /></label>{value && <button className="bt g sm" onClick={() => onChange('')}>Remove</button>}</div></div>
+  return <div className={'img' + (wide ? ' wide' : '')}>{value ? <img src={value} alt="" /> : <span>No image</span>}<div><label className="bt g sm">{b ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}<input type="file" accept="image/*" hidden onChange={pick} /></label>{value && <button className="bt g sm" onClick={() => onChange('')}>Remove</button>}</div></div>
 }
 
 export default function Admin() {
@@ -667,6 +667,20 @@ const isLogo = v => v === '🛡️' || v === '🛡'
 function Hero({ say, d }) {
   const [s, setS] = useState(null), [cfg, setCfg] = useState({ auto: true, speed: 4 }), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false)
   const cats = d?.cats || [], prods = d?.products || []
+  // picture shapes: the store shows a wide picture as a whole-picture slide, so the preview does the same
+  const [ars, setArs] = useState({}), asked = useRef(new Set())
+  useEffect(() => {
+    let on = true
+    ;(s || []).forEach(x => {
+      if (!x.image || asked.current.has(x.image)) return
+      asked.current.add(x.image)
+      const im = new Image()
+      im.onload = () => { if (on) setArs(a => ({ ...a, [x.image]: (im.naturalWidth || 1) / (im.naturalHeight || 1) })) }
+      im.onerror = () => { if (on) setArs(a => ({ ...a, [x.image]: 1 })) }
+      im.src = x.image
+    })
+    return () => { on = false }
+  }, [s])
   useEffect(() => {
     let live = true
     sb.from('site_settings').select('value').eq('key', 'hero').maybeSingle().then(({ data, error }) => {
@@ -704,7 +718,7 @@ function Hero({ say, d }) {
   return <div className="pg"><p className="mut">The slides on the storefront home banner. Customers see slides marked Show, in this order. {dirty && <b className="wn">Unsaved changes</b>}</p>
     <div className="cd"><div className="fg"><label className="ck"><input type="checkbox" checked={cfg.auto} onChange={e => setC({ auto: e.target.checked })} /> Slide automatically</label><F l="Time on each slide"><select className="in" disabled={!cfg.auto} value={cfg.speed} onChange={e => setC({ speed: +e.target.value })}>{SPEEDS.map(v => <option key={v} value={v}>{v} seconds</option>)}</select></F></div></div>
     {s.map((x, i) => {
-      const cov = x.layout === 'cover' && !!x.image, full = x.layout === 'full' && !!x.image, lk = x.link || '', lt = lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : ''
+      const cov = x.layout === 'cover' && !!x.image, full = !!x.image && x.layout !== 'cover' && (x.layout === 'full' || ars[x.image] >= 1.25), autoWide = full && x.layout !== 'full', lk = x.link || '', lt = lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : ''
       const pv = { background: heroBg(x), color: x.tone === 'dark' ? '#2a1a3a' : '#fff' }
       if (cov) pv.background = `linear-gradient(90deg,${x.tone === 'dark' ? '#fffd' : '#000b'},#0000), url(${JSON.stringify(x.image)}) center/cover`
       if (full) { pv.background = `url(${JSON.stringify(x.image)}) center/contain no-repeat, ${heroBg(x)}`; pv.aspectRatio = '2.4/1'; pv.minHeight = 0 }
@@ -721,7 +735,9 @@ function Hero({ say, d }) {
           <div className="fg"><F l="Picture style"><select className="in" value={x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side'} onChange={e => set(i, 'layout', e.target.value)}><option value="side">Picture on the right</option><option value="cover">Picture behind the text</option><option value="full">Picture only (whole picture, no text)</option></select></F>
             <F l="Text colour"><select className="in" value={x.tone === 'dark' ? 'dark' : 'light'} onChange={e => set(i, 'tone', e.target.value)}><option value="light">White (for dark backgrounds)</option><option value="dark">Dark (for light backgrounds)</option></select></F></div>
           <F l="Emoji (used when there is no picture)"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set(i, 'emoji', e.target.value)} /></F>
-          <Img value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
+          <Img wide value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
+          <p className="mut">Best picture: wide, 2400 × 1000 px (2.4:1). It is shown whole across the banner. Square or tall pictures sit beside the text.</p>
+          {autoWide && <p className="hnote">This picture is wide, so the store shows it as a whole-picture slide and hides the headline and button. To keep the text, choose "Picture behind the text".</p>}
           {x.layout === 'cover' && !x.image && <p className="mut">Upload a picture to use this style. Wide photos (3:2) with the subject on the right work best.</p>}
           {x.layout === 'full' && <p className="mut">{x.image ? 'The whole picture is shown on the banner, nothing is cut. Tapping it opens the link above.' : 'Upload a wide picture, best 2400 × 1000 px (about 2.4:1). Put any text inside the picture itself.'}</p>}
           <div className="acts"><label className="ck"><input type="checkbox" checked={x.on !== false} onChange={e => set(i, 'on', e.target.checked)} /> Show</label><button className="bt g sm" disabled={!i} onClick={() => mv(i, -1)}>Move up</button><button className="bt g sm" disabled={i === s.length - 1} onClick={() => mv(i, 1)}>Move down</button><button className="bt d sm" onClick={() => { if (window.confirm(`Delete slide ${i + 1}?`)) upd(a => a.filter((_, j) => j !== i)) }}>Delete</button></div></div></div>
