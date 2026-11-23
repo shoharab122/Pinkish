@@ -1404,8 +1404,9 @@ export default function App() {
     const soon = all => { if (all) full = true; clearTimeout(t); t = setTimeout(() => { last = Date.now(); const f = full; full = false; load(f ? undefined : 'p') }, Math.max(500, 4000 - (Date.now() - last))) }
     const vis = () => { if (!document.hidden) soon(true) }
     const ch = sb.channel('store-live').on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => soon(false)).on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => soon(true)).subscribe()
+    let bc; try { bc = new BroadcastChannel('pk-products'); bc.onmessage = () => { clearTimeout(t); load('p') } } catch { /* not supported */ }
     document.addEventListener('visibilitychange', vis); const poll = setInterval(() => { if (!document.hidden) soon(false) }, 90000)
-    return () => { clearTimeout(t); clearInterval(poll); document.removeEventListener('visibilitychange', vis); sb.removeChannel(ch) }
+    return () => { clearTimeout(t); clearInterval(poll); try { bc && bc.close() } catch { /* closed */ } document.removeEventListener('visibilitychange', vis); sb.removeChannel(ch) }
   }, [load])
   useEffect(() => { const t = setTimeout(() => writeLS('ms_cart', cart), 250); return () => clearTimeout(t) }, [cart])
   useEffect(() => { const t = setTimeout(() => writeLS('ms_wish', wish), 250); return () => clearTimeout(t) }, [wish])
