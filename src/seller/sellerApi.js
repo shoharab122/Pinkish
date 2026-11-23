@@ -35,6 +35,18 @@ async function prepareImage(file, maxDim = 1600, quality = 0.84) {
   if (file.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('This picture format is not supported on your device. Try a JPG or PNG.')
   return { blob: file, type: file.type, ext: ext(file) }
 }
+// Photos are compressed the moment they are picked (while the seller fills in the form), so Save only has to upload.
+const READY = new WeakSet()
+export async function preparePhoto(file) {
+  checkFile(file)
+  const o = await prepareImage(file, 1000)
+  const out = new File([o.blob], 'photo.' + o.ext, { type: o.type })
+  READY.add(out)
+  return out
+}
+// Tells any open store tab (same browser) to refresh its product list right now.
+let bc
+const announce = () => { try { bc = bc || new BroadcastChannel('pk-products'); bc.postMessage(Date.now()) } catch { /* not supported */ } }
 const cleanShop = f => ({ name: s(f.name, 60), description: s(f.description, 500), phone: s(f.phone, 20), address: s(f.address, 300), city: s(f.city, 60) })
 function checkShop(c) {
   if (c.name.length < 3) throw new Error('Shop name must be at least 3 characters.')
@@ -92,9 +104,9 @@ export async function removeCover(shop) {
   if (error) throw error
   return data
 }
-export async function uploadImage(shopId, file, maxDim = 1600) {
+export async function uploadImage(shopId, file, maxDim = 1000) {
   need(); checkFile(file)
-  const o = await prepareImage(file, maxDim)
+  const o = READY.has(file) ? { blob: file, type: file.type, ext: 'webp' } : await prepareImage(file, maxDim)
   const path = `shops/${shopId}/${Date.now()}-${rand()}.${o.ext}`
   const { error } = await supabase.storage.from('media').upload(path, o.blob, { contentType: o.type, cacheControl: '31536000' })
   if (error) throw error
@@ -145,15 +157,17 @@ export async function saveProduct(shop, form, photos, existing) {
   }
   if (existing) {
     const { data, error } = await supabase.from('products').update(row).eq('id', existing.id).eq('shop_id', shop.id).select().single()
-    if (error) throw error; return data
+    if (error) throw error; announce(); return data
   }
   if (!photos) throw new Error(`Add ${PHOTOS} product photos.`)
   const { data, error } = await supabase.from('products').insert({ ...row, shop_id: shop.id, variants: [{ label: 'Standard', mult: 1 }], features: [] }).select().single()
   if (error) throw error
+  announce()
   return data
 }
 export async function deleteProduct(shop, id) {
   need(); const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', shop.id); if (error) throw error
+  announce()
 }
 export async function sellerOrders() {
   need(); const { data, error } = await supabase.rpc('seller_orders'); if (error) throw error; return data || []
