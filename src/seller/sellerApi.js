@@ -78,8 +78,10 @@ export async function resubmitShop(uid, shop, form, docFile) {
 export async function updateShop(shop, form, logoFile, coverFile) {
   need(); const c = cleanShop(form); checkShop(c)
   const patch = { ...c }
-  if (logoFile) patch.logo_url = await uploadImage(shop.id, logoFile, 600)
-  if (coverFile) patch.cover_url = await uploadImage(shop.id, coverFile, 1800)
+  // logo and cover upload at the same time
+  const [logo, cover] = await Promise.all([logoFile ? uploadImage(shop.id, logoFile, 600) : null, coverFile ? uploadImage(shop.id, coverFile, 1800) : null])
+  if (logo) patch.logo_url = logo
+  if (cover) patch.cover_url = cover
   const { data, error } = await supabase.from('shops').update(patch).eq('id', shop.id).select().single()
   if (error) throw error
   return data
