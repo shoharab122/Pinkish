@@ -174,6 +174,10 @@ const LIQUID_CSS = `
 .shp{display:flex;align-items:center;gap:16px;padding:16px;border-radius:24px;background:linear-gradient(135deg,#fff,#fbf1fb);border:1px solid var(--edge);box-shadow:0 8px 22px #4a166814;margin-bottom:14px}
 .shp-lg{flex:none;width:76px;height:76px;border-radius:22px;overflow:hidden;display:grid;place-items:center;background:linear-gradient(135deg,#fde7f0,#efe0fb);box-shadow:0 8px 20px #7a1d8c33}
 .shp-lg img{width:100%;height:100%;object-fit:cover}.shp-lg em{font-style:normal;font-weight:800;font-size:32px;color:#b0236b}
+.shp-cv{position:relative;width:100%;aspect-ratio:3/1;max-height:240px;border-radius:24px 24px 0 0;overflow:hidden;background:linear-gradient(135deg,#fde7f0,#efe0fb)}
+.shp-cv img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.shp.has-cv{border-radius:0 0 24px 24px}.shp.has-cv .shp-lg{margin-top:-34px;box-shadow:0 0 0 4px #fff,0 8px 20px #7a1d8c33}
+@media (max-width:520px){.shp-cv{aspect-ratio:2/1}.shp.has-cv .shp-lg{margin-top:-26px}}
 .shp-t{display:grid;gap:3px;min-width:0}.shp-t b{font-size:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shp-t .vf{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--grad);color:#fff;font-size:10px;font-style:normal;margin-left:7px;vertical-align:middle}
 .shp-t small{font-size:13px;color:var(--mute)}.shp-n{justify-self:start;margin-top:4px;padding:4px 12px;border-radius:999px;background:#f4ecf8;color:#6b5b7b;font-size:12px;font-weight:600}
@@ -348,6 +352,9 @@ const LIQUID_CSS = `
 .bs.on{opacity:1;visibility:visible;transition:opacity .5s var(--ease),visibility 0s}
 .bs.dk{color:var(--ink)}
 .bs::after{content:'';position:absolute;width:190px;height:190px;right:-50px;top:-70px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#ffffff40,#fff0 70%);pointer-events:none}
+.bs.full{padding:0;display:block}.bs.full::after{display:none}
+.bfull-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(24px) saturate(1.15) brightness(.92);transform:scale(1.25);pointer-events:none}
+.bfull{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;object-position:center;display:block;pointer-events:none}
 .bs.cov::after{inset:0;width:auto;height:auto;right:auto;top:auto;border-radius:0;background:linear-gradient(90deg,#000b,#0005 58%,#0000)}
 .bs.cov.dk::after{background:linear-gradient(90deg,#fffd,#fff7 58%,#fff0)}
 .bcov{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
@@ -360,7 +367,10 @@ const LIQUID_CSS = `
 .bsub{font-size:12.5px;line-height:1.35;font-weight:500;opacity:.9;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .bw .bs .bshop{margin-top:6px;padding:5px 5px 5px 16px;font-size:13.5px;gap:10px;max-width:100%}
 .bw .bs.dk .bshop{background:var(--ink);color:#fff}
-.bart{position:absolute;right:10px;bottom:0;height:90%;max-width:42%;object-fit:contain;display:block;pointer-events:none}
+.bart{position:absolute;z-index:1;right:14px;top:12px;bottom:12px;height:calc(100% - 24px);width:auto;max-width:46%;object-fit:contain;object-position:center;display:block;pointer-events:none;filter:drop-shadow(0 10px 18px #0000004d)}
+/* bigger banner on tablets and desktops so the whole picture shows large and sharp */
+@media (min-width:720px){.bw .banner.hb{height:clamp(260px,30vw,340px);border-radius:32px}.bw .bs{padding:28px 48px}.bw .bs .bt{gap:8px;max-width:56%}.bw .bs.cov .bt{max-width:60%}.bw .bs .bchip{font-size:13px;padding:5px 14px}.bw .bs .bt h3{font-size:clamp(26px,3vw,40px);line-height:1.12}.bsub{font-size:16px;-webkit-line-clamp:3}.bw .bs .bshop{margin-top:12px;font-size:16px;padding:7px 7px 7px 22px}.bart{right:36px;top:18px;bottom:18px;height:calc(100% - 36px);max-width:40%}.bw .bs .be{right:48px}}
+@media (min-width:720px) and (max-width:1000px){.bw .banner.hb{height:clamp(240px,34vw,300px)}}
 .bs .be{z-index:1;pointer-events:none}
 .bw .bd{gap:0;margin-top:6px}
 .bw .bd button{width:24px;height:24px;display:grid;place-items:center;padding:0}
@@ -938,6 +948,11 @@ function BannerImpl({ shop, go, open, cats, prods }) {
     <div className={'banner hb' + (live(x0) ? ' lk' : '')} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={e => { if (sw.current) sw.current.m = true; setHold(false) }} onClick={() => { if (!sw.current?.m && live(x0)) act(x0) }}>
       {list.map((x, k) => {
         const cov = x.layout === 'cover' && !!x.image, art = x.image || x.emoji || '🛡️', btn = x.cta === undefined ? 'Shop Now' : x.cta
+        // "Picture only": the whole picture is always visible (never cropped); a blurred copy fills any spare space
+        if (x.layout === 'full' && x.image) return <div key={k} className={'bs full' + (k === cur ? ' on' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
+          <img className="bfull-bg" src={x.image} alt="" aria-hidden="true" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />
+          <img className="bfull" src={x.image} alt="Special offer" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />
+        </div>
         return <div key={k} className={'bs' + (k === cur ? ' on' : '') + (cov ? ' cov' : '') + (x.tone === 'dark' ? ' dk' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
           {cov && <img className="bcov" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />}
           <div className="bt">{x.chip && <span className="bchip">{x.chip}</span>}<h3>{x.lines.split('|').map((l, j) => <span key={j}>{l}</span>)}</h3>{x.sub && <p className="bsub">{x.sub}</p>}
@@ -974,10 +989,14 @@ const BellSvg = () => SV(<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9
 const NotifBell = memo(({ n, authed, onOpen }) => <button className={'ib bellb' + (n ? ' ring' : '')} aria-label={n ? n + ' unread notifications' : 'Notifications'} onClick={onOpen}><BellSvg />{authed && n > 0 && <em className="bdg" key={n}>{n > 9 ? '9+' : n}</em>}</button>)
 
 function Notifications({ list, back, onOpen, onReadAll }) {
-  const unread = list.some(n => !n.is_read)
+  const fresh = list.filter(n => !n.is_read), seen = list.filter(n => n.is_read), unread = fresh.length > 0
+  const row = n => <button key={n.id} type="button" className={'nt-i' + (n.is_read ? '' : ' un')} onClick={() => onOpen(n)}>
+    <span className="nt-ic" aria-hidden="true"><BellSvg /></span>
+    <span className="nt-t"><span className="nt-h"><b>{n.title}</b><em>{!n.is_read && <i className="nt-d" aria-label="Unread" />}{ago(n.created_at)}</em></span>{n.body && <small>{n.body}</small>}{n.link && <span className="nt-go">View ›</span>}</span>
+  </button>
   return <><Hdr title="Notifications" back={back} right={unread ? <button className="ib nt-all" aria-label="Mark all as read" onClick={onReadAll}>✓</button> : null} />
     <div className="scr narrow">{!list.length ? <div className="emp"><div className="emp-i"><NotifArt /></div><h3>No notifications yet</h3><p>Follow shops to hear about new products and deals. Answers to your questions show up here too.</p></div>
-      : <div className="nt">{list.map(n => <button key={n.id} className={'nt-i' + (n.is_read ? '' : ' un')} onClick={() => onOpen(n)}><span className="nt-d" aria-hidden="true" /><span className="nt-t"><b>{n.title}</b>{n.body && <small>{n.body}</small>}</span><em>{ago(n.created_at)}</em></button>)}</div>}</div></>
+      : <div className="nt">{unread && <h4 className="nt-s">New</h4>}{fresh.map(row)}{seen.length > 0 && <h4 className="nt-s">{unread ? 'Earlier' : 'All notifications'}</h4>}{seen.map(row)}</div>}</div></>
 }
 
 function QA({ p, user, say, login }) {
@@ -1724,7 +1743,8 @@ function ShopScreen({ shop, prods, loading, back, gp, follow }) {
   const shown = useMemo(() => { const k = q.trim().toLowerCase(); return k ? list.filter(x => `${x.name} ${x.brand || ''} ${x.tag || ''}`.toLowerCase().includes(k)) : list }, [list, q])
   const name = shop.name || 'Shop'
   return <><Hdr title={name} back={back} /><div className="scr">
-    <div className="shp"><span className="shp-lg">{shop.logo_url ? <img src={shop.logo_url} alt="" decoding="async" draggable="false" /> : <em>{name.trim().charAt(0).toUpperCase()}</em>}</span>
+    {shop.cover_url && <div className="shp-cv"><img src={shop.cover_url} alt="" decoding="async" fetchpriority="high" draggable="false" /></div>}
+    <div className={'shp' + (shop.cover_url ? ' has-cv' : '')}><span className="shp-lg">{shop.logo_url ? <img src={shop.logo_url} alt="" decoding="async" draggable="false" /> : <em>{name.trim().charAt(0).toUpperCase()}</em>}</span>
       <div className="shp-t"><b>{name}<i className="vf">✓</i></b><small>{shop.city ? 'Seller · ' + shop.city : 'Verified seller on Pinkish'}</small><span className="shp-n">{loading ? 'Loading…' : list.length + (list.length === 1 ? ' product' : ' products')}{fc != null && ' · ' + fc + (fc === 1 ? ' follower' : ' followers')}</span></div>
       {shop.id && follow && <button className={'fol' + (followed ? ' on' : '')} aria-pressed={followed} onClick={() => { follow.toggle(shop.id); setFc(c => c == null ? c : Math.max(0, c + (followed ? -1 : 1))) }}>{followed ? 'Following ✓' : '+ Follow'}</button>}</div>
     {list.length > 6 && <div className="tools"><div className="search">🔍<input placeholder={`Search ${name}...`} value={q} onChange={e => setQ(e.target.value)} /></div></div>}
