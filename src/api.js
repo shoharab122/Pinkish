@@ -205,7 +205,7 @@ export async function getHeroFull() {
   try {
     const { data } = await supabase.from('site_settings').select('value').eq('key', 'hero').maybeSingle()
     const v = data?.value || {}
-    const slides = (v.slides || []).filter(x => x.on !== false && (x.lines || '').trim()).map(x => ({ ...x, lines: x.lines.split('\n').map(l => l.trim()).filter(Boolean).join('|') }))
+    const slides = (v.slides || []).filter(x => x.on !== false && ((x.lines || '').trim() || (x.layout === 'full' && x.image))).map(x => ({ ...x, lines: String(x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('|') }))
     return slides.length ? { slides, auto: v.auto !== false, speed: Math.min(10, Math.max(2, Number(v.speed) || 4)) } : null
   } catch { return null }
 }
@@ -261,13 +261,14 @@ export async function placeBkashOrder(o) {
 // Reads the safe view "shops_public" (see supabaseshopspublic.sql); falls back to the shops table's public columns.
 export async function getShops() {
   if (!supabase) return null
-  const cols = 'id,name,logo_url,slug,city'
-  for (const [t, q] of [['shops_public', s => s], ['shops', s => s.eq('status', 'approved')]]) {
-    try {
-      const { data, error } = await q(supabase.from(t).select(cols))
-      if (!error && data) return Object.fromEntries(data.map(x => [x.id, x]))
-    } catch { /* try the next source */ }
-  }
+  // cover_url is optional: if the column is not added yet, fall back to the original columns.
+  for (const cols of ['id,name,logo_url,cover_url,slug,city', 'id,name,logo_url,slug,city'])
+    for (const [t, q] of [['shops_public', s => s], ['shops', s => s.eq('status', 'approved')]]) {
+      try {
+        const { data, error } = await q(supabase.from(t).select(cols))
+        if (!error && data) return Object.fromEntries(data.map(x => [x.id, x]))
+      } catch { /* try the next source */ }
+    }
   return null
 }
 // ---------------- Marketplace features (deals, best sellers, notifications, follow, Q&A) ----------------
