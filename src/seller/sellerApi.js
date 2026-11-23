@@ -9,10 +9,31 @@ export const validNid = n => /^(\d{10}|\d{13}|\d{17})$/.test(String(n || '').rep
 const nidOf = f => s(f?.nid, 20).replace(/[\s-]/g, '')
 export const validPhone = p => /^(\+?88)?01[3-9]\d{8}$/.test(String(p || '').replace(/[\s-]/g, ''))
 
+const isImg = f => !!f && (/^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(f.name || ''))
 function checkFile(f, { doc = false } = {}) {
-  const ok = ['image/jpeg', 'image/png', 'image/webp', ...(doc ? ['application/pdf'] : [])]
-  if (!f || !ok.includes(f.type)) throw new Error(doc ? 'Upload a JPG, PNG, WebP or PDF file.' : 'Upload a JPG, PNG or WebP image.')
-  if (f.size > (doc ? 5 : 3) * 1024 * 1024) throw new Error(`File is too large (max ${doc ? 5 : 3} MB).`)
+  if (doc) {
+    if (!f || !(isImg(f) || f.type === 'application/pdf')) throw new Error('Upload a photo or PDF file.')
+    if (f.size > 10 * 1024 * 1024) throw new Error('File is too large (max 10 MB).')
+    return
+  }
+  if (!isImg(f)) throw new Error('Choose a picture (any photo or image).')
+  if (f.size > 30 * 1024 * 1024) throw new Error('Picture is too large (max 30 MB).')
+}
+// Any picture in, a small optimised WebP out: resized to maxDim, EXIF-rotated, white behind transparency.
+// If the browser cannot decode the file (e.g. HEIC on some devices) the original is uploaded as-is when small enough.
+async function prepareImage(file, maxDim = 1600, quality = 0.84) {
+  try {
+    let bmp
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }) } catch { bmp = await createImageBitmap(file) }
+    const r = Math.min(1, maxDim / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas')
+    c.width = Math.max(1, Math.round(bmp.width * r)); c.height = Math.max(1, Math.round(bmp.height * r))
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height)
+    if (bmp.close) bmp.close()
+    const blob = await new Promise(res => c.toBlob(res, 'image/webp', quality))
+    if (blob && blob.size) return { blob, type: 'image/webp', ext: 'webp' }
+  } catch { /* fall through */ }
+  if (file.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('This picture format is not supported on your device. Try a JPG or PNG.')
+  return { blob: file, type: file.type, ext: ext(file) }
 }
 const cleanShop = f => ({ name: s(f.name, 60), description: s(f.description, 500), phone: s(f.phone, 20), address: s(f.address, 300), city: s(f.city, 60) })
 function checkShop(c) {
@@ -22,8 +43,9 @@ function checkShop(c) {
 }
 async function uploadDoc(uid, file) {
   checkFile(file, { doc: true })
-  const path = `${uid}/${Date.now()}-id.${ext(file)}`
-  const { error } = await supabase.storage.from('seller-docs').upload(path, file, { contentType: file.type })
+  const o = file.type === 'application/pdf' ? { blob: file, type: file.type, ext: 'pdf' } : await prepareImage(file, 2000, 0.9)
+  const path = `${uid}/${Date.now()}-id.${o.ext}`
+  const { error } = await supabase.storage.from('seller-docs').upload(path, o.blob, { contentType: o.type })
   if (error) throw error
   return path
 }
@@ -52,18 +74,27 @@ export async function resubmitShop(uid, shop, form, docFile) {
   if (error) throw error
   return data
 }
-export async function updateShop(shop, form, logoFile) {
+// logoFile / coverFile: a File to replace the picture, or null to leave it. removeCover() clears the cover.
+export async function updateShop(shop, form, logoFile, coverFile) {
   need(); const c = cleanShop(form); checkShop(c)
   const patch = { ...c }
-  if (logoFile) patch.logo_url = await uploadImage(shop.id, logoFile)
+  if (logoFile) patch.logo_url = await uploadImage(shop.id, logoFile, 600)
+  if (coverFile) patch.cover_url = await uploadImage(shop.id, coverFile, 1800)
   const { data, error } = await supabase.from('shops').update(patch).eq('id', shop.id).select().single()
   if (error) throw error
   return data
 }
-export async function uploadImage(shopId, file) {
+export async function removeCover(shop) {
+  need()
+  const { data, error } = await supabase.from('shops').update({ cover_url: null }).eq('id', shop.id).select().single()
+  if (error) throw error
+  return data
+}
+export async function uploadImage(shopId, file, maxDim = 1600) {
   need(); checkFile(file)
-  const path = `shops/${shopId}/${Date.now()}-${rand()}.${ext(file)}`
-  const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type, cacheControl: '31536000' })
+  const o = await prepareImage(file, maxDim)
+  const path = `shops/${shopId}/${Date.now()}-${rand()}.${o.ext}`
+  const { error } = await supabase.storage.from('media').upload(path, o.blob, { contentType: o.type, cacheControl: '31536000' })
   if (error) throw error
   return supabase.storage.from('media').getPublicUrl(path).data.publicUrl
 }
