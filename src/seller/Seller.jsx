@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import './seller.css'
 import { signIn, signUp, signOut, restoreUser, onAuthChange, resetPassword, signInWithGoogle, supabase, dealLive } from '../api.js'
-import { getMyShop, createShop, resubmitShop, updateShop, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion } from './sellerApi.js'
+import { getMyShop, createShop, resubmitShop, updateShop, removeCover, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion } from './sellerApi.js'
 
 const taka = n => '৳' + Number(n || 0).toLocaleString('en-BD')
 const when = d => { try { return new Date(d).toLocaleString('en-BD', { dateStyle: 'medium', timeStyle: 'short' }) } catch { return '' } }
@@ -140,7 +140,7 @@ function Auth({ onUser, lock }) {
               <Inp label="Shop name" value={f.shop} onChange={set('shop')} maxLength={60} autoComplete="organization" required />
               <div className="sl-row"><Inp label="Business address" value={f.address} onChange={set('address')} maxLength={300} autoComplete="street-address" required /><Inp label="City" value={f.city} onChange={set('city')} placeholder="Chattogram" /></div>
               <Inp label="NID number" inputMode="numeric" value={f.nid} onChange={set('nid')} placeholder="10, 13 or 17 digits" maxLength={21} required />
-              <Field label="NID photo"><span className={'sa-file' + (doc ? ' has' : '')}><input type="file" title={doc ? doc.name : 'Choose your NID photo'} accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => setDoc(e.target.files?.[0] || null)} /><i><Ico n={doc ? 'check' : 'id'} s={28} /></i><span><b>{doc ? doc.name : 'Tap to add your NID photo'}</b><small>{doc ? 'Tap to change it' : 'Clear photo of the front. JPG, PNG or PDF, max 5 MB'}</small></span></span></Field>
+              <Field label="NID photo"><span className={'sa-file' + (doc ? ' has' : '')}><input type="file" title={doc ? doc.name : 'Choose your NID photo'} accept="image/*,application/pdf" onChange={e => setDoc(e.target.files?.[0] || null)} /><i><Ico n={doc ? 'check' : 'id'} s={28} /></i><span><b>{doc ? doc.name : 'Tap to add your NID photo'}</b><small>{doc ? 'Tap to change it' : 'Clear photo of the front. Any photo or PDF'}</small></span></span></Field>
             </>}
             <button className="sl-btn sa-go" disabled={busy || cool > 0}>{cool > 0 ? 'Try again in ' + cool + 's' : busy ? 'Please wait…' : mode === 'in' ? 'Log in' : up1 ? 'Continue' : up2 ? 'Create seller account' : 'Send reset link'}</button>
             {up2 && <button type="button" className="sa-back" onClick={() => { setErr(''); setStep(1) }}>← Back</button>}
@@ -194,7 +194,7 @@ function ShopForm({ user, shop, onDone }) {
           <h3 className="sl-sec">Verify your identity</h3>
           <Inp label="NID number" inputMode="numeric" value={f.nid} onChange={set('nid')} placeholder="10, 13 or 17 digits" maxLength={21} required={!shop} />
           <Field label={shop ? 'New NID photo (optional)' : 'NID photo'}>
-            <span className={'sa-file' + (doc ? ' has' : '')}><input type="file" title={doc ? doc.name : 'Choose your NID photo'} accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => setDoc(e.target.files?.[0] || null)} /><i><Ico n={doc ? 'check' : 'id'} s={28} /></i><span><b>{doc ? doc.name : 'Tap to add your NID photo'}</b><small>{doc ? 'Tap to change it' : 'Clear photo of the front. JPG, PNG or PDF, max 5 MB'}</small></span></span>
+            <span className={'sa-file' + (doc ? ' has' : '')}><input type="file" title={doc ? doc.name : 'Choose your NID photo'} accept="image/*,application/pdf" onChange={e => setDoc(e.target.files?.[0] || null)} /><i><Ico n={doc ? 'check' : 'id'} s={28} /></i><span><b>{doc ? doc.name : 'Tap to add your NID photo'}</b><small>{doc ? 'Tap to change it' : 'Clear photo of the front. Any photo or PDF'}</small></span></span>
           </Field>
           <p className="sl-mut sl-vf-note"><Ico n="lock" s={15} /> Your NID is stored privately and only our verification team can see it. Once an admin approves your shop you can log in with this same account and add products.</p>
           <button className="sl-btn sa-go" disabled={busy}>{busy ? 'Submitting…' : shop ? 'Resubmit for review' : 'Send for verification'}</button>
@@ -231,7 +231,7 @@ function PhotoSlot({ n, file, saved, onPick }) {
     <label className={'sl-ph' + (src ? ' has' : '')} title={`Photo ${n}`}>
       {src ? <img src={src} alt={`Product photo ${n}`} /> : <span className="sl-ph-add"><b>+</b><small>Photo {n}</small></span>}
       {n === 1 && <em className="sl-ph-tag">Cover</em>}
-      <input type="file" accept="image/jpeg,image/png,image/webp" aria-label={`Product photo ${n}`} onChange={e => { onPick(e.target.files?.[0] || null); e.target.value = '' }} />
+      <input type="file" accept="image/*" aria-label={`Product photo ${n}`} onChange={e => { onPick(e.target.files?.[0] || null); e.target.value = '' }} />
     </label>
   )
 }
@@ -440,15 +440,35 @@ function ShopSettings({ shop, onSaved }) {
     try { onSaved(await updateShop(shop, { name: shop.name, description: shop.description || '', phone: shop.phone, address: shop.address, city: shop.city || '' }, file)); setOk('Logo updated. It now shows on your products in the store.') } catch (x) { setErr(msg(x)) }
     setLbusy(false)
   }
+  const [cbusy, setCbusy] = useState(false)
+  const profile = { name: shop.name, description: shop.description || '', phone: shop.phone, address: shop.address, city: shop.city || '' }
+  const pickCover = async e => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    setErr(''); setOk(''); setCbusy(true)
+    try { onSaved(await updateShop(shop, profile, null, file)); setOk('Cover picture updated. It now shows at the top of your shop page.') } catch (x) { setErr(/cover_url/i.test(String(x?.message)) ? 'Cover pictures are not enabled yet. Run the cover_url SQL update first.' : msg(x)) }
+    setCbusy(false)
+  }
+  const dropCover = async () => { setErr(''); setOk(''); setCbusy(true); try { onSaved(await removeCover(shop)); setOk('Cover picture removed.') } catch (x) { setErr(msg(x)) } setCbusy(false) }
   return (
-    <div style={{ maxWidth: 600 }}>
+    <div className="sl-shopset">
+      <div className="sl-card sl-cover">
+        <h2>Shop cover picture</h2>
+        {err && <div className="sl-err" role="alert">{err}</div>}{ok && <div className="sl-ok" role="status">{ok}</div>}
+        <div className={'sl-cover-pv' + (shop.cover_url ? ' has' : '')}>{shop.cover_url ? <img src={shop.cover_url} alt="Shop cover" decoding="async" /> : <span>No cover picture yet</span>}</div>
+        <div className="sl-cover-a">
+          <label className={'sl-btn sm sl-up' + (cbusy ? ' dis' : '')}>{cbusy ? 'Uploading…' : shop.cover_url ? 'Change cover' : 'Add cover picture'}<input type="file" accept="image/*" onChange={pickCover} disabled={cbusy} /></label>
+          {shop.cover_url && <button type="button" className="sl-btn ghost sm" onClick={dropCover} disabled={cbusy}>Remove</button>}
+        </div>
+        <small className="sl-mut">Wide picture works best (3:1). Any photo from your gallery or camera. It is resized automatically.</small>
+      </div>
       <div className="sl-card sl-brand">
         <span className="sl-av lg">{shop.logo_url ? <img src={shop.logo_url} alt="" /> : initial(shop.name)}</span>
         <div className="sl-brand-t">
           <h2>{shop.name}</h2>
           <p className="sl-mut">Your logo and name appear on every product you sell.</p>
-          <label className={'sl-btn sm sl-up' + (lbusy ? ' dis' : '')}>{lbusy ? 'Uploading…' : shop.logo_url ? 'Change logo' : 'Upload logo'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickLogo} disabled={lbusy} /></label>
-          <small className="sl-mut">Square image works best. JPG, PNG or WebP, max 3 MB.</small>
+          <label className={'sl-btn sm sl-up' + (lbusy ? ' dis' : '')}>{lbusy ? 'Uploading…' : shop.logo_url ? 'Change logo' : 'Upload logo'}<input type="file" accept="image/*" onChange={pickLogo} disabled={lbusy} /></label>
+          <small className="sl-mut">Square image works best. Any picture works, we resize it for you.</small>
         </div>
       </div>
       <form className="sl-card" onSubmit={go}>
