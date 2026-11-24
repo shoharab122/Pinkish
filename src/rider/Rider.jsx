@@ -90,6 +90,36 @@ function useOnline() {
   return on
 }
 
+/* Delivery illustrations for the home tiles and cards (drawn in code, Pinkish colours, no image downloads) */
+const ArtVan = ({ className = '' }) => <svg className={'rx-art ' + className} viewBox="0 0 140 100" aria-hidden="true">
+  <defs><linearGradient id="rxaV" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#e0457b" /><stop offset="1" stopColor="#8e2a8c" /></linearGradient><linearGradient id="rxaK" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f7d3a6" /><stop offset="1" stopColor="#dea067" /></linearGradient></defs>
+  <ellipse cx="70" cy="91" rx="58" ry="6" fill="#2d0b4a" opacity=".12" />
+  <rect x="50" y="14" width="30" height="24" rx="3" fill="url(#rxaK)" /><path d="M50 22h30" stroke="#e0457b" strokeWidth="3" />
+  <rect x="82" y="6" width="34" height="32" rx="3" fill="url(#rxaK)" /><path d="M99 6v32" stroke="#e0457b" strokeWidth="3" />
+  <rect x="42" y="36" width="82" height="40" rx="9" fill="url(#rxaV)" />
+  <path d="M12 58c0-6 3-11 8-14l11-7h15v39H17a5 5 0 0 1-5-5z" fill="#4a1668" />
+  <path d="M21 46l10-6h10v13H18z" fill="#e8dcff" />
+  <circle cx="84" cy="56" r="9" fill="#fff" opacity=".92" /><path d="M80 56l3 3 5-6" stroke="#e0457b" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  <circle cx="31" cy="78" r="11" fill="#2d0b4a" /><circle cx="31" cy="78" r="4.5" fill="#f3e9fa" />
+  <circle cx="104" cy="78" r="11" fill="#2d0b4a" /><circle cx="104" cy="78" r="4.5" fill="#f3e9fa" />
+  <rect x="9" y="63" width="7" height="5" rx="2" fill="#ffd36b" />
+</svg>
+const ArtBox = ({ className = '' }) => <svg className={'rx-art ' + className} viewBox="0 0 120 112" aria-hidden="true">
+  <ellipse cx="60" cy="104" rx="48" ry="6" fill="#2d0b4a" opacity=".14" />
+  <path d="M60 10l50 22-50 22-50-22z" fill="#f7d3a6" /><path d="M10 32l50 22v50L10 82z" fill="#e6a86b" /><path d="M110 32L60 54v50l50-22z" fill="#d18c4d" />
+  <path d="M39 19.2l50 22-8 3.6-50-22z" fill="#e0457b" opacity=".92" /><path d="M81 44.8l8-3.6V71l-8 3.6z" fill="#c2336a" opacity=".92" />
+  <path d="M19 52l26 11.4v19L19 71z" fill="#fff" opacity=".95" /><path d="M23 58.5l9 4M23 63l14 6.2" stroke="#c9b6d8" strokeWidth="2" strokeLinecap="round" /><path d="M35 72.5l6 2.6v5.6l-6-2.6z" fill="#e0457b" />
+</svg>
+const ArtCash = ({ className = '' }) => <svg className={'rx-art ' + className} viewBox="0 0 130 100" aria-hidden="true">
+  <defs><linearGradient id="rxaC" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#e0457b" /><stop offset="1" stopColor="#8e2a8c" /></linearGradient></defs>
+  <ellipse cx="64" cy="92" rx="50" ry="6" fill="#2d0b4a" opacity=".12" />
+  <rect x="24" y="30" width="80" height="44" rx="9" fill="#b98fd6" transform="rotate(-9 64 52)" />
+  <rect x="16" y="38" width="86" height="48" rx="10" fill="url(#rxaC)" />
+  <rect x="74" y="52" width="34" height="20" rx="10" fill="#4a1668" /><circle cx="85" cy="62" r="4.5" fill="#ffd36b" />
+  <path d="M28 50h26M28 58h16" stroke="#fff" strokeOpacity=".65" strokeWidth="3.5" strokeLinecap="round" />
+  <circle cx="104" cy="28" r="15" fill="#ffc94d" /><circle cx="104" cy="28" r="10" fill="none" stroke="#e8a21a" strokeWidth="2.5" /><text x="104" y="33.5" textAnchor="middle" fontSize="14" fontWeight="800" fill="#a86400" fontFamily="system-ui,sans-serif">৳</text>
+</svg>
+
 /* =====================================================================
    Sign in / join (email or the same Google account used on Pinkish)
    ===================================================================== */
@@ -248,25 +278,41 @@ const CodTag = ({ j }) => j.cod == null ? <span className="rx-pill warn">Payment
 const fromName = j => { const ps = j.pickups || []; return ps.length ? (ps[0].shop || 'Seller') + (ps.length > 1 ? ' +' + (ps.length - 1) : '') : 'Pinkish hub' }
 const fromCity = j => (j.pickups || [])[0]?.city || ''
 const short = a => String(a || '').split(',')[0].trim() || 'Customer'
-// how far along the route the parcel is: 0 = new job, 0.5 = collecting, 1 = on the way
-const progress = j => j.status === 'out' ? 0.78 : j.status === 'accepted' ? 0.18 + 0.3 * (counts(j).n ? counts(j).got / counts(j).n : 0) : 0.06
+// how far along the route the parcel is (0 → 1). Four stops: assigned · accepted · collected · delivered
+const progress = j => { const c = counts(j); return j.status === 'out' ? 0.84 : j.status === 'accepted' ? 0.4 + 0.22 * (c.n ? c.got / c.n : 0) : 0.17 }
+const reached = j => { const c = counts(j); return j.status === 'out' ? 3 : j.status === 'accepted' ? (c.n && c.got >= c.n ? 3 : 2) : 1 }
+const STOPS = [0, 1 / 3, 2 / 3, 1]
+const hm = d => { try { return new Date(d).toLocaleTimeString('en-BD', { hour: 'numeric', minute: '2-digit' }) } catch { return '' } }
+const itemsTxt = j => { const it = j.items || [], n = it.length; return n ? it[0].name + (n > 1 ? ` +${n - 1} more` : '') : units(j) + ' item' + (units(j) === 1 ? '' : 's') }
 const Thumb = ({ j }) => { const src = (j.items || []).find(i => i.image_url)?.image_url; return <span className="rx-thumb">{src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <Ico n="box" s={20} />}</span> }
 
-function Route({ j, dark }) {
-  const p = progress(j)
-  // start/end dots need an explicit position, and the rider marker sits on the line (not inside the bar)
+// Route line like a parcel tracker: stops as dots, the rider on the line, sender on the left, receiver on the right
+function Route({ j, dark, left, right, tag }) {
+  const p = progress(j), r = reached(j)
   return <div className={'rx-route' + (dark ? ' dk' : '')}>
-    <div className="rx-rline"><i className="a dn" style={{ left: 0 }}><Ico n="check" s={12} /></i><span className="rx-rbar"><b style={{ width: p * 100 + '%' }} /></span><em style={{ left: p * 100 + '%' }}><small>{STAGE[j.status]?.[0] || ''}</small><span><Ico n="bike" s={14} /></span></em><i className="z" style={{ left: '100%' }}><Ico n="pin" s={12} /></i></div>
-    <div className="rx-rlab"><span><Ico n="store" s={13} /><span>{fromName(j)}{fromCity(j) ? <small>{fromCity(j)}</small> : null}</span></span><span><span>{short(j.customer?.address)}</span><Ico n="pin" s={13} /></span></div>
+    <div className="rx-rline" aria-hidden="true">
+      <span className="rx-rbar"><b style={{ width: p * 100 + '%' }} /></span>
+      {STOPS.map((x, i) => <i key={i} className={(i < r ? 'dn' : '') + (i === 3 ? ' z' : '')} style={{ left: x * 100 + '%' }}>{i < r ? <Ico n="check" s={11} /> : i === 3 ? <Ico n="pin" s={11} /> : null}</i>)}
+      <em style={{ left: p * 100 + '%' }}><small>{tag || STAGE[j.status]?.[0] || ''}</small><span><Ico n="bike" s={14} /></span></em>
+    </div>
+    <div className="rx-rlab">
+      <span><small>{left || 'Pickup'}</small><b>{fromName(j)}</b>{fromCity(j) ? <small>{fromCity(j)}</small> : null}</span>
+      <span><small>{right || 'Drop-off'}</small><b>{short(j.customer?.address)}</b></span>
+    </div>
   </div>
 }
 
-function JobCard({ j, onOpen }) {
+// hero = the big "current delivery" card; otherwise a compact row
+function JobCard({ j, onOpen, hero }) {
   const [lb, cls] = STAGE[j.status] || STAGE.assigned, c = counts(j)
-  return <button className={'rx-job ' + cls} onClick={() => onOpen(j.id)}>
-    <span className="rx-jh"><Thumb j={j} /><span className="rx-jid"><small>Order ID</small><b>#{j.order_no}</b></span><span className={'rx-st ' + cls}>{lb}</span></span>
-    <Route j={j} />
-    <span className="rx-jm"><CodTag j={j} />{c.n > 0 && j.status !== 'out' && <span className="rx-pill">{c.got}/{c.n} collected</span>}<span className="rx-pill">{units(j)} item{units(j) === 1 ? '' : 's'}</span>{j.fee > 0 && <span className="rx-pill fee">+{taka(j.fee)}</span>}</span>
+  const pills = <span className="rx-jm"><CodTag j={j} />{c.n > 0 && j.status !== 'out' && <span className="rx-pill">{c.got}/{c.n} collected</span>}{j.fee > 0 && <span className="rx-pill fee">+{taka(j.fee)}</span>}</span>
+  const head = <span className="rx-jh"><Thumb j={j} /><span className="rx-jid"><b>ID: #{j.order_no}</b><small>{itemsTxt(j)}</small></span><span className={'rx-st ' + cls}>{lb}</span></span>
+  if (!hero) return <button className={'rx-job row ' + cls} onClick={() => onOpen(j.id)}>{head}{pills}</button>
+  return <button className={'rx-job hero ' + cls} onClick={() => onOpen(j.id)}>
+    {head}
+    <Route j={j} left={ago(j.assigned_at || j.created_at)} right="Deliver to" />
+    {pills}
+    <ArtBox className="hero" />
   </button>
 }
 
@@ -326,9 +372,19 @@ function JobMap({ j, cu, pos, ops }) {
     ...(collecting ? pts.filter(p => okLL(p.lat, p.lng)).map(p => ({ id: 's' + p.id, kind: 'shop', lat: p.lat, lng: p.lng, label: p.shop || 'Shop' })) : []),
     collecting && ops.mode === 'dropoff' && { id: 'hub', kind: 'hub', lat: HUB.lat, lng: HUB.lng, label: 'Pinkish hub' },
   ].filter(Boolean), [me?.lat, me?.lng, home, cu.lat, cu.lng, cu.name, pts, collecting, ops.mode]) // eslint-disable-line react-hooks/exhaustive-deps
+  // dashed line from you to the customer while the parcel is on the way (straight direction, not the road route)
+  const [lm, setLm] = useState(null), line = useRef(null)
+  useEffect(() => {
+    const L = window.L; if (!lm || !L) return
+    if (line.current && line.current._map !== lm) line.current = null
+    const ll = j.status === 'out' && me && home ? [[me.lat, me.lng], [+cu.lat, +cu.lng]] : null
+    if (!ll) { line.current?.remove(); line.current = null; return }
+    if (line.current) line.current.setLatLngs(ll)
+    else line.current = L.polyline(ll, { color: '#2d0b4a', weight: 4, opacity: 0.75, dashArray: '2 9', lineCap: 'round', interactive: false }).addTo(lm)
+  }, [lm, j.status, me?.lat, me?.lng, home, cu.lat, cu.lng]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!home && !pts.length) { const src = mapEmbed(cu.address, cu.lat, cu.lng); return src ? <EmbedMap src={src} /> : null }
   const km = me && home ? havKm(me.lat, me.lng, +cu.lat, +cu.lng) : null
-  return <div className="rx-mapwrap"><LiveMap markers={markers} zone follow={j.status === 'out' ? 'me' : undefined} lazy={lowData()} height="100%" className="rx-map rx-live"
+  return <div className="rx-mapwrap"><LiveMap markers={markers} zone follow={j.status === 'out' ? 'me' : undefined} lazy={lowData()} height="100%" className="rx-map rx-live" onMap={setLm}
     chip={me ? { text: km != null && j.status === 'out' ? `${kmTxt(km)} to the customer · ~${etaMin(km)} min` : 'Live · sharing your location' } : { text: 'Turn on location to see yourself', old: true }} /></div>
 }
 function EmbedMap({ src }) {
@@ -351,26 +407,32 @@ function JobView({ j, ops, pos, onBack, reload, say }) {
   useEffect(() => { const t = setInterval(() => { if (live()) reload() }, 10000); return () => clearInterval(t) }, [reload])
   const run = async (fn, ok) => { setBusy(true); setErr(''); try { await fn(); if (ok) say(ok); await reload() } catch (x) { setErr(msg(x)) } setBusy(false) }
   const steps = ['Accept', 'Collect', 'Deliver'], at = st === 'assigned' ? 0 : st === 'accepted' ? 1 : 2
-  return <div className="rx-view">
-    <header className="rx-vh"><button className="rx-ib" aria-label="Back" onClick={onBack}><Ico n="back" /></button><div><b>#{j.order_no}</b><small>{units(j)} item{units(j) === 1 ? '' : 's'} · {ago(j.assigned_at || j.created_at)}</small></div><button className="rx-ib" aria-label="Refresh" onClick={() => run(async () => {})}><Ico n="refresh" /></button></header>
-    <div className="rx-vb">
+  const kmTo = pos && okLL(cu.lat, cu.lng) ? havKm(pos.lat, pos.lng, +cu.lat, +cu.lng) : null
+  return <div className="rx-view job">
+    <div className="rx-side">
+      <header className={'rx-vh' + (hasMap ? ' over' : '')}><button className="rx-ib" aria-label="Back" onClick={onBack}><Ico n="back" /></button><div><b>Live tracking</b><small>#{j.order_no} · {units(j)} item{units(j) === 1 ? '' : 's'}</small></div><button className="rx-ib" aria-label="Refresh" disabled={busy} onClick={() => run(async () => {})}><Ico n="refresh" /></button></header>
       <JobMap j={j} cu={cu} pos={pos} ops={ops} />
       <div className={'rx-track' + (hasMap ? '' : ' nomap')}>
         <span className="rx-grab" />
-        <div className="rx-trh"><span><small>Order ID</small><b>#{j.order_no}</b></span><span className="r"><span className={'rx-st ' + (STAGE[st]?.[1] || 'new')}>{STAGE[st]?.[0]}</span></span></div>
-        <Route j={j} dark />
+        <div className="rx-trh"><span><small>Order ID</small><b>#{j.order_no}</b></span><span className="r"><small>Status</small><span className={'rx-st ' + (STAGE[st]?.[1] || 'new')}>{STAGE[st]?.[0]}</span></span></div>
+        <Route j={j} dark left={'Assigned ' + hm(j.assigned_at || j.created_at)} right={st === 'out' && kmTo != null ? `~${etaMin(kmTo)} min · ${kmTxt(kmTo)}` : 'Deliver to'} tag={st === 'out' && kmTo != null ? kmTxt(kmTo) + ' away' : undefined} />
         <div className="rx-tgrid">
-          <div><small>Sender</small><b>{fromName(j)}</b></div>
-          <div><small>Receiver</small><b>{short(cu.address)}</b></div>
+          <div><small>From</small><b>{fromName(j)}</b></div>
+          <div><small>To</small><b>{short(cu.address)}</b></div>
+          <div><small>Collected</small><b>{c.n ? `${c.got} of ${c.n}` : 'From hub'}</b></div>
           <div><small>You earn</small><b>{taka(j.fee)}</b></div>
+          <div><small>Quantity</small><b>{units(j)} item{units(j) === 1 ? '' : 's'}</b></div>
           <div><small>Cash to collect</small><b>{j.cod == null ? 'Check' : j.cod > 0 ? taka(j.cod) : 'Paid online'}</b></div>
         </div>
+        <ArtBox className="dk" />
         <div className="rx-tfoot">
           <span className="rx-av sm">{first(cu.name).charAt(0).toUpperCase()}</span><span className="rx-tn"><b>{cu.name || 'Customer'}</b><small>{st === 'out' ? 'Waiting for you' : 'Customer'}</small></span>
-          {telHref(cu.phone) && <a className="rx-rb" href={telHref(cu.phone)} aria-label="Call customer"><Ico n="phone" s={18} /></a>}
-          <a className="rx-rb hot" href={mapLink(cu.address, cu.lat, cu.lng)} target="_blank" rel="noopener noreferrer" aria-label="Navigate"><Ico n="send" s={18} /></a>
+          {telHref(cu.phone) && <a className="rx-rb hot" href={telHref(cu.phone)} aria-label="Call customer"><Ico n="phone" s={18} /></a>}
+          <a className="rx-rb" href={mapLink(cu.address, cu.lat, cu.lng)} target="_blank" rel="noopener noreferrer" aria-label="Navigate to the customer"><Ico n="send" s={18} /></a>
         </div>
       </div>
+    </div>
+    <div className="rx-vb">
       <ol className="rx-steps">{steps.map((s, i) => <li key={s} className={i < at ? 'dn' : i === at ? 'on' : ''}><i>{i < at ? '✓' : i + 1}</i>{s}</li>)}</ol>
       {err && <div className="rx-err" role="alert">{err}</div>}
       {st === 'assigned' && <div className="rx-card rx-new">
@@ -404,18 +466,32 @@ function JobView({ j, ops, pos, onBack, reload, say }) {
 /* =====================================================================
    Screens
    ===================================================================== */
-function Jobs({ data, onOpen, goFind, q }) {
-  const { active = [], stats = {}, ops = {}, me = {} } = data
+const HIST = { delivered: ['Delivered', 'out', 'check'], failed: ['Not delivered', 'bad', 'alert'] }
+function Jobs({ data, onOpen, goFind, goEarn, q }) {
+  const { active = [], stats = {}, ops = {}, me = {}, history = [] } = data
   const order = { out: 0, accepted: 1, assigned: 2 }
   const k = q.trim().toLowerCase().replace(/^#/, '')
   const list = [...active].filter(j => !k || `${j.order_no} ${j.customer?.address || ''} ${fromName(j)}`.toLowerCase().includes(k)).sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3))
+  const [cur, ...rest] = list
+  const today = <div className="rx-today"><div><small>Today</small><b>{stats.today || 0}</b><span>delivered</span></div><div><small>Earned today</small><b>{taka(stats.today_fee)}</b><span>fees</span></div><div className={stats.cash > 0 ? 'cash' : ''}><small>Cash with you</small><b>{taka(stats.cash)}</b><span>give to Pinkish</span></div></div>
+  if (k) return <>
+    <div className="rx-hrow"><h2 className="rx-h2">Search results {list.length > 0 && <em>{list.length}</em>}</h2></div>
+    {list.length ? <div className="rx-list">{list.map(j => <JobCard key={j.id} j={j} onOpen={onOpen} />)}</div> : <p className="rx-mut">No job matches “{q}”.</p>}
+  </>
   return <>
     {ops.notice && <div className="rx-notice"><Ico n="bell" s={18} /><p><b>From Pinkish</b>{ops.notice}</p></div>}
-    <div className="rx-today"><div><small>Today</small><b>{stats.today || 0}</b><span>delivered</span></div><div><small>Earned today</small><b>{taka(stats.today_fee)}</b><span>fees</span></div><div className={stats.cash > 0 ? 'cash' : ''}><small>Cash with you</small><b>{taka(stats.cash)}</b><span>give to Pinkish</span></div></div>
     {!me.on_duty && <div className="rx-card rx-off"><span className="rx-offic"><Ico n="power" s={20} /></span><div><b>You are offline</b><p className="rx-mut">Tap the round button below to go online{ops.pool ? ' and see open jobs' : ''}.</p></div></div>}
-    <div className="rx-hrow"><h2 className="rx-h2">Active delivery {active.length > 0 && <em>{active.length}</em>}</h2></div>
-    {!list.length ? (k ? <p className="rx-mut">No job matches “{q}”.</p> : <div className="rx-empty"><span><Ico n="box" s={30} /></span><b>No jobs right now</b><p>{me.on_duty ? 'New jobs appear here with a buzz. Keep the app open.' : 'Go online to start receiving jobs.'}</p>{ops.pool && me.on_duty && <button className="rx-btn sm" onClick={goFind}><Ico n="search" s={16} />Find open jobs</button>}</div>)
-      : <div className="rx-list">{list.map(j => <JobCard key={j.id} j={j} onOpen={onOpen} />)}</div>}
+    <div className="rx-hrow"><h2 className="rx-h2">Current delivery</h2>{active.length > 1 && <span className="rx-pill">{active.length} active</span>}</div>
+    {cur ? <JobCard hero j={cur} onOpen={onOpen} /> : <div className="rx-empty"><span><Ico n="box" s={30} /></span><b>No jobs right now</b><p>{me.on_duty ? 'New jobs appear here with a buzz. Keep the app open.' : 'Go online to start receiving jobs.'}</p>{ops.pool && me.on_duty && <button className="rx-btn sm" onClick={goFind}><Ico n="search" s={16} />Find open jobs</button>}</div>}
+    {rest.length > 0 && <><div className="rx-hrow"><h2 className="rx-h2">Up next <em>{rest.length}</em></h2></div><div className="rx-list">{rest.map(j => <JobCard key={j.id} j={j} onOpen={onOpen} />)}</div></>}
+    <div className="rx-hrow"><h2 className="rx-h2">Today</h2></div>
+    {today}
+    {history.length > 0 && <>
+      <div className="rx-hrow"><h2 className="rx-h2">Recent deliveries</h2><button type="button" className="rx-see" onClick={goEarn}>See all</button></div>
+      <div className="rx-list">{history.slice(0, 3).map(h => { const [lb, cls, ic] = HIST[h.status] || ['Cancelled', 'off', 'ban']; return <div key={h.id} className="rx-job row hist">
+        <span className="rx-jh"><span className={'rx-thumb ' + cls}><Ico n={ic} s={20} /></span><span className="rx-jid"><b>ID: #{h.order_no}</b><small>{when(h.at)}{h.status === 'delivered' && h.fee > 0 ? ' · +' + taka(h.fee) : ''}</small></span><span className={'rx-st ' + cls}>{lb}</span></span>
+      </div> })}</div>
+    </>}
   </>
 }
 
@@ -427,7 +503,7 @@ function Find({ data, say, reload, onOpen }) {
   const take = async o => { setBusy(o.order_id); setErr(''); try { const id = await claimJob(o.order_id); say(`Job #${o.order_no} is yours`); await reload(); onOpen(id) } catch (x) { setErr(msg(x)); load() } setBusy('') }
   if (!data.ops?.pool) return <div className="rx-empty"><span><Ico n="search" s={30} /></span><b>Pinkish assigns your jobs</b><p>You get a notification when a new job is assigned to you.</p></div>
   return <>
-    <div className="rx-hrow"><h2 className="rx-h2">Open jobs {rows?.length > 0 && <em>{rows.length}</em>}</h2><button className="rx-ib sm" aria-label="Refresh" onClick={load}><Ico n="refresh" s={18} /></button></div>
+    <div className="rx-hrow"><h2 className="rx-h2">Near you {rows?.length > 0 && <em>{rows.length}</em>}</h2><button className="rx-ib sm" aria-label="Refresh" onClick={load}><Ico n="refresh" s={18} /></button></div>
     {!on && <div className="rx-warn"><Ico n="alert" s={18} />Go online to take a job.</div>}
     {err && <div className="rx-err" role="alert">{err}</div>}
     {rows === null ? <div className="rx-skel" /> : !rows.length ? <div className="rx-empty"><span><Ico n="search" s={30} /></span><b>No open jobs</b><p>This list refreshes by itself every few seconds.</p></div>
@@ -455,12 +531,11 @@ function Earn({ data }) {
   </>
 }
 
-// Profile: not in the bottom bar any more. The rider opens it by tapping their picture on the home screen.
-function Me({ data, user, logout, onBack }) {
+// Profile tab (bottom bar)
+function Me({ data, user, logout }) {
   const { me = {}, ops = {}, stats = {} } = data
-  return <div className="rx-view">
-    <header className="rx-vh"><button className="rx-ib" aria-label="Back" onClick={onBack}><Ico n="back" /></button><div><b>Profile</b><small>Your rider account</small></div></header>
-    <div className="rx-vb">
+  return <div className="rx-prof">
+    <div>
       <div className="rx-me"><span className="rx-ring"><span className="rx-av lg">{first(me.name).charAt(0).toUpperCase()}</span></span><b>{me.name}</b><small>{user.email}</small><span className="rx-pill ok"><Ico n="shield" s={13} />Verified rider</span></div>
       <div className="rx-menu">
         <div><span className="rx-mi"><Ico n="phone" s={18} /></span><span>Phone</span><b>{me.phone}</b></div>
@@ -484,7 +559,7 @@ function Me({ data, user, logout, onBack }) {
    Main app (verified riders)
    ===================================================================== */
 function RiderApp({ user, logout }) {
-  const [data, setData] = useState(null), [err, setErr] = useState(''), [tab, setTab] = useState('jobs'), [open, setOpen] = useState(null), [duty, setDutyBusy] = useState(false), [me, setMe] = useState(false), [q, setQ] = useState('')
+  const [data, setData] = useState(null), [err, setErr] = useState(''), [tab, setTab] = useState('jobs'), [open, setOpen] = useState(null), [duty, setDutyBusy] = useState(false), [q, setQ] = useState(''), [spin, setSpin] = useState(false)
   const [toast, say] = useToast(), online = useOnline(), seen = useRef(null), scr = useRef(null)
   const load = useCallback(async () => {
     try {
@@ -524,40 +599,49 @@ function RiderApp({ user, logout }) {
     navigator.vibrate?.(30)
     setDutyBusy(true); try { await setDuty(!onDuty); say(onDuty ? 'You are offline' : 'You are online. New jobs will buzz.'); await load() } catch (x) { say(msg(x)) } setDutyBusy(false)
   }
-  const go = t => { setTab(t); setOpen(null); setMe(false); scr.current?.scrollTo?.(0, 0); window.scrollTo?.(0, 0) }
+  const go = t => { setTab(t); setOpen(null); scr.current?.scrollTo?.(0, 0); window.scrollTo?.(0, 0) }
+  const refresh = async () => { if (spin) return; setSpin(true); await load(); setSpin(false) }
   const job = open && data?.active?.find(j => j.id === open)
   useEffect(() => { if (open && data && !job) setOpen(null) }, [open, data, job])
   const nActive = data?.active?.length || 0, pool = !!data?.ops?.pool
   const name = first(data?.me?.name)
   if (!data) return <div className="rx-page narrow center-v">{err ? <div className="rx-card center"><span className="rx-big bad"><Ico n="alert" s={34} /></span><p>{err}</p><button className="rx-btn" onClick={load}>Try again</button><button className="rx-link" onClick={logout}>Log out</button></div> : <div className="rx-spin" aria-label="Loading" />}</div>
   const navB = (k, l, ic, n) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><Ico n={ic} s={22} /><span>{l}</span>{n > 0 && <em>{n}</em>}</button>
-  return <div className="rx-app">
+  const TITLE = { find: ['Open jobs', 'Inside the ' + RIDER_KM + ' km Pinkish zone'], earn: ['Earnings', 'Fees and cash for the last 30 days'], me: ['Profile', 'Your rider account'] }
+  const area = data.me?.area
+  return <div className={'rx-app' + (job ? ' full' : '')}>
     {!online && <div className="rx-offline">No internet. Showing your last update.</div>}
-    {me ? <Me data={data} user={user} logout={logout} onBack={() => setMe(false)} /> : job ? <JobView j={job} ops={data.ops || {}} pos={pos} onBack={() => setOpen(null)} reload={load} say={say} /> : <>
+    {job ? <JobView j={job} ops={data.ops || {}} pos={pos} onBack={() => setOpen(null)} reload={load} say={say} /> : <>
       <header className="rx-home">
         <div className="rx-hr1">
-          <button className="rx-avbtn" aria-label="Open your profile" onClick={() => setMe(true)}><span className="rx-av sm">{name.charAt(0).toUpperCase()}</span></button>
+          <div className="rx-loc"><span className="rx-locic"><Ico n="bike" s={20} /></span><span><small>Hello, {name} 👋</small><b>{area ? 'Delivering in ' + area : 'Pinkish Rider'}</b></span></div>
           <button className={'rx-duty' + (onDuty ? ' on' : '')} role="switch" aria-checked={onDuty} disabled={duty} onClick={toggle}><i /><span>{duty ? '…' : onDuty ? 'Online' : 'Offline'}</span></button>
         </div>
-        <h1>Hello,<br /><b>{name} 👋</b></h1>
-        {tab === 'jobs' && <label className="rx-search"><Ico n="search" s={18} /><input type="search" inputMode="search" enterKeyHint="search" placeholder="Find a job by order number" aria-label="Find a job" value={q} onChange={e => setQ(e.target.value)} />{q && <button type="button" aria-label="Clear" onClick={() => setQ('')}><Ico n="x" s={16} /></button>}</label>}
-        <div className="rx-quick">
-          {pool ? <button onClick={() => go('find')}><span className="t"><b>Open jobs</b><small>Take a job near you</small></span><span className="qi"><Ico n="search" s={20} /></span></button>
-            : <button onClick={load}><span className="t"><b>Refresh</b><small>Check for new jobs</small></span><span className="qi"><Ico n="refresh" s={20} /></span></button>}
-          <button onClick={() => go('earn')}><span className="t"><b>Earnings</b><small>{taka(data.stats?.today_fee)} today</small></span><span className="qi"><Ico n="wallet" s={20} /></span></button>
-        </div>
+        {tab === 'jobs' ? <>
+          <div className="rx-srow">
+            <label className="rx-search"><Ico n="search" s={18} /><input type="search" inputMode="search" enterKeyHint="search" placeholder="Search order number" aria-label="Find a job" value={q} onChange={e => setQ(e.target.value)} />{q && <button type="button" aria-label="Clear" onClick={() => setQ('')}><Ico n="x" s={16} /></button>}</label>
+            <button type="button" className={'rx-sbtn' + (spin ? ' spin' : '')} aria-label="Refresh jobs" onClick={refresh}><Ico n="refresh" s={20} /></button>
+          </div>
+          <div className="rx-quick">
+            {pool ? <button onClick={() => go('find')}><span className="t"><b>Open<br />jobs</b><small>Take a job near you</small></span><ArtVan /></button>
+              : <button onClick={refresh}><span className="t"><b>New<br />jobs</b><small>Check for new jobs</small></span><ArtVan /></button>}
+            <button onClick={() => go('earn')}><span className="t"><b>My<br />earnings</b><small>{taka(data.stats?.today_fee)} today</small></span><ArtCash /></button>
+          </div>
+        </> : <div className="rx-ttl"><h1>{TITLE[tab]?.[0]}</h1><small>{TITLE[tab]?.[1]}</small></div>}
       </header>
       <main className="rx-scr" ref={scr}>
         {err && <div className="rx-err">{err}</div>}
-        {tab === 'jobs' && <Jobs data={data} onOpen={setOpen} goFind={() => go('find')} q={q} />}
+        {tab === 'jobs' && <Jobs data={data} onOpen={setOpen} goFind={() => go('find')} goEarn={() => go('earn')} q={q} />}
         {tab === 'find' && <Find data={data} say={say} reload={load} onOpen={id => { setTab('jobs'); setOpen(id) }} />}
         {tab === 'earn' && <Earn data={data} />}
+        {tab === 'me' && <Me data={data} user={user} logout={logout} />}
       </main>
       <nav className="rx-nav" aria-label="Rider sections"><div className="rx-navin">
         {navB('jobs', 'Home', 'home', nActive)}
-        {pool && navB('find', 'Open jobs', 'search')}
+        {pool ? navB('find', 'Open jobs', 'search') : navB('earn', 'Earnings', 'wallet')}
         <button className={'rx-fab' + (onDuty ? ' on' : '')} role="switch" aria-checked={onDuty} aria-label={onDuty ? 'Go offline' : 'Go online'} disabled={duty} onClick={toggle}><Ico n="power" s={24} /></button>
-        {navB('earn', 'Earnings', 'wallet')}
+        {pool ? navB('earn', 'Earnings', 'wallet') : telHref(data.ops?.support_phone) ? <a href={telHref(data.ops.support_phone)}><Ico n="phone" s={22} /><span>Support</span></a> : <span aria-hidden="true" />}
+        {navB('me', 'Profile', 'user')}
       </div></nav>
     </>}
     {toast && <div className="rx-toast" role="status">{toast}</div>}
