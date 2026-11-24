@@ -1,4 +1,5 @@
 import { supabase } from '../api.js'
+import { validNid, cleanNid } from '../lib/nid.js'
 
 // Pinkish Rider: every action goes through database functions (see supabase-riders.sql).
 // Riders never read orders, customers or shops directly, so a tampered app can only do what the server allows.
@@ -34,7 +35,7 @@ async function sessionUid(uid) {
 
 export const cleanPhone = p => { let n = String(p || '').replace(/\D/g, ''); if (n.startsWith('880')) n = n.slice(2); return n.slice(0, 11) }
 export const validPhone = p => /^01[3-9]\d{8}$/.test(cleanPhone(p))
-export const validNid = n => /^(\d{10}|\d{13}|\d{17})$/.test(String(n || '').replace(/\D/g, ''))
+export { validNid }
 export const VEHICLES = [['bike', 'Motorbike'], ['cycle', 'Bicycle'], ['car', 'Car / CNG'], ['foot', 'On foot']]
 // tel: links only ever get digits and a leading +
 export const telHref = p => { const n = String(p || '').replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '').slice(0, 16); return n.length >= 6 ? 'tel:' + n : '' }
@@ -103,7 +104,7 @@ export async function applyRider(uid, f, doc) {
   if (!validNid(f.nid)) throw new Error('NID number must be 10, 13 or 17 digits.')
   const vehicle = VEHICLES.some(v => v[0] === f.vehicle) ? f.vehicle : 'bike'
   const path = await uploadNid(me, doc)
-  return rpc('rider_apply', { p_name: s(f.name, 80), p_phone: cleanPhone(f.phone), p_area: s(f.area, 120), p_vehicle: vehicle, p_nid: String(f.nid).replace(/\D/g, ''), p_doc: path }, 'Could not send your application. Please try again.')
+  return rpc('rider_apply', { p_name: s(f.name, 80), p_phone: cleanPhone(f.phone), p_area: s(f.area, 120), p_vehicle: vehicle, p_nid: cleanNid(f.nid), p_doc: path }, 'Could not send your application. Please try again.')
 }
 
 // ---------------- jobs ----------------
