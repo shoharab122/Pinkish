@@ -54,6 +54,8 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-ib{width:44px;height:44px;flex:none;border-radius:50%;display:grid;place-items:center;background:#fff;color:var(--p0);border:1px solid var(--ln);box-shadow:var(--sh);transition:transform .2s var(--spring)}
 .rx-ib:active{transform:scale(.9)}
 .rx-ib.sm{width:36px;height:36px}
+.rx-ib:disabled{cursor:default}
+.rx-ib.spin .ico{animation:rxSpin .8s linear infinite}
 .rx-link{display:block;width:100%;padding:14px 8px;text-align:center;font-weight:600;color:var(--p2)}
 .rx-link.bad{color:var(--er)}
 .rx-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
@@ -257,7 +259,7 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-rbar b{position:absolute;left:0;top:-2px;height:2px;background:repeating-linear-gradient(90deg,var(--p3) 0 3px,#0000 3px 6px);transition:width .6s var(--ease)}
 .rx-rline>i{position:absolute;top:32px;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #d6c4e6;display:grid;place-items:center;color:#b9a6cb;z-index:1}
 .rx-rline>i.dn{background:var(--p3);border-color:var(--p3);color:#fff;box-shadow:0 0 0 3px #e0457b26}
-.rx-rline>em{position:absolute;top:0;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;font-style:normal;transition:left .6s var(--ease)}
+.rx-rline>em{position:absolute;top:0;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;font-style:normal;pointer-events:none;transition:left .6s var(--ease)}
 .rx-rline>em small{font-size:10.5px;line-height:14px;font-weight:700;color:var(--p1);white-space:nowrap;margin-bottom:3px;padding:0 6px;border-radius:6px;background:#fff}
 .rx-rline>em span{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--p0);color:#fff;box-shadow:0 6px 12px -4px #2d0b4a99,0 0 0 3px #fff}
 .rx-rlab{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
@@ -330,6 +332,8 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-mapwrap{position:relative;height:clamp(300px,50vh,480px);background:#ece6f1;overflow:hidden}
 .rx-map{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
 .rx-map iframe{width:100%;height:100%;border:0;display:block;filter:grayscale(.7) contrast(.95)}
+/* address (Google) map and the tap-to-load placeholder end where the dark sheet starts, so the sheet no longer covers Google's buttons */
+.rx-mapwrap>.rx-map:not(.rx-live){bottom:30px;height:auto}
 .rx-maptap{display:grid;place-content:center;justify-items:center;gap:4px;color:var(--p1);background:repeating-linear-gradient(0deg,#0000 0 54px,#e2dae9 54px 62px),repeating-linear-gradient(90deg,#ece6f1 0 74px,#e2dae9 74px 82px)}
 .rx-maptap .ico{width:52px;height:52px;padding:13px;border-radius:50%;background:#fff;box-shadow:var(--sh)}
 .rx-maptap small{color:var(--mut)}
@@ -546,11 +550,13 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
   .rx-app{max-width:1040px}
   .rx-app.full{max-width:none}
   .rx-view.job{display:grid;grid-template-columns:minmax(400px,480px) minmax(0,1fr);gap:32px;max-width:1220px;margin:0 auto;padding:24px 28px 40px;align-items:start}
-  .rx-side{position:sticky;top:24px}
+  .rx-side{position:relative}
   .rx-side .rx-mapwrap{height:min(52vh,440px);border-radius:28px;border:1px solid var(--ln)}
   .rx-side .rx-vh{border-radius:28px 28px 0 0}
   .rx-side .rx-vh:not(.over){position:relative;background:none;padding:0 0 12px}
   .rx-track,.rx-track.nomap{margin-left:0;margin-right:0}
   .rx-view.job>.rx-vb{padding:0;max-width:none}
 }
+/* the map + sheet column only sticks when the whole column fits on screen (otherwise its call buttons were cut off) */
+@media(min-width:960px) and (min-height:960px){.rx-side{position:sticky;top:24px}}
 @media(prefers-reduced-motion:reduce){.rx *,.rx *::before,.rx *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
