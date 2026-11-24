@@ -278,8 +278,14 @@ const CodTag = ({ j }) => j.cod == null ? <span className="rx-pill warn">Payment
 const fromName = j => { const ps = j.pickups || []; return ps.length ? (ps[0].shop || 'Seller') + (ps.length > 1 ? ' +' + (ps.length - 1) : '') : 'Pinkish hub' }
 const fromCity = j => (j.pickups || [])[0]?.city || ''
 const short = a => String(a || '').split(',')[0].trim() || 'Customer'
-// how far along the route the parcel is (0 → 1). Four stops: assigned · accepted · collected · delivered
-const progress = j => { const c = counts(j); return j.status === 'out' ? 0.84 : j.status === 'accepted' ? 0.4 + 0.22 * (c.n ? c.got / c.n : 0) : 0.17 }
+// how far along the route the parcel is (0 → 1). Four stops at 0, 1/3, 2/3, 1: assigned · accepted · collected · delivered.
+// The rider sits between two stops (never on top of a dot), sliding a little as parcels are collected.
+const progress = j => {
+  const c = counts(j)
+  if (j.status === 'out') return 5 / 6
+  if (j.status === 'accepted') return c.n && c.got >= c.n ? 0.76 : 0.43 + 0.14 * (c.n ? c.got / c.n : 0)
+  return 1 / 6
+}
 const reached = j => { const c = counts(j); return j.status === 'out' ? 3 : j.status === 'accepted' ? (c.n && c.got >= c.n ? 3 : 2) : 1 }
 const STOPS = [0, 1 / 3, 2 / 3, 1]
 const hm = d => { try { return new Date(d).toLocaleTimeString('en-BD', { hour: 'numeric', minute: '2-digit' }) } catch { return '' } }
@@ -395,8 +401,11 @@ function EmbedMap({ src }) {
 }
 
 function JobView({ j, ops, pos, onBack, reload, say }) {
-  const [busy, setBusy] = useState(false), [err, setErr] = useState(''), [sheet, setSheet] = useState('')
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(''), [sheet, setSheet] = useState(''), [spin, setSpin] = useState(false)
   const c = counts(j), ready = c.got >= c.n, st = j.status, cu = j.customer || {}, hasMap = okLL(cu.lat, cu.lng) || !!mapEmbed(cu.address, cu.lat, cu.lng)
+  // header floats over the live map only. Over the Google address map it collided with Google's own place card.
+  const overMap = okLL(cu.lat, cu.lng)
+  const refresh = async () => { if (spin) return; setSpin(true); try { await reload() } finally { setSpin(false) } }
   useEffect(() => { // keep the screen awake while delivering (the phone drops the lock when the screen turns off, so ask again)
     if (st !== 'out' || !navigator.wakeLock) return
     let lock, gone = false
@@ -410,7 +419,7 @@ function JobView({ j, ops, pos, onBack, reload, say }) {
   const kmTo = pos && okLL(cu.lat, cu.lng) ? havKm(pos.lat, pos.lng, +cu.lat, +cu.lng) : null
   return <div className="rx-view job">
     <div className="rx-side">
-      <header className={'rx-vh' + (hasMap ? ' over' : '')}><button className="rx-ib" aria-label="Back" onClick={onBack}><Ico n="back" /></button><div><b>Live tracking</b><small>#{j.order_no} · {units(j)} item{units(j) === 1 ? '' : 's'}</small></div><button className="rx-ib" aria-label="Refresh" disabled={busy} onClick={() => run(async () => {})}><Ico n="refresh" /></button></header>
+      <header className={'rx-vh' + (overMap ? ' over' : '')}><button className="rx-ib" aria-label="Back" onClick={onBack}><Ico n="back" /></button><div><b>Live tracking</b><small>#{j.order_no} · {units(j)} item{units(j) === 1 ? '' : 's'}</small></div><button className={'rx-ib' + (spin ? ' spin' : '')} aria-label="Refresh" disabled={busy || spin} onClick={refresh}><Ico n="refresh" /></button></header>
       <JobMap j={j} cu={cu} pos={pos} ops={ops} />
       <div className={'rx-track' + (hasMap ? '' : ' nomap')}>
         <span className="rx-grab" />
@@ -603,6 +612,8 @@ function RiderApp({ user, logout }) {
   const refresh = async () => { if (spin) return; setSpin(true); await load(); setSpin(false) }
   const job = open && data?.active?.find(j => j.id === open)
   useEffect(() => { if (open && data && !job) setOpen(null) }, [open, data, job])
+  // opening or leaving a job starts at the top (it used to open halfway down, wherever the home list was scrolled)
+  useEffect(() => { try { window.scrollTo(0, 0) } catch { /* old browsers */ } }, [open])
   const nActive = data?.active?.length || 0, pool = !!data?.ops?.pool
   const name = first(data?.me?.name)
   if (!data) return <div className="rx-page narrow center-v">{err ? <div className="rx-card center"><span className="rx-big bad"><Ico n="alert" s={34} /></span><p>{err}</p><button className="rx-btn" onClick={load}>Try again</button><button className="rx-link" onClick={logout}>Log out</button></div> : <div className="rx-spin" aria-label="Loading" />}</div>
