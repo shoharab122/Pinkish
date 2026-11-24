@@ -49,7 +49,7 @@ export async function getProducts() {
   return DEV ? ls('ms_prods', []) : null
 }
 export async function addProduct(p) {
-  const row = { variants: [{ label: 'Standard', mult: 1 }], features: ['100% original product', 'Discreet packaging'], rating: 4.5, reviews: 0, is_active: true, ...p }
+  const row = { variants: [{ label: 'Standard', mult: 1 }], features: ['100% original product', 'Discreet packaging'], rating: null, reviews: 0, is_active: true, ...p }
   if (supabase) { const { data, error } = await supabase.from('products').insert(row).select().single(); if (error) throw error; return data }
   if (!DEV) throw new Error(NEEDS_SETUP)
   const n = { id: 'u' + Date.now(), emoji: '🛍️', ...row }; sv('ms_prods', [...ls('ms_prods', []), n]); return n
@@ -261,17 +261,28 @@ export async function placeBkashOrder(o) {
 }
 // Public shop info for the storefront (name, logo, cover, city only; never phone, NID or documents).
 // Sellers cannot be contacted directly: every order goes through Pinkish and our riders.
+// Order of sources:
+//   1. public_shops() RPC (security definer, see supabase-public-shops.sql): works for guests and every customer.
+//   2. shops_public view, 3. shops table: older setups.
+// An EMPTY answer is not trusted: row-level security on `shops` silently returns [] to visitors who do not own
+// the shop, which used to stop the search here and leave every product showing "Marketplace seller".
 export async function getShops() {
   if (!supabase) return null
+  const map = rows => Object.fromEntries((rows || []).filter(x => x && x.id).map(x => [x.id, x]))
+  let empty = null
+  try {
+    const { data, error } = await supabase.rpc('public_shops')
+    if (!error && Array.isArray(data)) { if (data.length) return map(data); empty = {} }
+  } catch { /* not installed yet: try the older sources */ }
   // cover_url is optional: if the column is not added yet, fall back to the original columns.
   for (const cols of ['id,name,logo_url,cover_url,slug,city', 'id,name,logo_url,slug,city'])
     for (const [t, q] of [['shops_public', s => s], ['shops', s => s.eq('status', 'approved')]]) {
       try {
         const { data, error } = await q(supabase.from(t).select(cols))
-        if (!error && data) return Object.fromEntries(data.map(x => [x.id, x]))
+        if (!error && Array.isArray(data)) { if (data.length) return map(data); empty = {} }
       } catch { /* try the next source */ }
     }
-  return null
+  return empty // {} only when every source answered and there really are no approved shops
 }
 // ---------------- Marketplace features (deals, best sellers, notifications, follow, Q&A) ----------------
 // A deal is "live" only while deal_ends_at is in the future. The server (pg_cron) puts the price back afterwards.
