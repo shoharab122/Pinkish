@@ -1,7 +1,9 @@
 import React, { memo, useEffect, useState, useCallback, useMemo, useRef, useDeferredValue } from 'react'
 import './seller.css'
 import { signIn, signUp, signOut, onAuthChange, resetPassword, signInWithGoogle, supabase, dealLive, getFollowerCount, productUrl } from '../api.js'
-import { getMyShop, createShop, resubmitShop, updateShop, removeCover, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion, preparePhoto, sellerReturns, respondReturn, hasContact, setStock, sellerHandovers, markPacked, confirmPickup, getSellerOps, productStats, OPS0 } from './sellerApi.js'
+import { LiveMap, PinPicker, usePoll } from '../lib/LiveMap.jsx'
+import { HUB, RIDER_KM, okLL, kmFromHub, havKm, kmTxt, etaMin, seenAgo, fresh } from '../lib/zone.js'
+import { getMyShop, createShop, resubmitShop, updateShop, removeCover, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion, preparePhoto, sellerReturns, respondReturn, hasContact, setStock, sellerHandovers, markPacked, confirmPickup, getSellerOps, productStats, OPS0, telHref, setShopLocation, riderLocation } from './sellerApi.js'
 
 const taka = n => '৳' + Number(n || 0).toLocaleString('en-BD')
 const when = d => { try { return new Date(d).toLocaleString('en-BD', { dateStyle: 'medium', timeStyle: 'short' }) } catch { return '' } }
@@ -16,8 +18,10 @@ const toLocalInput = x => { const d = new Date(x); if (isNaN(d)) return ''; d.se
 const MEM = {}, PCACHE = {}, CCACHE = { v: null }
 const wipe = () => { Object.keys(MEM).forEach(k => delete MEM[k]); Object.keys(PCACHE).forEach(k => delete PCACHE[k]); CCACHE.v = null }
 const DRAFT = 'sl_draft'
-const readDraft = () => { try { return JSON.parse(localStorage.getItem(DRAFT)) || {} } catch { return {} } }
-const saveDraft = d => { try { localStorage.setItem(DRAFT, JSON.stringify(d)) } catch { /* storage unavailable */ } }
+// The sign-up draft (shop name, phone, address) survives an email confirmation, but expires after 7 days
+// and is deleted on log-out, so personal details never sit on a shared phone.
+const readDraft = () => { try { const d = JSON.parse(localStorage.getItem(DRAFT)) || {}; if (!d.t || Date.now() - d.t > 7 * 864e5) { localStorage.removeItem(DRAFT); return {} } return d } catch { return {} } }
+const saveDraft = d => { try { localStorage.setItem(DRAFT, JSON.stringify({ ...d, t: Date.now() })) } catch { /* storage unavailable */ } }
 const clearDraft = () => { try { localStorage.removeItem(DRAFT) } catch { /* storage unavailable */ } }
 const IC = {
   overview: <><path d="M3 3v18h18" /><path d="M8 17v-5M13 17V8M18 17v-9" /></>,
@@ -62,6 +66,11 @@ function Steps({ at }) {
   return <ol className="sl-steps" aria-label="Progress">{STEP.map((s, i) => <li key={s} className={i < at ? 'dn' : i === at ? 'on' : ''}><i>{i < at ? '✓' : i + 1}</i><span>{s}</span></li>)}</ol>
 }
 
+function useOnline() {
+  const [on, setOn] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false)
+  useEffect(() => { const a = () => setOn(true), b = () => setOn(false); addEventListener('online', a); addEventListener('offline', b); return () => { removeEventListener('online', a); removeEventListener('offline', b) } }, [])
+  return on
+}
 function useObjectUrl(file) {
   const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
@@ -267,6 +276,11 @@ function ProductForm({ shop, cats, product, copy, onSaved, onCancel }) {
     try { const out = await preparePhoto(file); setFiles(a => a.map((x, k) => (k === i ? out : x))) } catch (x) { setErr(msg(x)) }
     setPrep(n => n - 1)
   }
+  useEffect(() => {
+    if (!busy && !prep) return
+    const h = e => { e.preventDefault(); e.returnValue = '' }
+    addEventListener('beforeunload', h); return () => removeEventListener('beforeunload', h)
+  }, [busy, prep])
   const saved = useMemo(() => existingImages(src), [src])
   const filled = files.filter((f, i) => f || saved[i]).length
   const set = k => v => setF(p => ({ ...p, [k]: v }))
@@ -312,14 +326,16 @@ function ProductForm({ shop, cats, product, copy, onSaved, onCancel }) {
 
 // quick restock: tap − / + and it saves by itself a moment later
 function StockStep({ p, onSave }) {
-  const [v, setV] = useState(p.stock ?? 0), t = useRef(0), first = useRef(true)
-  useEffect(() => { setV(p.stock ?? 0) }, [p.stock])
+  const [v, setV] = useState(p.stock ?? 0), t = useRef(0), pend = useRef(null), save = useRef(onSave)
+  save.current = onSave
+  useEffect(() => { if (pend.current == null) setV(p.stock ?? 0) }, [p.stock])
   useEffect(() => {
-    if (first.current) { first.current = false; return }
-    if (v === (p.stock ?? 0)) return
-    clearTimeout(t.current); t.current = setTimeout(() => onSave(p, v), 700)
-    return () => clearTimeout(t.current)
+    if (v === (p.stock ?? 0)) { pend.current = null; return }
+    pend.current = v
+    clearTimeout(t.current); t.current = setTimeout(() => { pend.current = null; save.current(p, v) }, 700)
   }, [v]) // eslint-disable-line react-hooks/exhaustive-deps
+  // leaving the page (tab switch, edit) saves straight away instead of dropping the change
+  useEffect(() => () => { clearTimeout(t.current); if (pend.current != null) save.current(p, pend.current) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const low = v <= 5
   return <div className={'sl-step' + (low ? ' low' : '')} aria-label={'Stock for ' + p.name}>
     <button type="button" aria-label="One less" onClick={() => setV(x => Math.max(0, x - 1))}>−</button>
@@ -336,8 +352,9 @@ const share = async (p, say) => {
 const PF = [['all', 'All'], ['live', 'Live'], ['hidden', 'Hidden'], ['low', 'Low stock'], ['deal', 'On deal']]
 const PS = { new: ['Newest', (a, b) => new Date(b.created_at) - new Date(a.created_at)], sold: ['Best selling', null], stock: ['Lowest stock', (a, b) => (a.stock ?? 0) - (b.stock ?? 0)], price: ['Price', (a, b) => a.price - b.price] }
 function Products({ shop, list, put, cats, reload, sold, saves, say }) {
-  const [edit, setEdit] = useState(null), [err, setErr] = useState(''), [q, setQ] = useState(''), [pf, setPf] = useState('all'), [ps, setPs] = useState('new')
+  const [edit, setEdit] = useState(null), [err, setErr] = useState(''), [q, setQ] = useState(''), [pf, setPf] = useState('all'), [ps, setPs] = useState('new'), [lim, setLim] = useState(24)
   const dq = useDeferredValue(q)
+  useEffect(() => { setLim(24) }, [dq, pf, ps])
   const del = async p => { if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return; try { await deleteProduct(shop, p.id); put(l => l.filter(x => x.id !== p.id)); say('Product deleted') } catch (x) { setErr(msg(x)) } }
   const toggle = async p => { try { const n = await saveProduct(shop, { ...p, price: p.price, stock: p.stock ?? 0, is_active: !(p.is_active !== false) }, null, p); put(l => l.map(x => x.id === p.id ? n : x)); say(n.is_active !== false ? 'Live in the store' : 'Hidden from the store') } catch (x) { setErr(msg(x)) } }
   const restock = useCallback(async (p, n) => { try { const r = await setStock(shop, p.id, n); put(l => l.map(x => x.id === p.id ? r : x)); say(`Stock saved: ${n}`) } catch (x) { setErr(msg(x)) } }, [shop, put, say])
@@ -364,10 +381,10 @@ function Products({ shop, list, put, cats, reload, sold, saves, say }) {
       </div>}
       {list?.length > 0 && <div className="sl-seg" role="tablist" aria-label="Filter products">{PF.map(([k, l]) => <button key={k} role="tab" aria-selected={pf === k} className={pf === k ? 'on' : ''} onClick={() => setPf(k)}>{l}<em>{cnt[k]}</em></button>)}</div>}
       {list === null ? <div className="sl-grid">{[0, 1, 2].map(i => <div key={i} className="sl-skel" />)}</div> : !list.length ? <div className="sl-empty"><i><Ico n="bag" s={34} /></i><b>No products yet</b><p>Add your first product and it appears in the store instantly.</p><button className="sl-btn sm" onClick={() => setEdit({})}>+ Add product</button></div> : !shown.length ? <p className="sl-mut">No products match.</p> : (
-        <div className="sl-grid">{shown.map(p => (
+        <><div className="sl-grid">{shown.slice(0, lim).map(p => (
           <div className={'sl-prod' + (p.is_active !== false ? '' : ' off')} key={p.id}>
             <div className="sl-pimg">
-              {p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" /> : <div className="sl-ph">{p.emoji || <Ico n="bag" s={40} />}</div>}
+              {p.image_url ? <img src={p.image_url} alt="" width="400" height="300" loading="lazy" decoding="async" /> : <div className="sl-ph">{p.emoji || <Ico n="bag" s={40} />}</div>}
               <span className={'sl-badge ' + (p.is_active !== false ? 'approved' : 'pending')}>{p.is_active !== false ? 'Live' : 'Hidden'}</span>
               <button className="sl-pshare" aria-label={'Share ' + p.name} onClick={() => share(p, say)}><Ico n="share" s={16} /></button>
             </div>
@@ -383,6 +400,7 @@ function Products({ shop, list, put, cats, reload, sold, saves, say }) {
                 <button className="sl-btn bad sm" aria-label={'Delete ' + p.name} onClick={() => del(p)}>Delete</button>
               </div></div>
           </div>))}</div>
+        {shown.length > lim && <button className="sl-btn ghost" onClick={() => setLim(l => l + 24)}>Show more · {shown.length - lim} left</button>}</>
       )}
     </>
   )
@@ -486,14 +504,31 @@ function SendTo({ ops, shop, compact, open }) {
 }
 
 function printSlip(o, shop) {
-  const w = window.open('', '_blank', 'width=420,height=640')
-  if (!w) return false
+  const f = document.createElement('iframe')
+  f.setAttribute('aria-hidden', 'true'); f.setAttribute('sandbox', 'allow-modals allow-same-origin')
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+  document.body.appendChild(f)
+  const w = f.contentWindow
+  if (!w) { f.remove(); return false }
+  setTimeout(() => f.remove(), 60000)
   const e = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   w.document.write(`<!doctype html><title>Packing slip #${e(o.order_no)}</title><style>body{font:14px/1.45 system-ui,sans-serif;margin:24px;color:#2a1a3a}h1{font-size:22px;margin:0}small{color:#777}.no{font:700 34px monospace;letter-spacing:2px;margin:10px 0;padding:10px;border:3px dashed #8e2a8c;text-align:center;border-radius:12px}table{width:100%;border-collapse:collapse;margin:12px 0}td{padding:8px 4px;border-bottom:1px solid #eee}td:last-child{text-align:right;font-weight:700}.ft{margin-top:18px;padding:10px;border-radius:10px;background:#f6effa;font-size:12px}</style>
   <h1>Pinkish · packing slip</h1><small>${e(shop.name)} · ${e(when(o.created_at))}</small><div class="no">#${e(o.order_no)}</div>
   <table>${(o.lines || []).map(l => `<tr><td>☐ ${e(l.name)}${l.variant && l.variant !== 'Standard' ? ' (' + e(l.variant) + ')' : ''}</td><td>× ${e(l.qty)}</td></tr>`).join('')}</table>
-  <div class="ft">Hand this parcel ONLY to a Pinkish rider who tells you the correct pickup code. Pinkish delivers to the customer.</div><script>onload=()=>{print()}<\/script>`)
-  w.document.close(); return true
+  <div class="ft">Hand this parcel ONLY to a Pinkish rider who tells you the correct pickup code. Pinkish delivers to the customer.</div>`)
+  w.document.close()
+  setTimeout(() => { try { w.focus(); w.print() } catch { /* printing unavailable */ } }, 250)
+  return true
+}
+
+// The Pinkish rider on the map while they come to collect this parcel (only when a rider-app job is on its way)
+function RiderComing({ o, shop, on }) {
+  const r = usePoll(() => riderLocation(o.id), 10000, on, [o.id])
+  if (!r || !okLL(r.lat, r.lng)) return null
+  const me = okLL(shop.lat, shop.lng), km = me ? havKm(+r.lat, +r.lng, +shop.lat, +shop.lng) : null
+  const markers = [{ id: 'rider', kind: 'rider', lat: r.lat, lng: r.lng, label: (r.name || 'Rider') + ' · ' + seenAgo(r.seen) }, me && { id: 'shop', kind: 'shop', lat: shop.lat, lng: shop.lng, label: shop.name }].filter(Boolean)
+  return <div className="sl-live"><LiveMap markers={markers} follow="rider" height={200} chip={{ text: `${r.name || 'Rider'} · ${km != null ? (km < 0.15 ? 'arriving now' : kmTxt(km) + ' away · ~' + etaMin(km) + ' min') : seenAgo(r.seen)}`, old: !fresh(r.seen, 2) }} />
+    {!me && <p className="sl-mut">Set your pickup pin in Shop settings so riders find you faster.</p>}</div>
 }
 
 const SOrder = memo(function SOrder({ o, h, stage, ops, hoOn, img, shop, onPack, onConfirm, say }) {
@@ -517,10 +552,11 @@ const SOrder = memo(function SOrder({ o, h, stage, ops, hoOn, img, shop, onPack,
     {stage === 'pack' && <div className="sl-oact">
       {hoOn ? <button className="sl-btn" disabled={busy} onClick={() => { if (!all && !confirm('Not every item is ticked. Mark the parcel packed anyway?')) return; run(async () => { await onPack(o, true); say(`#${o.order_no} is packed. ${ops.mode === 'dropoff' ? 'Bring it to the hub.' : 'A rider will collect it.'}`) }) }}><Ico n="pkg" s={18} />{busy ? 'Saving…' : 'Mark packed & ready'}</button>
         : <p className="sl-mut">Pack it now. Pinkish will collect it and update the status.</p>}
-      <button className="sl-btn ghost sm" onClick={() => { if (!printSlip(o, shop)) say('Allow pop-ups to print the packing slip.') }}><Ico n="print" s={15} />Packing slip</button>
+      <button className="sl-btn ghost sm" onClick={() => { if (!printSlip(o, shop)) say('Printing is not available on this device.') }}><Ico n="print" s={15} />Packing slip</button>
     </div>}
     {stage === 'ready' && <div className="sl-hand">
-      {h?.rider_name ? <div className="sl-rider"><span className="ic"><Ico n="truck" s={18} /></span><span><small>Pinkish rider</small><b>{h.rider_name}</b></span>{h.rider_phone && <a className="sl-btn ghost sm" href={'tel:' + h.rider_phone}><Ico n="phone" s={15} />Call rider</a>}</div>
+      <RiderComing o={o} shop={shop} on={hoOn && ops.mode !== 'dropoff'} />
+      {h?.rider_name ? <div className="sl-rider"><span className="ic"><Ico n="truck" s={18} /></span><span><small>Pinkish rider</small><b>{h.rider_name}</b></span>{telHref(h.rider_phone) && <a className="sl-btn ghost sm" href={telHref(h.rider_phone)}><Ico n="phone" s={15} />Call rider</a>}</div>
         : <p className="sl-mut"><Ico n="clock" s={14} /> {ops.mode === 'dropoff' ? 'Bring the parcel to the hub. Staff there will give you the code.' : 'Pinkish is assigning a rider. You will get a notification.'}</p>}
       <form className="sl-code" onSubmit={e => { e.preventDefault(); run(async () => { await onConfirm(o, code); setCode(''); say(`#${o.order_no} handed to Pinkish ✓`) }) }}>
         <label><span>Pickup code from the rider</span><input inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" maxLength={4} placeholder="••••" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))} aria-label="4-digit pickup code" /></label>
@@ -546,9 +582,9 @@ function Orders({ orders, ho, hoOn, ops, shop, img, reload, say, err }) {
   const onPack = useCallback(async (o, v) => { await markPacked(o.id, v); await reload() }, [reload])
   const onConfirm = useCallback(async (o, c) => { await confirmPickup(o.id, c); await reload() }, [reload])
   const csv = () => {
-    const c = v => { v = String(v ?? ''); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"' }
+    const c = v => { v = String(v ?? ''); if (/^[=+\-@\t\r|]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"' }
     const out = [['Order', 'Date', 'Items', 'Status', 'Sales', 'Your payout'], ...rows.map(r => [r.o.order_no, r.o.created_at, (r.o.lines || []).map(l => `${l.name}${l.variant ? ' (' + l.variant + ')' : ''} x${l.qty}`).join('; '), STG[r.stage][0], r.o.subtotal, Math.round(earn(r.o, ops))])]
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out.map(r => r.map(c).join(',')).join('\n')], { type: 'text/csv' })); a.download = 'pinkish-orders.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + out.map(r => r.map(c).join(',')).join('\r\n')], { type: 'text/csv' })); a.download = `pinkish-orders-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   }
   if (orders === null) return <div className="sl-skel tall" />
   return (
@@ -596,7 +632,7 @@ function Overview({ shop, go, orders, ho, hoOn, ops, prods, qs, retN, followers,
   const lp = prods || [], liveP = lp.filter(p => p.is_active !== false), outP = liveP.filter(p => (p.stock ?? 0) === 0), lowP = liveP.filter(p => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= 5)
   const qOpen = (qs || []).filter(q => !q.answer).length, qRate = qs?.length ? (qs.length - qOpen) / qs.length : 1
   const H = [
-    [!!shop.logo_url, 10, 'Add your shop logo', 'shop'], [!!shop.cover_url, 5, 'Add a cover picture', 'shop'], [(shop.description || '').trim().length >= 30, 5, 'Write a short "About" for your shop', 'shop'],
+    [!!shop.logo_url, 10, 'Add your shop logo', 'shop'], [!!shop.cover_url || okLL(shop.lat, shop.lng), 5, okLL(shop.lat, shop.lng) ? 'Add a cover picture' : 'Pin your pickup location on the map', 'shop'], [(shop.description || '').trim().length >= 30, 5, 'Write a short "About" for your shop', 'shop'],
     [liveP.length >= 5, 15, `List at least 5 products (${liveP.length}/5)`, 'products'], [!outP.length, 15, `Restock ${outP.length} sold-out product${outP.length === 1 ? '' : 's'}`, 'products'],
     [qRate >= 0.9, 20, `Answer customer questions (${qOpen} waiting)`, 'questions'], [s.onTime == null || s.onTime >= 0.9, 20, `Pack orders within ${ops.pack_hours || 24}h (${s.onTime == null ? '' : Math.round(s.onTime * 100) + '% on time'})`, 'orders'],
     [lp.some(dealLive), 10, 'Run a flash deal to bring followers back', 'products'],
@@ -660,6 +696,28 @@ function Overview({ shop, go, orders, ho, hoOn, ops, prods, qs, retN, followers,
 }
 
 const initial = n => String(n || 'S').trim().charAt(0).toUpperCase()
+// Pickup location on the map: riders navigate straight to this pin. Private, customers never see it.
+function PickupPin({ shop, onSaved }) {
+  const has = okLL(shop.lat, shop.lng), [pt, setPt] = useState(has ? { lat: +shop.lat, lng: +shop.lng } : null), [edit, setEdit] = useState(!has)
+  const [busy, setBusy] = useState(false), [gps, setGps] = useState(false), [err, setErr] = useState(''), [ok, setOk] = useState('')
+  const km = pt ? kmFromHub(pt.lat, pt.lng) : null
+  const locate = () => {
+    if (!navigator.geolocation) return setErr('Location is not supported on this device.')
+    setGps(true); setErr('')
+    navigator.geolocation.getCurrentPosition(p => { setGps(false); setPt({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6) }) },
+      e => { setGps(false); setErr(e.code === 1 ? 'Location permission denied. Move the map to your shop instead.' : 'Could not get your location. Move the map to your shop instead.') },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 })
+  }
+  const save = async () => { if (!pt) return setErr('Move the map so the pin sits on your shop.'); setBusy(true); setErr(''); setOk(''); try { onSaved(await setShopLocation(shop, pt.lat, pt.lng)); setOk('Pickup location saved. Riders navigate straight to it.'); setEdit(false) } catch (x) { setErr(msg(x)) } setBusy(false) }
+  return <div className="sl-card sl-pin">
+    <div className="sl-head"><div><h2>Pickup location</h2><p className="sl-mut">Riders use this pin to find your shop. Only Pinkish sees it.</p></div>{has && !edit && <button type="button" className="sl-btn ghost sm" onClick={() => setEdit(true)}>Move pin</button>}</div>
+    {err && <div className="sl-err" role="alert">{err}</div>}{ok && <div className="sl-ok" role="status">{ok}</div>}
+    {edit ? <PinPicker value={pt} onChange={setPt} height={260} />
+      : <LiveMap markers={[{ id: 'shop', kind: 'shop', lat: shop.lat, lng: shop.lng, label: shop.name }, { id: 'hub', kind: 'hub', lat: HUB.lat, lng: HUB.lng, label: 'Pinkish hub · ' + HUB.name }]} zone height={200} />}
+    {km != null && <p className={'sl-zone' + (km <= RIDER_KM ? ' in' : '')}><Ico n={km <= RIDER_KM ? 'truck' : 'pin'} s={15} />{kmTxt(km)} from the Pinkish hub ({HUB.name}){km <= RIDER_KM ? ' · inside the Pinkish rider zone' : ` · outside the ${RIDER_KM} km rider zone`}</p>}
+    {edit && <div className="sl-acts"><button type="button" className="sl-btn" disabled={busy || !pt} onClick={save}>{busy ? 'Saving…' : 'Save pickup location'}</button><button type="button" className="sl-btn ghost sm" disabled={gps} onClick={locate}><Ico n="pin" s={15} />{gps ? 'Finding you…' : 'Use my location'}</button>{has && <button type="button" className="sl-btn ghost sm" onClick={() => { setPt({ lat: +shop.lat, lng: +shop.lng }); setEdit(false) }}>Cancel</button>}</div>}
+  </div>
+}
 function ShopSettings({ shop, onSaved }) {
   const [f, setF] = useState({ name: shop.name, description: shop.description || '', phone: shop.phone, address: shop.address, city: shop.city || '' })
   const [err, setErr] = useState(''), [ok, setOk] = useState(''), [busy, setBusy] = useState(false), [lbusy, setLbusy] = useState(false), [cbusy, setCbusy] = useState(false)
@@ -704,6 +762,7 @@ function ShopSettings({ shop, onSaved }) {
           <small className="sl-mut">Square image works best. Any picture works, we resize it for you.</small>
         </div>
       </div>
+      <PickupPin shop={shop} onSaved={onSaved} />
       <form className="sl-card" onSubmit={go}>
         <h2>Shop details</h2>
         <Inp label="Shop name" value={f.name} onChange={set('name')} maxLength={60} required />
@@ -758,10 +817,11 @@ function useSellerData(shop, say) {
     load(); loadProds()
     getSellerOps().then(o => { MEM.ops = o; setOps(o) })
     getFollowerCount(shop.id).then(setFollowers)
-    const t = setInterval(() => { if (!document.hidden) load() }, 45000)
-    const vis = () => { if (!document.hidden) load() }
-    document.addEventListener('visibilitychange', vis)
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis) }
+    const live = () => !document.hidden && navigator.onLine !== false
+    const t = setInterval(() => { if (live()) load() }, 45000)
+    const vis = () => { if (live()) load() }
+    document.addEventListener('visibilitychange', vis); addEventListener('online', vis)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); removeEventListener('online', vis) }
   }, [load, loadProds, shop.id])
   const sold = useMemo(() => { const m = {}; (orders || []).filter(o => o.status !== 4).forEach(o => (o.lines || []).forEach(l => { m[l.name] = (m[l.name] || 0) + Number(l.qty || 0) })); return m }, [orders])
   const img = useMemo(() => Object.fromEntries((prods || []).filter(p => p.image_url).map(p => [p.name, p.image_url])), [prods])
@@ -772,10 +832,10 @@ function useSellerData(shop, say) {
 function Dashboard({ shop, user, setShop, logout }) {
   const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('sl_tab') || 'overview' } catch { return 'overview' } }), [toast, setToast] = useState(''), tt = useRef(0), scr = useRef(null)
   const say = useCallback(m => { setToast(m); clearTimeout(tt.current); tt.current = setTimeout(() => setToast(''), 3200) }, [])
-  const D = useSellerData(shop, say)
+  const D = useSellerData(shop, say), online = useOnline()
   const [retN, setRetN] = useState(() => (MEM.returns || []).filter(needsYou).length)
   useEffect(() => {
-    const run = () => { if (!document.hidden) sellerReturns().then(r => { MEM.returns = r; setRetN(r.filter(needsYou).length) }).catch(() => {}) }
+    const run = () => { if (!document.hidden && navigator.onLine !== false) sellerReturns().then(r => { MEM.returns = r; setRetN(r.filter(needsYou).length) }).catch(() => {}) }
     run(); const t = setInterval(run, 60000); return () => clearInterval(t)
   }, [])
   const go = useCallback(t => { setTab(t); try { sessionStorage.setItem('sl_tab', t) } catch { /* storage unavailable */ } scr.current?.scrollTo?.(0, 0) }, [])
@@ -786,12 +846,13 @@ function Dashboard({ shop, user, setShop, logout }) {
       <nav className="sb" aria-label="Seller sections">
         <div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
         <div className="me"><span className="mav" aria-hidden="true">{shop.logo_url ? <img src={shop.logo_url} alt="" /> : initial(shop.name)}</span><b>{shop.name}</b><small>Seller Centre{D.followers ? ' · ' + D.followers + ' followers' : ''}</small></div>
-        <div className="nv">{NAV.map(([k, l, ic, n]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ico n={ic} s={20} /></span><span className="lb">{l}</span>{n > 0 && <em aria-label={n + ' need attention'}>{n > 99 ? '99+' : n}</em>}</button>)}</div>
+        <div className="nv">{NAV.map(([k, l, ic, n]) => <button key={k} title={l} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ico n={ic} s={20} /></span><span className="lb">{l}</span>{n > 0 && <em aria-label={n + ' need attention'}>{n > 99 ? '99+' : n}</em>}</button>)}</div>
         <div className="sp" />
         <a className="lo vs" href="/"><i aria-hidden="true"><Ico n="bag" s={15} /></i>View store</a>
         <button className="lo" onClick={logout}><i aria-hidden="true"><Ico n="out" s={15} /></i>Log out</button>
       </nav>
       <main className="mn">
+        {!online && <div className="sl-offline" role="status">No internet. Showing your last update. Changes need a connection.</div>}
         <header className="top"><h1>{TITLE[tab]}</h1><div className="ta"><a className="ib2" href="/" aria-label="View store"><Ico n="bag" s={20} /></a><button className="ib2 mo" aria-label="Log out" onClick={logout}><Ico n="out" s={20} /></button></div></header>
         <div className="scr" ref={scr}><div className="pg" key={tab}>
           <Welcome shop={shop} user={user} />
@@ -809,24 +870,40 @@ function Dashboard({ shop, user, setShop, logout }) {
   )
 }
 
+// Seller Centre must never be shown inside another site's frame (clickjacking protection, also set as a header on the server)
+const FRAMED = (() => { try { return window.top !== window.self } catch { return true } })()
 export default function Seller() {
   const lock = useRef(false), [user, setUser] = useState(undefined), [shop, setShop] = useState(undefined), [err, setErr] = useState('')
 
+  const uidRef = useRef(null)
   useEffect(() => {
     document.title = 'Seller Centre · Pinkish'
     try { sessionStorage.removeItem('pk_seller') } catch { /* storage unavailable */ }
+    // private area: keep it out of search engines and give phones the right theme colour
+    const meta = (name, content) => { let m = document.querySelector(`meta[name="${name}"]`); const had = !!m, old = m?.getAttribute('content'); if (!m) { m = document.createElement('meta'); m.name = name; document.head.appendChild(m) } m.setAttribute('content', content); return () => { if (had) m.setAttribute('content', old || ''); else m.remove() } }
+    const undo = [meta('robots', 'noindex,nofollow'), meta('theme-color', '#f7effb'), meta('referrer', 'strict-origin-when-cross-origin')]
     // session comes straight from local storage: no extra admin/profile lookups for sellers
     supabase?.auth.getSession().then(({ data }) => { const a = data?.session?.user; setUser(a ? { id: a.id, email: a.email, name: a.user_metadata?.full_name || a.email?.split('@')[0] || 'Seller', mobile: a.user_metadata?.phone || '' } : null) }).catch(() => setUser(null))
-    return onAuthChange((u, ev) => { if (ev === 'SIGNED_OUT') { wipe(); setUser(null); setShop(undefined) } else if (u && !lock.current) setUser(u) })
+    const off = onAuthChange((u, ev) => {
+      if (ev === 'SIGNED_OUT') { wipe(); clearDraft(); setUser(null); setShop(undefined) }
+      else if (u && !lock.current) {
+        // another account signed in (e.g. in a second tab): never show the previous seller's cached data
+        if (uidRef.current && uidRef.current !== u.id) { wipe(); setShop(undefined) }
+        setUser(u)
+      }
+    })
+    return () => { off(); undo.forEach(f => f()) }
   }, [])
+  useEffect(() => { uidRef.current = user?.id || null }, [user?.id])
   const loadShop = useCallback(async u => { setErr(''); try { setShop(await getMyShop(u.id)) } catch (x) { setErr(msg(x)); setShop(null) } }, [])
   useEffect(() => { if (user) loadShop(user) }, [user?.id, loadShop]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (FRAMED) return <div className="slx"><div className="sl-wrap"><div className="sl-err">For your safety, Seller Centre only opens in its own window. <a href="/merchant" target="_top" rel="noopener">Open Seller Centre</a></div></div></div>
   if (!supabase) return <div className="slx"><div className="sl-wrap"><div className="sl-err">The store is not configured.</div></div></div>
   if (user === undefined) return <div className="slx"><div className="sl-wrap sl-mut">Loading…</div></div>
   if (!user) return <div className="slx"><Auth onUser={setUser} lock={lock} /></div>
 
-  const logout = () => signOut().then(() => { wipe(); try { sessionStorage.removeItem('sl_tab') } catch { /* storage unavailable */ } setUser(null); setShop(undefined) })
+  const logout = () => signOut().then(() => { wipe(); clearDraft(); try { sessionStorage.removeItem('sl_tab') } catch { /* storage unavailable */ } setUser(null); setShop(undefined) })
   if (shop && shop.status === 'approved') return <Dashboard shop={shop} user={user} setShop={setShop} logout={logout} />
   const top = (
     <div className="sl-top"><div className="sl-top-in">

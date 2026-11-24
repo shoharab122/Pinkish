@@ -749,3 +749,36 @@ html.adm-on body{position:fixed;inset:0;width:100%}
 }
 .mq.pk .g1 b,.mq.pk .g1 small{white-space:normal}
 .atip{width:max-content;max-width:180px}
+
+/* =========================================================
+   Riders (Pinkish Rider app) · delivery card in orders
+   ========================================================= */
+.dlv{display:grid;gap:10px;border-left:5px solid #e69500}
+.dlv.out{border-left-color:#2757b3;background:linear-gradient(90deg,#f2f6ff,#fff 55%)}
+.dlv.delivered{border-left-color:var(--ok)}.dlv.failed{border-left-color:var(--er);background:linear-gradient(90deg,#fff0f4,#fff 55%)}
+.dlv.cancelled{opacity:.7;border-left-color:#c9bcd6}
+.dlv-h{display:flex;align-items:center;gap:10px}.dlv-h .sc-av{width:40px;height:40px;border-radius:13px}
+.dlv-h .g1{min-width:0}.dlv-h small{overflow:hidden;text-overflow:ellipsis}
+.dlv .pk-code small.er{flex:none;font-weight:700}
+.dlv .pk-r select{flex:1;min-width:0}
+.rdc{background:#e6effd!important;color:#2757b3!important}
+.rdc.failed{background:#fdecf2!important;color:var(--er)!important}.rdc.delivered{background:#e4f6ec!important;color:var(--ok)!important}
+.sc-av{position:relative}
+.rd-dot{position:absolute;right:3px;bottom:3px;width:11px;height:11px;border-radius:50%;background:#c9bcd6;box-shadow:0 0 0 2px #fff}
+.rd-dot.on{background:#22c55e}
+.rd-top{margin:0}
+.rd-cash{display:flex;align-items:center;gap:12px;background:linear-gradient(145deg,#e9f8f0,#fff);border-color:#bfe5cf}
+.rd-cash small{display:block;color:var(--mut);font-size:.78rem}.rd-cash b{font:700 1.5rem var(--serif,inherit);color:#0f7a5a}
+.rd-fail{display:grid;gap:8px;border-left:5px solid var(--er)}.rd-fail h3{margin:0}
+.rd-job .g1 small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dlv .pk-r{grid-template-columns:minmax(0,1fr) auto}
+@media(max-width:640px){.dlv .pk-r{grid-template-columns:1fr}}
+.dlv>p.ok{color:var(--ok);font-weight:600;margin:0}.dlv>p.wn{margin:0;font-weight:600}
+/* ---------- delivery zone, courier booking, live maps ---------- */
+.zn{display:grid;gap:12px}
+.zn-h{display:flex;align-items:center;gap:12px}.zn-h .g1{min-width:0}
+.zn.courier{border-color:#f3d3a0;background:linear-gradient(145deg,#fffaf0,#fff)}
+.zn-c{display:grid;gap:10px}.zn-c p{margin:0}.zn-c .pk-r{margin:0}
+.zn-p{width:max-content;max-width:100%;overflow-x:auto}
+.crb{color:#9a5a00;background:#fff3df;border-radius:99px;padding:2px 9px;font-weight:700}.crb.ok{color:#1f8a54;background:#e4f6ec}
+.fleet .rh{display:grid;gap:2px;margin-bottom:12px}.fleet .rh h2{margin:0}

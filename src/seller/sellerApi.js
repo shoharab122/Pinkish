@@ -8,6 +8,17 @@ const slugify = n => (s(n, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace
 export const validNid = n => /^(\d{10}|\d{13}|\d{17})$/.test(String(n || '').replace(/[\s-]/g, ''))
 const nidOf = f => s(f?.nid, 20).replace(/[\s-]/g, '')
 export const validPhone = p => /^(\+?88)?01[3-9]\d{8}$/.test(String(p || '').replace(/[\s-]/g, ''))
+// tel: links only ever get digits and a leading + (used for "Call rider")
+export const telHref = p => { const n = String(p || '').replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '').slice(0, 16); return n.length >= 6 ? 'tel:' + n : '' }
+// Database / network errors become a short message a seller understands (no SQL text on screen)
+const TECH = /violates|row-level|relation|column|syntax|permission denied|pgrst|null value|duplicate key|constraint|uuid|invalid input/i
+const fail = (e, fb = 'Something went wrong. Please try again.') => {
+  const m = String(e?.message || e || '')
+  if (/failed to fetch|network|load failed/i.test(m)) return new Error('No internet connection. Check your data and try again.')
+  if (/jwt|not authenticated|refresh token/i.test(m)) return new Error('Please log in again.')
+  if (/row-level|permission denied/i.test(m)) return new Error('You are not allowed to do that. Refresh and try again.')
+  return new Error(m && m.length < 220 && !TECH.test(m) ? m : fb)
+}
 // Sellers sell only through Pinkish: no phone numbers, messenger names or links in public text.
 // The same rule runs in the database (supabase-seller-ops.sql), this just gives a quick, friendly message.
 const BN = '০১২৩৪৫৬৭৮৯'
@@ -59,7 +70,8 @@ export async function preparePhoto(file) {
 // Tells any open store tab (same browser) to refresh its product list right now.
 let bc
 const announce = () => { try { bc = bc || new BroadcastChannel('pk-products'); bc.postMessage(Date.now()) } catch { /* not supported */ } }
-const cleanShop = f => ({ name: s(f.name, 60), description: s(f.description, 500), phone: s(f.phone, 20), address: s(f.address, 300), city: s(f.city, 60) })
+const cleanPhone = p => { let n = String(p || '').replace(/\D/g, ''); if (n.startsWith('880')) n = n.slice(2); return n.slice(0, 11) }
+const cleanShop = f => ({ name: s(f.name, 60), description: s(f.description, 500), phone: cleanPhone(f.phone), address: s(f.address, 300), city: s(f.city, 60) })
 function checkShop(c) {
   if (c.name.length < 3) throw new Error('Shop name must be at least 3 characters.')
   noContact('Shop name and description', c.name, c.description)
@@ -69,16 +81,22 @@ function checkShop(c) {
 async function uploadDoc(uid, file) {
   checkFile(file, { doc: true })
   const o = file.type === 'application/pdf' ? { blob: file, type: file.type, ext: 'pdf' } : await prepareImage(file, 2000, 0.9)
-  const path = `${uid}/${Date.now()}-id.${o.ext}`
-  const { error } = await supabase.storage.from('seller-docs').upload(path, o.blob, { contentType: o.type })
-  if (error) throw error
-  return path
+  const path = `${uid}/${Date.now()}-${rand()}-id.${o.ext}`
+  let err
+  for (let a = 0; a < 3; a++) {
+    const { error } = await supabase.storage.from('seller-docs').upload(path, o.blob, { contentType: o.type, upsert: false })
+    if (!error) return path
+    err = error
+    if (/row-level|not allowed|mime|too large|exceeded/i.test(String(error.message))) break
+    await new Promise(r => setTimeout(r, 700 * (a + 1)))
+  }
+  throw fail(err, 'Could not upload your NID photo. Check your internet and try again.')
 }
 
 export async function getMyShop(uid) {
   need()
   const { data, error } = await supabase.from('shops').select('*').eq('owner_id', uid).maybeSingle()
-  if (error) throw error
+  if (error) throw fail(error, 'Could not load your shop. Please try again.')
   return data
 }
 export async function createShop(uid, form, docFile) {
@@ -86,7 +104,7 @@ export async function createShop(uid, form, docFile) {
   const nid = nidOf(form); if (!validNid(nid)) throw new Error('Enter your NID number (10, 13 or 17 digits).')
   const id_doc_path = await uploadDoc(uid, docFile)
   const { data, error } = await supabase.from('shops').insert({ ...c, nid_number: nid, owner_id: uid, slug: slugify(c.name), id_doc_path, status: 'pending' }).select().single()
-  if (error) throw new Error(/duplicate|unique/i.test(error.message) ? 'You already have a shop.' : error.message)
+  if (error) throw /duplicate|unique/i.test(error.message) ? new Error('You already have a shop.') : fail(error, 'Could not create your shop. Please try again.')
   return data
 }
 // Rejected sellers fix their details and send the shop for review again.
@@ -96,7 +114,7 @@ export async function resubmitShop(uid, shop, form, docFile) {
   const nid = nidOf(form); if (nid) { if (!validNid(nid)) throw new Error('NID number must be 10, 13 or 17 digits.'); patch.nid_number = nid }
   if (docFile) patch.id_doc_path = await uploadDoc(uid, docFile)
   const { data, error } = await supabase.from('shops').update(patch).eq('id', shop.id).select().single()
-  if (error) throw error
+  if (error) throw fail(error, 'Could not resubmit your shop. Please try again.')
   return data
 }
 // logoFile / coverFile: a File to replace the picture, or null to leave it. removeCover() clears the cover.
@@ -110,18 +128,18 @@ export async function updateShop(shop, form, logoFile, coverFile) {
   if (logo) patch.logo_url = logo
   if (cover) patch.cover_url = cover
   const { data, error } = await supabase.from('shops').update(patch).eq('id', shop.id).select().single()
-  if (error) throw error
+  if (error) throw /cover_url/i.test(error.message) ? error : fail(error, 'Could not save your shop details. Please try again.')
   return data
 }
 export async function removeCover(shop) {
   need()
   const { data, error } = await supabase.from('shops').update({ cover_url: null }).eq('id', shop.id).select().single()
-  if (error) throw error
+  if (error) throw fail(error, 'Could not remove the cover picture.')
   return data
 }
 export async function uploadImage(shopId, file, maxDim = 1000) {
   need(); checkFile(file)
-  const o = READY.has(file) ? { blob: file, type: file.type, ext: (file.name.split('.').pop() || 'jpg') } : await prepareImage(file, maxDim)
+  const o = READY.has(file) ? { blob: file, type: file.type, ext: file.type === 'image/webp' ? 'webp' : 'jpg' } : await prepareImage(file, maxDim)
   const path = `shops/${shopId}/${Date.now()}-${rand()}.${o.ext}`
   // a flaky mobile connection is the usual reason a photo goes missing: retry before giving up
   let err
@@ -141,7 +159,7 @@ export async function getCategoriesList() {
 export async function myProducts(shopId) {
   need()
   const { data, error } = await supabase.from('products').select('*').eq('shop_id', shopId).order('created_at', { ascending: false })
-  if (error) throw error
+  if (error) throw fail(error, 'Could not load your products. Please try again.')
   return data || []
 }
 export const PHOTOS = 4
@@ -182,23 +200,23 @@ export async function saveProduct(shop, form, photos, existing, base = null) {
   }
   if (existing) {
     const { data, error } = await supabase.from('products').update(row).eq('id', existing.id).eq('shop_id', shop.id).select().single()
-    if (error) throw error; announce(); return data
+    if (error) throw fail(error, 'Could not save the product. Please try again.'); announce(); return data
   }
   if (!photos) throw new Error(`Add ${PHOTOS} product photos.`)
   const { data, error } = await supabase.from('products').insert({ ...row, shop_id: shop.id, variants: [{ label: 'Standard', mult: 1 }], features: [] }).select().single()
-  if (error) throw error
+  if (error) throw fail(error, 'Could not save the product. Please try again.')
   announce()
   return data
 }
 export async function deleteProduct(shop, id) {
-  need(); const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', shop.id); if (error) throw error
+  need(); const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', shop.id); if (error) throw fail(error, /foreign key|referenced/i.test(error.message) ? 'This product has orders, so it cannot be deleted. Hide it instead.' : 'Could not delete the product.')
   announce()
 }
 export async function sellerOrders() {
-  need(); const { data, error } = await supabase.rpc('seller_orders'); if (error) throw error; return data || []
+  need(); const { data, error } = await supabase.rpc('seller_orders'); if (error) throw fail(error, 'Could not load your orders. Pull to refresh.'); return data || []
 }
 export async function sellerQuestions() {
-  need(); const { data, error } = await supabase.rpc('seller_questions'); if (error) throw error; return data || []
+  need(); const { data, error } = await supabase.rpc('seller_questions'); if (error) throw fail(error, 'Could not load questions.'); return data || []
 }
 export async function answerQuestion(id, answer) {
   need(); noContact('Answers', answer)
@@ -208,7 +226,7 @@ export async function answerQuestion(id, answer) {
 // ---------------- Returns (only this seller's items; no customer details) ----------------
 export async function sellerReturns() {
   need(); const { data, error } = await supabase.rpc('seller_returns')
-  if (error) throw new Error(/does not exist|schema cache/i.test(error.message) ? 'Returns are not set up yet. Ask Pinkish to run the returns update.' : error.message)
+  if (error) throw new Error(/does not exist|schema cache/i.test(error.message) ? 'Returns are not set up yet. Ask Pinkish to run the returns update.' : fail(error, 'Could not load returns.').message)
   return data || []
 }
 export async function respondReturn(id, response, note) {
@@ -221,7 +239,7 @@ export async function setStock(shop, id, stock) {
   const n = parseInt(stock, 10)
   if (!Number.isInteger(n) || n < 0 || n > 100000) throw new Error('Enter a valid stock quantity.')
   const { data, error } = await supabase.from('products').update({ stock: n }).eq('id', id).eq('shop_id', shop.id).select().single()
-  if (error) throw error
+  if (error) throw fail(error, 'Could not save the stock. Try again.')
   announce(); return data
 }
 
@@ -232,20 +250,20 @@ const notSetUp = e => /does not exist|schema cache|could not find/i.test(String(
 export async function sellerHandovers() {
   need()
   const { data, error } = await supabase.rpc('seller_handovers')
-  if (error) { if (notSetUp(error)) return null; throw error } // null = feature not installed yet
+  if (error) { if (notSetUp(error)) return null; throw fail(error) } // null = feature not installed yet
   return data || []
 }
 export async function markPacked(orderId, packed = true) {
   need()
   const { error } = await supabase.rpc('seller_mark_packed', { p_order: orderId, p_packed: packed })
-  if (error) throw new Error(notSetUp(error) ? 'Pickups are not set up yet. Ask Pinkish to run the seller update.' : error.message)
+  if (error) throw new Error(notSetUp(error) ? 'Pickups are not set up yet. Ask Pinkish to run the seller update.' : fail(error, 'Could not update the order. Try again.').message)
 }
 export async function confirmPickup(orderId, code) {
   need()
   const c = String(code || '').replace(/\D/g, '')
   if (c.length !== 4) throw new Error('Enter the 4-digit code the rider tells you.')
   const { data, error } = await supabase.rpc('seller_confirm_pickup', { p_order: orderId, p_code: c })
-  if (error) throw new Error(notSetUp(error) ? 'Pickups are not set up yet. Ask Pinkish to run the seller update.' : error.message)
+  if (error) throw new Error(notSetUp(error) ? 'Pickups are not set up yet. Ask Pinkish to run the seller update.' : fail(error, 'Could not check the code. Try again.').message)
   if (data === 'wrong') throw new Error('That code is not right. Do not hand over the parcel. Ask the rider to check the code in the Pinkish rider app.')
   if (data === 'locked') throw new Error('Too many wrong codes. Keep the parcel and contact Pinkish support.')
   if (data === 'closed') throw new Error('This order was cancelled. Keep the parcel.')
@@ -261,4 +279,19 @@ export async function getSellerOps() {
 export async function productStats() {
   if (!supabase) return {}
   try { const { data, error } = await supabase.rpc('seller_product_stats'); return error ? {} : Object.fromEntries((data || []).map(r => [String(r.product_id), Number(r.saves) || 0])) } catch { return {} }
+}
+// ---------------- Pickup location + live rider map ----------------
+// The pin riders navigate to. Stored on the shop (lat/lng), only inside Bangladesh.
+export async function setShopLocation(shop, lat, lng) {
+  need()
+  const a = Math.round(+lat * 1e6) / 1e6, b = Math.round(+lng * 1e6) / 1e6
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a < 20 || a > 27 || b < 88 || b > 93) throw new Error('Move the pin to your shop in Bangladesh.')
+  const { data, error } = await supabase.from('shops').update({ lat: a, lng: b }).eq('id', shop.id).select().single()
+  if (error) throw new Error(/lat|lng|column/i.test(error.message) ? 'Shop pins are not set up yet. Ask Pinkish to run supabase-delivery-zones.sql.' : fail(error, 'Could not save your location. Try again.').message)
+  return data
+}
+// Where the Pinkish rider is while they come to collect this order (null when not on the way)
+export async function riderLocation(orderId) {
+  if (!supabase) return null
+  try { const { data, error } = await supabase.rpc('seller_rider_location', { p_order: String(orderId) }); return error ? null : data || null } catch { return null }
 }

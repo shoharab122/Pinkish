@@ -2,6 +2,8 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom'
 import { supabase as sb } from '../api'
 import './admin.css'
+import { LiveMap } from '../lib/LiveMap.jsx'
+import { HUB, RIDER_KM, COURIERS, modeOf, orderKm, okLL, kmTxt, trackUrl, safeUrl, fresh, seenAgo } from '../lib/zone.js'
 
 const ago = d => { const m = Math.max(0, Math.round((Date.now() - new Date(d)) / 6e4)); return m < 1 ? 'Just now' : m < 60 ? m + 'm ago' : m < 1440 ? Math.floor(m / 60) + 'h ago' : Math.floor(m / 1440) + 'd ago' }
 const ini = n => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
@@ -17,7 +19,7 @@ const HO = { new: ['Seller packing', 's0'], packed: ['Ready for pickup', 's1'], 
 const OPS0 = { mode: 'pickup', hub_address: '', hours: 'Sat–Thu, 10am–6pm', pack_hours: 24, commission: 10, notice: '' }
 const hoOpen = (o, hs) => (o.status || 0) < 2 && o.status !== 4 && (hs || []).some(h => h.status === 'new' || h.status === 'packed')
 const readRiders = () => { try { const a = JSON.parse(localStorage.getItem('adm-riders') || '[]'); return Array.isArray(a) ? a.slice(0, 12) : [] } catch { return [] } }
-const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['returns', 'Returns'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['cats', 'Categories'], ['notify', 'Notify'], ['hero', 'Hero']]
+const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['returns', 'Returns'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['riders', 'Riders'], ['cats', 'Categories'], ['notify', 'Notify'], ['hero', 'Hero']]
 
 const ICN = {
   dash: <><rect x="3" y="3" width="7.5" height="9" rx="2.2" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="2.2" /><rect x="13.5" y="12" width="7.5" height="9" rx="2.2" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="2.2" /></>,
@@ -39,6 +41,7 @@ const ICN = {
   inbox: <><path d="M4 13l2.2-7.2A1.5 1.5 0 0 1 7.6 4.8h8.8a1.5 1.5 0 0 1 1.4 1l2.2 7.2v5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z" /><path d="M4 13h4.5l1 2.5h5l1-2.5H20" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5.2l3.2 1.9" /></>,
   truck: <><path d="M2.5 6.5h10.5v10H2.5zM13 10h4.2l3.3 3.3v3.2H13" /><circle cx="7" cy="18" r="1.9" /><circle cx="17" cy="18" r="1.9" /></>,
+  riders: <><circle cx="5.5" cy="17" r="3" /><circle cx="18.5" cy="17" r="3" /><path d="M5.5 17l4-7h5l4 7M9.5 10L8 7H5.5M14.5 10l1.5-3h2.5" /></>,
   check: <><circle cx="12" cy="12" r="9" /><path d="M7.8 12.4l2.9 2.9 5.5-6" /></>,
   chat: <><path d="M20.5 11.5a8.4 8.4 0 0 1-12.2 7.5L3.5 20.5 5 16A8.4 8.4 0 1 1 20.5 11.5z" /><path d="M9.2 8.8c.1 2.7 2.6 5.2 5.4 5.4l1.2-1.4-2-1-.9.8a4 4 0 0 1-2-2l.8-.9-1-2z" /></>,
   phone: <path d="M5 4h3.5l1.7 4.3-2.2 1.4a11 11 0 0 0 6.3 6.3l1.4-2.2L20 15.5V19a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z" />,
@@ -233,13 +236,14 @@ const readNotes = () => { try { const a = JSON.parse(localStorage.getItem('adm-n
 const stab = (m, rows) => rows.map(r => { const s = JSON.stringify(r), h = m.get(r.id); if (h && h.s === s) return h.r; m.set(r.id, { s, r }); return r })
 
 function Shell({ user }) {
-  const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false, shops: [], shopsErr: false, returns: [], retErr: false, ho: [], hoErr: false, ops: OPS0 }), [toast, setToast] = useState(''), [ld, setLd] = useState(true), [rf, setRf] = useState(false), tt = useRef(0), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({ o: new Map(), p: new Map() })
+  const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false, shops: [], shopsErr: false, returns: [], retErr: false, ho: [], hoErr: false, ops: OPS0, riders: [], ridersErr: false, dl: [], rops: RO0 }), [toast, setToast] = useState(''), [ld, setLd] = useState(true), [rf, setRf] = useState(false), tt = useRef(0), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({ o: new Map(), p: new Map() })
   const say = useCallback(m => { setToast(m); clearTimeout(tt.current); tt.current = setTimeout(() => setToast(''), 2400) }, [])
+  const ridersRef = useRef([]); ridersRef.current = d.riders || []
   const push = useCallback(n => { setNotes(a => [{ id: Date.now() + Math.random(), t: Date.now(), read: false, ...n }, ...a].slice(0, 40)); if (n.k !== 'wish') navigator.vibrate?.(60) }, [])
   const readAll = useCallback(() => setNotes(a => a.some(n => !n.read) ? a.map(n => n.read ? n : { ...n, read: true }) : a), [])
   const openOrder = useCallback(id => { setFocus(id); setNOpen(false); setTab('orders'); history.replaceState(null, '', '#orders') }, [])
   const clearFocus = useCallback(() => setFocus(null), [])
-  const [rfocus, setRfocus] = useState(null), [opre, setOpre] = useState(null), hoSeen = useRef(new Map())
+  const [rfocus, setRfocus] = useState(null), [opre, setOpre] = useState(null), hoSeen = useRef(new Map()), dlSeen = useRef(new Map())
   const openPickups = useCallback(() => { setOpre('pick'); setTab('orders'); history.replaceState(null, '', '#orders') }, [])
   const clearPre = useCallback(() => setOpre(null), [])
   const openReturn = useCallback(id => { setRfocus(id); setNOpen(false); setTab('returns'); history.replaceState(null, '', '#returns') }, [])
@@ -247,9 +251,9 @@ function Shell({ user }) {
   useEffect(() => { try { localStorage.setItem('adm-notes', JSON.stringify(notes)) } catch { /* storage unavailable */ } }, [notes])
   const go = t => { setTab(t); history.replaceState(null, '', '#' + t); document.querySelector('.scr')?.scrollTo?.(0, 0) }
   const load = useCallback(async () => {
-    const [o, p, c, w, sp, rr, hv, so] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false }), sb.from('return_requests').select('*').order('created_at', { ascending: false }).limit(500), sb.from('seller_handovers').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'seller_ops').maybeSingle()])
+    const [o, p, c, w, sp, rr, hv, so, rd, dv, ro] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false }), sb.from('return_requests').select('*').order('created_at', { ascending: false }).limit(500), sb.from('seller_handovers').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'seller_ops').maybeSingle(), sb.from('riders').select('*').order('created_at', { ascending: false }), sb.from('deliveries').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'rider_ops').maybeSingle()])
     const er = o.error || p.error || c.error; if (er) say(er.message)
-    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error, returns: rr.data || [], retErr: !!rr.error, ho: hv.data || [], hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) } }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); setLd(false)
+    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error, returns: rr.data || [], retErr: !!rr.error, ho: hv.data || [], hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) }, riders: rd.data || [], ridersErr: !!rd.error, dl: dv.data || [], rops: { ...RO0, ...(ro.data?.value || {}) } }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); dlSeen.current = new Map((dv.data || []).map(x => [x.id, x.status])); setLd(false)
   }, [say])
   useEffect(() => {
     const later = () => { clearTimeout(lt.current); lt.current = setTimeout(load, 400) } // coalesce bursts of realtime events
@@ -264,6 +268,9 @@ function Shell({ user }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'seller_handovers' }, p => { const r = p.new || {}, was = hoSeen.current.get(r.id); hoSeen.current.set(r.id, r.status); if (was !== r.status) { if (r.status === 'packed') { say('📦 A seller packed an order'); push({ k: 'shop', title: 'Seller packed an order', sub: r.rider_name ? 'Rider ' + r.rider_name + ' can collect it' : 'Assign a rider to collect it', oid: r.order_id }) } else if (r.status === 'picked') push({ k: 'order', title: 'Parcel handed to rider', sub: 'Seller confirmed with the pickup code', oid: r.order_id }) } later() })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'return_requests' }, p => { const r = p.new || {}; say('↩ Return requested #' + r.order_no); push({ k: 'ret', title: 'Return requested #' + r.order_no, sub: (r.reason || 'Return') + ' · ' + taka(r.amount), rid: r.id }); later() })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'return_requests' }, p => { const r = p.new || {}; if (r.seller_response && r.seller_response !== p.old?.seller_response) push({ k: 'ret', title: (r.seller_response === 'dispute' ? 'Seller disputed return #' : 'Seller agreed to return #') + r.order_no, sub: r.seller_note || r.reason || '', rid: r.id }); later() })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'riders' }, p => { const r = p.new || {}; say('🛵 New rider: ' + (r.name || 'rider')); push({ k: 'shop', title: 'New rider to verify', sub: (r.name || 'Rider') + (r.area ? ' · ' + r.area : '') }); later() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'riders' }, p => { const r = p.new; const old = r?.user_id && ridersRef.current.find(y => y.user_id === r.user_id); if (!old || old.status !== r.status) return later(); setD(x => ({ ...x, riders: x.riders.map(y => y.user_id === r.user_id ? { ...y, ...r } : y) })) })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, p => { const r = p.new || {}, was = dlSeen.current.get(r.id); if (r.id) dlSeen.current.set(r.id, r.status); if (r.status && was && was !== r.status) { if (r.status === 'failed') { say('⚠️ A rider could not deliver'); push({ k: 'order', title: 'Delivery failed', sub: r.fail_reason || 'Rider could not deliver', oid: r.order_id }) } else if (r.status === 'delivered') push({ k: 'order', title: 'Delivered by rider', sub: 'Customer code confirmed', oid: r.order_id }) } if (r.status === 'assigned' && !r.rider_id && r.fail_reason) push({ k: 'order', title: 'Rider declined a job', sub: r.fail_reason, oid: r.order_id }); later() })
       .subscribe()
     return () => { clearTimeout(lt.current); sb.removeChannel(ch) }
   }, [load, say, push])
@@ -273,16 +280,16 @@ function Shell({ user }) {
     ev.forEach(e => addEventListener(e, reset, { passive: true, capture: true })); reset()
     return () => { clearTimeout(t); ev.forEach(e => removeEventListener(e, reset, { capture: true })) }
   }, [])
-  const pend = d.orders.filter(o => !o.status).length, pshop = (d.shops || []).filter(s => s.status === 'pending').length, pret = (d.returns || []).filter(r => r.status === 'requested').length, prider = (d.ho || []).filter(h => h.status === 'packed' && !h.rider_name).length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length + pshop + pret + prider, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
+  const pend = d.orders.filter(o => !o.status).length, pshop = (d.shops || []).filter(s => s.status === 'pending').length, pret = (d.returns || []).filter(r => r.status === 'requested').length, prider = (d.ho || []).filter(h => h.status === 'packed' && !h.rider_name).length, pridr = (d.riders || []).filter(r => r.status === 'pending').length, fdl = (d.dl || []).filter(x => x.status === 'failed').length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length + pshop + pret + prider + pridr + fdl, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
   const nm = user.user_metadata?.full_name || (user.email || 'admin').split('@')[0]
   const p = { d, reload: load, say, go, focus, clearFocus, openOrder, openReturn, openPickups }
   return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
     <div className="me"><span className="mav" aria-hidden="true">{ini(nm)}</span><b>{nm}</b><small>Store admin</small></div>
-    <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k === 'notify' ? 'bell' : k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}{k === 'returns' && pret > 0 && <em>{pret}</em>}</button>)}</div>
+    <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k === 'notify' ? 'bell' : k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}{k === 'returns' && pret > 0 && <em>{pret}</em>}{k === 'riders' && pridr + fdl > 0 && <em>{pridr + fdl}</em>}</button>)}</div>
     <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
     <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => sb.auth.signOut()}><Ic n="out" s={20} /></button></div></header>
       <div className="scr">
-      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
+      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'riders' ? <Riders {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
     {nOpen && <Notifs orders={d.orders} shops={d.shops || []} rets={d.returns || []} ho={d.ho || []} onReturn={openReturn} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
     {toast && <div className="toast" role="status">{toast}</div>}</div>
 }
@@ -359,7 +366,7 @@ function Dash({ d, go, openPickups }) {
 }
 
 const PAGE = 25
-const OrderCard = memo(function OrderCard({ o, hs, onOpen, onNext }) {
+const OrderCard = memo(function OrderCard({ o, hs, dv, onOpen, onNext }) {
   const hr = (hs || []).filter(h => h.status !== 'cancelled'), hReady = hr.filter(h => h.status !== 'new').length, hDone = hr.length > 0 && hr.every(h => h.status === 'picked')
   const st = o.status || 0, its = o.items || [], n = its.reduce((a, i) => a + i.qty, 0), ph = o.address?.phone
   return <article className={'oc s' + st}>
@@ -368,7 +375,7 @@ const OrderCard = memo(function OrderCard({ o, hs, onOpen, onNext }) {
       <span className="g1"><b>{o.address?.name || 'Customer'} {st === 0 && <i className="nw">NEW</i>}</b><small>#{o.order_no} · {ago(o.created_at)}</small></span>
       <span className="rt"><b>{taka(o.total)}</b><span className={'pl s' + st}>{STEPS[st]}</span></span>
       <span className="its">{its.map(i => `${i.name}${i.qty > 1 ? ' ×' + i.qty : ''}`).join(', ') || 'No items'}</span>
-      <span className="pm"><span>{n} item{n === 1 ? '' : 's'}</span><span>{o.payment}</span>{o.payment_status === 'paid' && <span className="pd">✓ Paid</span>}{o.payment_status === 'verifying' && <span className="vf">⏳ Verify</span>}{hr.length > 0 && st < 2 && <span className={hDone ? 'pd' : 'hv'}>{hDone ? '✓ Collected from sellers' : `📦 ${hReady}/${hr.length} seller${hr.length === 1 ? '' : 's'} ready`}</span>}</span>
+      <span className="pm"><span>{n} item{n === 1 ? '' : 's'}</span><span>{o.payment}</span>{o.payment_status === 'paid' && <span className="pd">✓ Paid</span>}{o.payment_status === 'verifying' && <span className="vf">⏳ Verify</span>}{hr.length > 0 && st < 2 && <span className={hDone ? 'pd' : 'hv'}>{hDone ? '✓ Collected from sellers' : `📦 ${hReady}/${hr.length} seller${hr.length === 1 ? '' : 's'} ready`}</span>}{modeOf(o) === 'courier' && st < 4 && <span className={'crb' + (o.courier_tracking ? ' ok' : '')}>📦 {o.courier_tracking ? (o.courier_name || 'Courier') + ' booked' : 'Courier · book it'}</span>}{dv && dv.status !== 'cancelled' && st < 4 && <span className={'rdc ' + dv.status}>🛵 {dv.rname ? dv.rname + ' · ' : ''}{(DLV[dv.status] || DLV.assigned)[0]}</span>}</span>
     </button>
     <div className="oa"><small><Ic n="pin" s={13} /> {o.address?.address || 'No address'}</small>
       <div className="oq">{ph && <a className="ib3" href={'tel:' + ph} aria-label="Call customer"><Ic n="phone" s={17} /></a>}{ph && <a className="ib3 wa" href={wa(ph, WA[defTpl(o)][2](o))} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp customer"><Ic n="chat" s={17} /></a>}
@@ -376,9 +383,12 @@ const OrderCard = memo(function OrderCard({ o, hs, onOpen, onNext }) {
   </article>
 })
 
-function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [] }, reload, say, focus, clearFocus, openReturn, pre, clearPre }) {
+function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [], riders = [], dl = [], ridersErr }, reload, say, focus, clearFocus, openReturn, pre, clearPre }) {
   const [f, setF] = useState('all'), [q, setQ] = useState(''), [rg, setRg] = useState('all'), [sel, setSel] = useState(null), [busy, setBusy] = useState(false), [vo, setVo] = useState(false), [lim, setLim] = useState(PAGE), [inv, setInv] = useState(false), bz = useRef(false)
-  const [po, setPo] = useState(false)
+  const [po, setPo] = useState(false), [nr, setNr] = useState(false), [cb, setCb] = useState(false)
+  const dby = useMemo(() => { const rn = new Map(riders.map(r => [r.user_id, (r.name || '').split(' ')[0]])); return new Map(dl.map(x => [String(x.order_id), { ...x, rname: rn.get(x.rider_id) || '' }])) }, [dl, riders])
+  const noRider = useCallback(o => modeOf(o) !== 'courier' && (o.status || 0) >= 1 && (o.status || 0) < 3 && !dby.get(String(o.id))?.rider_id, [dby])
+  const toBook = useCallback(o => modeOf(o) === 'courier' && (o.status || 0) >= 1 && (o.status || 0) < 3 && !o.courier_tracking, [])
   const hby = useMemo(() => { const m = new Map(); ho.forEach(h => { const k = String(h.order_id); m.set(k, [...(m.get(k) || []), h]) }); return m }, [ho])
   useEffect(() => { if (pre === 'pick') { setPo(true); setF('all'); clearPre() } }, [pre, clearPre])
   const dq = useDeferredValue(q)
@@ -393,12 +403,15 @@ function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [] 
   const cnt = useMemo(() => { const m = [0, 0, 0, 0]; base.forEach(o => { m[o.status || 0]++ }); return m }, [base])
   const vcnt = useMemo(() => base.filter(o => o.payment_status === 'verifying').length, [base])
   const pcnt = useMemo(() => base.filter(o => hoOpen(o, hby.get(String(o.id)))).length, [base, hby])
-  const list = useMemo(() => base.filter(o => (f === 'all' || (o.status || 0) === +f) && (!vo || o.payment_status === 'verifying') && (!po || hoOpen(o, hby.get(String(o.id))))), [base, f, vo, po, hby])
-  useEffect(() => { setLim(PAGE) }, [f, dq, rg, vo, po])
+  const ncnt = useMemo(() => riders.length ? base.filter(noRider).length : 0, [base, noRider, riders.length])
+  const ccnt = useMemo(() => base.filter(toBook).length, [base, toBook])
+  const list = useMemo(() => base.filter(o => (f === 'all' || (o.status || 0) === +f) && (!vo || o.payment_status === 'verifying') && (!po || hoOpen(o, hby.get(String(o.id)))) && (!nr || noRider(o)) && (!cb || toBook(o))), [base, f, vo, po, hby, nr, noRider, cb, toBook])
+  useEffect(() => { setLim(PAGE) }, [f, dq, rg, vo, po, nr, cb])
   useEffect(() => { if (focus) { setF('all'); setVo(false); setSel(focus); clearFocus() } }, [focus, clearFocus])
   const sum = useMemo(() => list.reduce((a, o) => a + (+o.total || 0), 0), [list])
   const setStatus = useCallback(async (o, s) => {
     if (bz.current || s === (o.status || 0)) return
+    if (s === 2 && modeOf(o) === 'courier' && !o.courier_tracking && !confirm('No courier tracking ID is saved for this order yet. Mark it Out for delivery anyway?')) return
     if (s >= 2 && s < 4 && hoOpen(o, hby.get(String(o.id))) && !confirm('Some sellers have not handed over their items yet. Mark this order as ' + STEPS[s] + ' anyway? Their pickups will be marked as collected.')) return
     bz.current = true; setBusy(true)
     const { error } = await sb.from('orders').update({ status: s }).eq('id', o.id)
@@ -432,15 +445,19 @@ function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [] 
     <div className="tl"><label className="sr"><Ic n="search" s={18} /><input className="in" type="search" inputMode="search" enterKeyHint="search" placeholder="Search order, name, phone, address" aria-label="Search orders" value={q} onChange={e => setQ(e.target.value)} /></label>
       <select className="in rg" aria-label="Date range" value={rg} onChange={e => setRg(e.target.value)}>{RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
       {(pcnt > 0 || po) && <button className={'vchip pk' + (po ? ' on' : '')} aria-pressed={po} onClick={() => setPo(v => !v)}><Ic n="truck" s={15} />Seller pickups<em>{pcnt}</em></button>}
+      {(ncnt > 0 || nr) && <button className={'vchip pk' + (nr ? ' on' : '')} aria-pressed={nr} onClick={() => setNr(v => !v)}><Ic n="riders" s={15} />Needs rider<em>{ncnt}</em></button>}
+      {(ccnt > 0 || cb) && <button className={'vchip pk' + (cb ? ' on' : '')} aria-pressed={cb} onClick={() => setCb(v => !v)}><Ic n="pkg" s={15} />Book courier<em>{ccnt}</em></button>}
       {(vcnt > 0 || vo) && <button className={'vchip' + (vo ? ' on' : '')} aria-pressed={vo} onClick={() => setVo(v => !v)}><Ic n="alert" s={15} />Verify payment<em>{vcnt}</em></button>}
       <button className="bt g sm csvb" onClick={csv}>Export CSV</button></div>
-    <p className="sum"><b>{list.length}</b> order{list.length === 1 ? '' : 's'} · <b>{taka(sum)}</b>{(f !== 'all' || po) && <> · <button className="lk" onClick={() => { setF('all'); setPo(false) }}>Clear filter</button></>}</p>
-    <div className="ol">{list.slice(0, lim).map(o => <OrderCard key={o.id} o={o} hs={hby.get(String(o.id))} onOpen={openSel} onNext={next} />)}{!list.length && <p className="mut pad cd">No orders match. Orders placed in the store appear here instantly.</p>}</div>
+    <p className="sum"><b>{list.length}</b> order{list.length === 1 ? '' : 's'} · <b>{taka(sum)}</b>{(f !== 'all' || po || nr || cb) && <> · <button className="lk" onClick={() => { setF('all'); setPo(false); setNr(false); setCb(false) }}>Clear filter</button></>}</p>
+    <div className="ol">{list.slice(0, lim).map(o => <OrderCard key={o.id} o={o} hs={hby.get(String(o.id))} dv={dby.get(String(o.id))} onOpen={openSel} onNext={next} />)}{!list.length && <p className="mut pad cd">No orders match. Orders placed in the store appear here instantly.</p>}</div>
     {list.length > lim && <button className="bt g more" onClick={() => setLim(l => l + PAGE)}>Show {Math.min(PAGE, list.length - lim)} more · {list.length - lim} left</button>}
     {cur && <Modal title={'Order #' + cur.order_no} onClose={closeSel} footer={<>{st < 3 && <button className="bt" disabled={busy} onClick={() => setStatus(cur, st + 1)}>{NEXT[st]} →</button>}<button className={'bt' + (st < 3 ? ' g' : '')} onClick={() => setInv(true)}><Ic n="receipt" s={17} />Invoice</button></>}>
       <div className="steps">{STEPS.map((s, i) => <button key={s} disabled={busy} className={st === i ? 'on' : st > i ? 'dn' : ''} onClick={() => setStatus(cur, i)}>{st > i ? '✓ ' : ''}{s}</button>)}</div>
       {curRet && <button className={'mq rq2 rlink ' + curRet.status} onClick={() => { closeSel(); openReturn(curRet.id) }}><span className="mq-i"><Ic n="returns" s={20} /></span><span className="g1"><b>Return {RLBL[curRet.status].toLowerCase()}</b><small>{curRet.kind === 'replace' ? 'Replacement' : 'Refund'} · {curRet.reason} · {taka(curRet.amount)}</small></span><Ic n="chev" s={18} /></button>}
       <div className="cu"><span className="av lg">{ini(cur.address?.name)}</span><span className="g1"><b>{cur.address?.name}</b><small>{ph}</small></span><span className={'pl s' + st}>{STEPS[st]}</span></div>
+      <ZoneCard o={cur} dv={dby.get(String(cur.id))} riders={riders} reload={reload} say={say} />
+      {modeOf(cur) !== 'courier' && <Delivery o={cur} dv={dby.get(String(cur.id))} riders={riders} dl={dl} err={ridersErr} reload={reload} say={say} />}
       {(hby.get(String(cur.id)) || []).length > 0 && <Pickups o={cur} hs={hby.get(String(cur.id))} shops={shops} products={products} reload={reload} say={say} />}
       <div className="qa">{ph && <a className="bt g sm" href={'tel:' + ph}><Ic n="phone" s={16} />Call</a>}{ph && <a className="bt sm wa" href={wa(ph, WA[defTpl(cur)][2](cur))} target="_blank" rel="noopener noreferrer"><Ic n="chat" s={16} />WhatsApp</a>}</div>
       {ph && <div className="cd wcd"><h3>Message on WhatsApp</h3><div className="wcs">{WA.map(([l, ic, fn]) => <a key={l} className="wc" href={wa(ph, fn(cur))} target="_blank" rel="noopener noreferrer"><Ic n={ic} s={15} />{l}</a>)}</div></div>}
@@ -460,6 +477,64 @@ function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [] 
       <p className="mut">Placed {fmt(cur.created_at)} · {ago(cur.created_at)}</p>
     </Modal>}
     {cur && inv && <Invoice o={cur} onClose={closeInv} />}</div>
+}
+
+// Who delivers this order: Pinkish rider (≤ 4 km from the hub) or Pathao / partner courier. Live map + courier booking.
+function ZoneCard({ o, dv, riders, reload, say }) {
+  const mode = modeOf(o), km = orderKm(o), ad = o.address || {}, st = o.status || 0, home = okLL(ad.lat, ad.lng)
+  const r = dv?.rider_id && ['accepted', 'out'].includes(dv.status) ? riders.find(x => x.user_id === dv.rider_id) : null
+  const live = r && okLL(r.last_lat, r.last_lng) && fresh(r.last_seen) ? r : null
+  const [f, setF] = useState({}), [busy, setBusy] = useState(false)
+  useEffect(() => { setF({ name: o.courier_name || 'Pathao', id: o.courier_tracking || '', url: '' }) }, [o.id, o.courier_name, o.courier_tracking])
+  const tpl = COURIERS.find(c => c.k === f.name) || COURIERS[COURIERS.length - 1], cod = o.payment_status === 'paid' ? 0 : +o.total || 0
+  const markers = useMemo(() => [{ id: 'hub', kind: 'hub', lat: HUB.lat, lng: HUB.lng, label: 'Pinkish hub · ' + HUB.name }, home && { id: 'home', kind: 'home', lat: ad.lat, lng: ad.lng, label: ad.name || 'Customer' }, live && { id: 'rider', kind: 'rider', lat: live.last_lat, lng: live.last_lng, label: live.name + ' · ' + seenAgo(live.last_seen) }].filter(Boolean), [home, ad.lat, ad.lng, ad.name, live?.last_lat, live?.last_lng, live?.last_seen, live?.name]) // eslint-disable-line react-hooks/exhaustive-deps
+  const setMode = async to => {
+    if (to === mode) return
+    const active = dv?.rider_id && ['assigned', 'accepted', 'out'].includes(dv.status)
+    if (to === 'courier' && !confirm(active ? 'A rider is on this order. Remove the rider and send it by courier instead?' : 'Send this order by Pathao / partner courier instead of a Pinkish rider?')) return
+    setBusy(true)
+    if (to === 'courier' && active) { const { error } = await sb.rpc('admin_assign_rider', { p_order: o.id, p_rider: null }); if (error) { setBusy(false); return say(error.message) } }
+    const { error } = await sb.from('orders').update({ delivery_mode: to }).eq('id', o.id)
+    setBusy(false); if (error) return say(/delivery_mode/i.test(error.message) ? 'Run supabase-delivery-zones.sql first' : error.message)
+    say(to === 'courier' ? 'Order moved to courier delivery' : 'Order moved to Pinkish riders'); reload()
+  }
+  const book = async () => {
+    const id = String(f.id || '').trim().slice(0, 40)
+    if (id.length < 3) return say('Enter the tracking / consignment ID from the courier')
+    const url = f.url.trim() ? safeUrl(f.url.trim()) : trackUrl(tpl.url, id, ad.phone)
+    if (f.url.trim() && !url) return say('The tracking link must start with https://')
+    setBusy(true)
+    const { error } = await sb.from('orders').update({ courier_name: f.name === 'Other' ? (f.other || 'Courier').trim().slice(0, 30) : f.name, courier_tracking: id, courier_url: url || null, courier_booked_at: new Date().toISOString() }).eq('id', o.id)
+    setBusy(false); if (error) return say(/courier_/i.test(error.message) ? 'Run supabase-delivery-zones.sql first' : error.message)
+    say('Courier booked · the customer got the tracking ID'); reload()
+  }
+  const brief = `${ad.name || 'Customer'}\n${ad.phone || ''}\n${ad.address || ''}${ad.note ? '\nNote: ' + ad.note : ''}\nOrder #${o.order_no} · ${(o.items || []).reduce((a, i) => a + (+i.qty || 1), 0)} item(s)\nCollect (COD): ${cod ? taka(cod) : '0 (paid online)'}`
+  return <><h3>Delivery zone</h3><div className={'cd zn ' + mode}>
+    <div className="zn-h"><span className="mq-i"><Ic n={mode === 'courier' ? 'pkg' : 'riders'} s={20} /></span><span className="g1"><b>{mode === 'courier' ? 'Pathao / partner courier' : 'Pinkish rider'}</b><small>{km == null ? 'Customer did not pin a location · check the address' : `${kmTxt(km)} from ${HUB.name} · ${km <= RIDER_KM ? 'inside' : 'outside'} the ${RIDER_KM} km rider zone`}</small></span>
+      {st < 3 && st !== 4 && <button className="bt g sm" disabled={busy} onClick={() => setMode(mode === 'courier' ? 'pinkish' : 'courier')}>{mode === 'courier' ? 'Use a rider' : 'Send by courier'}</button>}</div>
+    {(home || live) && <LiveMap markers={markers} zone follow={live ? 'rider' : undefined} height={220} chip={live ? { text: `${live.name.split(' ')[0]} · ${seenAgo(live.last_seen)}`, old: !fresh(live.last_seen, 2) } : null} />}
+    {mode === 'courier' && <div className="zn-c">{o.courier_tracking && <p className="ok">✓ Booked with {o.courier_name} · <b>{o.courier_tracking}</b>{o.courier_booked_at ? ' · ' + ago(o.courier_booked_at) : ''}{safeUrl(o.courier_url) && <> · <a href={safeUrl(o.courier_url)} target="_blank" rel="noopener noreferrer">Track</a></>}</p>}
+      {st < 3 && st !== 4 && <>
+        <div className="seg zn-p" role="group" aria-label="Courier">{COURIERS.map(c => <button key={c.k} type="button" className={f.name === c.k ? 'on' : ''} aria-pressed={f.name === c.k} onClick={() => setF(x => ({ ...x, name: c.k }))}>{c.k}</button>)}</div>
+        <div className="pk-r">{f.name === 'Other' && <input className="in" placeholder="Courier name" maxLength={30} value={f.other || ''} onChange={e => setF(x => ({ ...x, other: e.target.value }))} />}<input className="in" placeholder="Tracking / consignment ID" maxLength={40} value={f.id || ''} onChange={e => setF(x => ({ ...x, id: e.target.value }))} /><button className="bt sm" disabled={busy} onClick={book}>{o.courier_tracking ? 'Update' : 'Save booking'}</button></div>
+        {(f.name === 'Other' || !tpl.url) && <input className="in" type="url" placeholder="Tracking link (https://…, optional)" value={f.url || ''} onChange={e => setF(x => ({ ...x, url: e.target.value }))} />}
+        <div className="acts"><button className="bt g sm" onClick={() => navigator.clipboard?.writeText(brief).then(() => say('Parcel details copied'), () => say('Could not copy'))}><Ic n="copy" s={15} />Copy parcel details</button>{tpl.panel && <a className="bt g sm" href={tpl.panel} target="_blank" rel="noopener noreferrer">Open {tpl.k} panel</a>}</div>
+        <p className="mut">Book the parcel in the courier's merchant panel (COD {cod ? taka(cod) : '৳0, paid online'}), then save the tracking ID here. The customer is notified and can track it in the app.</p></>}</div>}
+  </div></>
+}
+
+// Live map of every online rider and every active Pinkish delivery (updates as riders move)
+function Fleet({ riders, dl, orders }) {
+  const om = useMemo(() => new Map(orders.map(o => [String(o.id), o])), [orders])
+  const act = useMemo(() => dl.filter(x => ACTIVE.includes(x.status)), [dl])
+  const on = riders.filter(r => r.status === 'approved' && r.on_duty && okLL(r.last_lat, r.last_lng) && fresh(r.last_seen))
+  const markers = useMemo(() => [
+    { id: 'hub', kind: 'hub', lat: HUB.lat, lng: HUB.lng, label: 'Pinkish hub · ' + HUB.name },
+    ...on.map(r => ({ id: 'r' + r.user_id, kind: 'rider', lat: r.last_lat, lng: r.last_lng, off: !fresh(r.last_seen, 3), label: `${r.name} · ${act.filter(x => x.rider_id === r.user_id).length} job(s) · ${seenAgo(r.last_seen)}` })),
+    ...act.map((x, i) => { const o = om.get(String(x.order_id)), a = o?.address; return a && okLL(a.lat, a.lng) ? { id: 'd' + x.id, kind: 'dest', text: String(i + 1), lat: a.lat, lng: a.lng, label: `#${o.order_no} · ${DLV[x.status][0]}` } : null }).filter(Boolean),
+  ], [on, act, om]) // eslint-disable-line react-hooks/exhaustive-deps
+  return <section className="cd fleet"><div className="rh"><h2>Live map</h2><small className="mut">{on.length} rider{on.length === 1 ? '' : 's'} sharing location · {act.length} active deliver{act.length === 1 ? 'y' : 'ies'} · dashed circle = {RIDER_KM} km rider zone</small></div>
+    <LiveMap markers={markers} zone height={340} /></section>
 }
 
 // Seller pickups for one order: assign a rider, give them the code, track the handover.
@@ -712,6 +787,166 @@ function Shops({ d: { shops = [], products, orders, shopsErr, ho = [], hoErr, op
         : <><img src={doc.url} alt="Verification document" /><a className="bt g sm" href={doc.url} target="_blank" rel="noopener noreferrer">Open full size</a></>}
         <small>Private file. The link expires in 5 minutes.</small></div>
       {mine.length > 0 && <><h3>Latest products</h3><div className="cd lst">{mine.map(p => <div className="rw" key={p.id}><span className="th">{p.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : p.emoji || '🛍️'}</span><span className="g1"><b>{p.name}</b><small>{taka(p.price)} · {stockTxt(p.stock)}</small></span><span className={'pl ' + (p.is_active !== false ? 's3' : 's1')}>{p.is_active !== false ? 'Live' : 'Hidden'}</span></div>)}</div></>}
+    </Modal>}
+  </div>
+}
+
+// ---------------- Riders: the Pinkish Rider app (/rider). Run supabase-riders.sql first. ----------------
+const RO0 = { fee: 60, require_code: true, pool: true, max_active: 5, support_phone: '', notice: '' }
+const RIDER_LBL = { pending: 'Pending review', approved: 'Active', rejected: 'Rejected', suspended: 'Paused' }
+const RIDER_PL = { pending: 's1', approved: 's3', rejected: '', suspended: 'bad' }
+const RIDER_TABS = [['pending', 'Pending', 'clock', 1], ['approved', 'Active', 'shield', 3], ['rejected', 'Rejected', 'alert', 0], ['suspended', 'Paused', 'ban', 2]]
+const RREASONS = ['NID photo is blurry', 'Name does not match the NID', 'Invalid phone number', 'We do not cover this area yet']
+const VEH = { bike: 'Motorbike', cycle: 'Bicycle', car: 'Car / CNG', foot: 'On foot' }
+const DLV = { assigned: ['Waiting for rider', 's1'], accepted: ['Rider collecting', 's1'], out: ['Out for delivery', 's2'], delivered: ['Delivered', 's3'], failed: ['Not delivered', 'bad'], cancelled: ['Cancelled', ''] }
+const ACTIVE = ['assigned', 'accepted', 'out']
+const seenNow = r => !!r?.last_seen && Date.now() - new Date(r.last_seen) < 15 * 6e4
+
+// Delivery card in the order details: pick a rider, see progress, code and cash.
+function Delivery({ o, dv, riders, dl, err, reload, say }) {
+  const [pick, setPick] = useState(''), [busy, setBusy] = useState(false)
+  const st = o.status || 0
+  const load = useMemo(() => { const m = new Map(); dl.forEach(x => { if (ACTIVE.includes(x.status) && x.rider_id) m.set(x.rider_id, (m.get(x.rider_id) || 0) + 1) }); return m }, [dl])
+  const list = useMemo(() => riders.filter(r => r.status === 'approved').sort((a, b) => (b.on_duty - a.on_duty) || ((load.get(a.user_id) || 0) - (load.get(b.user_id) || 0)) || a.name.localeCompare(b.name)), [riders, load])
+  useEffect(() => { setPick(dv?.rider_id || '') }, [dv?.rider_id, o.id])
+  if (err) return <div className="cd dlv"><h3>Delivery rider</h3><p className="mut">The rider app is not set up yet. Run <b>supabase-riders.sql</b> in the Supabase SQL editor, then press Refresh.</p></div>
+  if (st === 4 && !dv) return null
+  const r = dv?.rider_id ? riders.find(x => x.user_id === dv.rider_id) : null, [lb, cls] = dv ? DLV[dv.status] || DLV.assigned : ['No rider yet', 's1']
+  const done = dv?.status === 'delivered' || st >= 3, locked = (dv?.code_attempts || 0) >= 5
+  const assign = async id => {
+    setBusy(true)
+    const { error } = await sb.rpc('admin_assign_rider', { p_order: o.id, p_rider: id || null })
+    setBusy(false); if (error) return say(error.message)
+    say(id ? 'Rider assigned · they got a notification' : 'Rider removed'); reload()
+  }
+  const unlock = async () => { setBusy(true); const { error } = await sb.from('deliveries').update({ code_attempts: 0, updated_at: new Date().toISOString() }).eq('id', dv.id); setBusy(false); if (error) return say(error.message); say('Delivery code unlocked'); reload() }
+  return <><h3>Delivery rider</h3><div className={'cd dlv ' + (dv?.status || 'none')}>
+    <div className="dlv-h"><span className="sc-av">{r ? ini(r.name) : <Ic n="riders" s={20} />}</span><span className="g1"><b>{r ? r.name : 'No rider assigned'}</b><small>{r ? [r.phone, VEH[r.vehicle], r.on_duty ? '🟢 online' : 'offline'].filter(Boolean).join(' · ') : st < 1 ? 'Confirm the order, then assign a rider' : 'Assign a rider, or let riders take it from Open jobs'}</small></span><span className={'pl ' + cls}>{lb}</span></div>
+    {dv?.fail_reason && dv.status !== 'delivered' && <p className="wn">{dv.status === 'failed' ? 'Not delivered: ' : ''}{dv.fail_reason}</p>}
+    {dv && !done && dv.status !== 'cancelled' && <div className="pk-code"><span><small>Customer's delivery code (support only — never tell the rider)</small><b>{dv.delivery_code}</b></span>{locked ? <button className="bt g sm" disabled={busy} onClick={unlock}>Unlock</button> : dv.code_attempts > 0 ? <small className="er">{dv.code_attempts} wrong</small> : null}</div>}
+    {dv?.status === 'delivered' && <p className="ok">✓ Delivered {dv.delivered_at ? ago(dv.delivered_at) : ''}{+dv.cash_collected > 0 ? ` · rider collected ${taka(dv.cash_collected)} ${dv.cash_settled ? '(handed in ✓)' : '(still with rider)'}` : ''}</p>}
+    {!done && st !== 4 && <div className="pk-r"><select className="in" aria-label="Choose rider" value={pick} onChange={e => setPick(e.target.value)}><option value="">{list.length ? 'Choose a rider…' : 'No active riders yet'}</option>{list.map(x => <option key={x.user_id} value={x.user_id}>{x.on_duty ? '🟢 ' : '⚪ '}{x.name} · {x.area || 'any area'} · {load.get(x.user_id) || 0} job{load.get(x.user_id) === 1 ? '' : 's'}</option>)}</select>
+      <button className="bt sm" disabled={busy || !pick || pick === dv?.rider_id} onClick={() => assign(pick)}>{dv?.rider_id ? 'Reassign' : 'Assign rider'}</button></div>}
+    <div className="acts">{r?.phone && <a className="bt g sm" href={'tel:' + r.phone}><Ic n="phone" s={15} />Call rider</a>}{dv?.rider_id && !done && st !== 4 && <button className="bt g sm" disabled={busy} onClick={() => confirm('Remove the rider from this order?') && assign(null)}>Remove rider</button>}</div>
+  </div></>
+}
+
+// Rider rules: pay per delivery, delivery code, open jobs, support number, notice.
+function RiderOps({ rops, say, reload }) {
+  const [f, setF] = useState(() => ({ ...RO0, ...rops })), [busy, setBusy] = useState(false), [open, setOpen] = useState(false)
+  useEffect(() => { setF({ ...RO0, ...rops }) }, [rops])
+  const set = k => e => setF(x => ({ ...x, [k]: e.target.value }))
+  const dirty = JSON.stringify({ ...RO0, ...rops }) !== JSON.stringify(f)
+  const save = async () => {
+    const ph = String(f.support_phone || '').replace(/[^\d+]/g, '').slice(0, 16)
+    const v = { fee: Math.min(5000, Math.max(0, Math.round(+f.fee || 0))), require_code: String(f.require_code) !== 'false', pool: String(f.pool) !== 'false', max_active: Math.min(20, Math.max(1, Math.round(+f.max_active || 5))), support_phone: ph, notice: String(f.notice || '').trim().slice(0, 400) }
+    setBusy(true)
+    const { error } = await sb.from('site_settings').upsert({ key: 'rider_ops', value: v, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    setBusy(false); if (error) return say(error.message)
+    say('Rider rules saved. Riders see them now.'); reload()
+  }
+  return <section className="cd sop"><button className="sop-h" aria-expanded={open} onClick={() => setOpen(v => !v)}><span className="mq-i"><Ic n="gear" s={20} /></span><span className="g1"><b>Rider rules</b><small>{taka(rops.fee)} per delivery · {rops.require_code !== false ? 'customer code required' : 'no customer code'} · {rops.pool !== false ? 'riders can take open jobs' : 'admin assigns jobs'}</small></span><Ic n="chev" s={18} /></button>
+    {open && <div className="sop-b">
+      <div className="fg"><F l="Rider pay per delivery (৳)"><span className="pf"><i>৳</i><input className="in" type="number" min="0" max="5000" inputMode="numeric" value={f.fee} onChange={set('fee')} /></span></F>
+        <F l="Max jobs at once per rider"><input className="in" type="number" min="1" max="20" inputMode="numeric" value={f.max_active} onChange={set('max_active')} /></F></div>
+      <div className="fg"><F l="Proof of delivery"><select className="in" value={String(f.require_code)} onChange={set('require_code')}><option value="true">Customer's 4-digit code (recommended)</option><option value="false">No code (rider just confirms)</option></select></F>
+        <F l="How riders get jobs"><select className="in" value={String(f.pool)} onChange={set('pool')}><option value="true">Riders can also take open jobs</option><option value="false">Only admin assigns jobs</option></select></F></div>
+      <F l="Support phone (riders can call it from the app)"><input className="in" type="tel" inputMode="tel" maxLength={16} value={f.support_phone} onChange={set('support_phone')} placeholder="01XXXXXXXXX" /></F>
+      <F l={`Notice to all riders (optional) · ${String(f.notice || '').length}/400`}><textarea className="in" rows="2" maxLength={400} value={f.notice} onChange={set('notice')} placeholder="e.g. Rain today: keep parcels in plastic bags." /></F>
+      <p className="mut">Riders open <b>{location.host}/rider</b>, apply with their NID and start after you verify them. Open jobs are confirmed orders (Processing) without a rider.</p>
+      <div className="acts"><button className="bt" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save rider rules'}</button>{dirty && <button className="bt g" onClick={() => setF({ ...RO0, ...rops })}>Undo changes</button>}</div>
+    </div>}
+  </section>
+}
+
+const RiderCard = memo(function RiderCard({ r, n, onOpen, onVerify }) {
+  return <article className={'sc ' + r.status}>
+    <button className="sc-main" onClick={() => onOpen(r.user_id)}>
+      <span className="sc-av">{ini(r.name)}{r.status === 'approved' && <i className={'rd-dot' + (r.on_duty ? ' on' : '')} aria-label={r.on_duty ? 'Online' : 'Offline'} />}</span>
+      <span className="sc-t"><b>{r.name}</b><small>{[r.area, r.phone, VEH[r.vehicle]].filter(Boolean).join(' · ')}</small></span>
+      <span className={'pl ' + RIDER_PL[r.status]}>{RIDER_LBL[r.status]}</span>
+      <span className="sc-meta">{n.active > 0 && <span className="hv">🛵 {n.active} active</span>}<span>{n.done} delivered (30d)</span>{n.cash > 0 && <span className="hv">{taka(n.cash)} cash to collect</span>}{n.failed > 0 && <span className="er">{n.failed} failed</span>}{r.status === 'approved' ? <span>{r.on_duty ? 'Online' : 'Seen ' + (r.last_seen ? ago(r.last_seen) : 'never')}</span> : <span>Applied {ago(r.created_at)}</span>}</span>
+    </button>
+    {r.status === 'pending' && <div className="sc-act"><small>Check the NID, then verify</small><button className="bt sm" onClick={() => onVerify(r)}>✓ Verify</button></div>}
+  </article>
+})
+
+function Riders({ d: { riders = [], dl = [], orders = [], ridersErr, rops = RO0 }, reload, say, openOrder }) {
+  const [f, setF] = useState(() => riders.some(r => r.status === 'pending') ? 'pending' : ''), [q, setQ] = useState(''), [sel, setSel] = useState(null), [busy, setBusy] = useState(false), [rej, setRej] = useState(null), [doc, setDoc] = useState(null), bz = useRef(false)
+  const dq = useDeferredValue(q)
+  useEffect(() => { setRej(null); setDoc(null) }, [sel])
+  const om = useMemo(() => new Map(orders.map(o => [String(o.id), o])), [orders])
+  const stat = useMemo(() => {
+    const m = {}, t30 = Date.now() - 30 * 864e5
+    riders.forEach(r => { m[r.user_id] = { active: 0, done: 0, failed: 0, cash: 0, fees: 0, jobs: [], recent: [] } })
+    dl.forEach(x => { const e = m[x.rider_id]; if (!e) return
+      if (ACTIVE.includes(x.status)) { e.active++; e.jobs.push(x) }
+      if (x.status === 'delivered' && !x.cash_settled) e.cash += +x.cash_collected || 0
+      if (new Date(x.updated_at) > t30) { if (x.status === 'delivered') { e.done++; e.fees += +x.fee || 0 } if (x.status === 'failed') e.failed++; if (!ACTIVE.includes(x.status)) e.recent.push(x) } })
+    return m
+  }, [riders, dl])
+  const cnt = useMemo(() => { const c = { pending: 0, approved: 0, rejected: 0, suspended: 0 }; riders.forEach(r => { if (r.status in c) c[r.status]++ }); return c }, [riders])
+  const online = riders.filter(r => r.status === 'approved' && r.on_duty).length, cashOut = Object.values(stat).reduce((t, e) => t + e.cash, 0)
+  const failed = useMemo(() => dl.filter(x => x.status === 'failed'), [dl])
+  const list = useMemo(() => { const k = dq.trim().toLowerCase(); return riders.filter(r => (!f || r.status === f) && (!k || `${r.name} ${r.phone} ${r.area || ''}`.toLowerCase().includes(k))).sort((a, b) => (b.status === 'pending') - (a.status === 'pending') || (b.on_duty - a.on_duty) || new Date(b.created_at) - new Date(a.created_at)) }, [riders, f, dq])
+  const setStatus = useCallback(async (r, status, reason) => {
+    if (bz.current) return
+    bz.current = true; setBusy(true)
+    const patch = { status, updated_at: new Date().toISOString(), ...(status === 'rejected' ? { reject_reason: reason } : {}), ...(status === 'approved' ? { verified_at: r.verified_at || new Date().toISOString(), reject_reason: null } : {}), ...(status !== 'approved' ? { on_duty: false } : {}) }
+    const { data, error } = await sb.from('riders').update(patch).eq('user_id', r.user_id).select()
+    bz.current = false; setBusy(false)
+    if (error) return say(error.message)
+    if (!data?.length) return say('Not saved. Run supabase-riders.sql first and make sure this account is an admin.')
+    say(`${r.name} → ${RIDER_LBL[status]}`); setRej(null); reload()
+  }, [reload, say])
+  const verify = useCallback(r => setStatus(r, 'approved'), [setStatus])
+  const open = useCallback(id => setSel(id), [])
+  const cur = sel && riders.find(r => r.user_id === sel), n = cur ? stat[cur.user_id] : null
+  const showDoc = async () => {
+    setDoc({ busy: true })
+    const { data, error } = await sb.storage.from('rider-docs').createSignedUrl(cur.id_doc_path, 300)
+    if (error || !data?.signedUrl) { setDoc(null); return say('Could not open the document') }
+    setDoc({ url: data.signedUrl, pdf: /\.pdf$/i.test(cur.id_doc_path) })
+  }
+  const settle = async () => {
+    if (!confirm(`Confirm you received ${taka(n.cash)} in cash from ${cur.name}?`)) return
+    setBusy(true); const { data, error } = await sb.rpc('admin_settle_rider_cash', { p_rider: cur.user_id }); setBusy(false)
+    if (error) return say(error.message); say(`${taka(data)} received from ${cur.name.split(' ')[0]} ✓`); reload()
+  }
+  const doReject = () => { if (!rej.trim()) return say('Tell the rider why, so they can fix it'); setStatus(cur, 'rejected', rej.trim()) }
+  const pause = () => { if (confirm(`Pause ${cur.name}? They cannot take or finish jobs until you reactivate them.${n.active ? ` They still have ${n.active} active job${n.active === 1 ? '' : 's'}: reassign them in Orders.` : ''}`)) setStatus(cur, 'suspended') }
+  if (ridersErr) return <div className="pg"><div className="cd"><h2>The rider app is not set up yet</h2><p className="mut">Run <b>supabase-riders.sql</b> in the Supabase SQL editor, then press Refresh. Riders sign up at <b>{location.host}/rider</b>.</p></div></div>
+  const foot = !cur ? null : cur.status === 'pending' ? <><button className="bt" disabled={busy} onClick={() => verify(cur)}>✓ Verify rider</button><button className="bt g" disabled={busy} onClick={() => setRej('')}>Reject</button></>
+    : cur.status === 'approved' ? <button className="bt d" disabled={busy} onClick={pause}><Ic n="ban" s={17} />Pause rider</button>
+    : <button className="bt" disabled={busy} onClick={() => verify(cur)}>{cur.status === 'rejected' ? '✓ Verify anyway' : 'Reactivate rider'}</button>
+  return <div className="pg">
+    <RiderOps rops={rops} say={say} reload={reload} />
+    {cnt.approved > 0 && <Fleet riders={riders} dl={dl} orders={orders} />}
+    {failed.length > 0 && <div className="cd rd-fail"><h3>Not delivered · needs a decision</h3>{failed.map(x => { const o = om.get(String(x.order_id)), r = riders.find(y => y.user_id === x.rider_id); return <button key={x.id} className="nr" onClick={() => o && openOrder(o.id)}><span className="nk w"><Ic n="alert" s={18} /></span><span className="g1"><b>#{o?.order_no || '—'} · {r?.name || 'Rider'}</b><small>{x.fail_reason || 'No reason'} · {ago(x.failed_at || x.updated_at)}</small></span><Ic n="chev" s={16} /></button> })}<p className="mut">Call the customer, then reassign a rider (or the same one) from the order, or cancel it.</p></div>}
+    <div className="sd-stats rd-top"><div><b>{online}</b><small>Online now</small></div><div><b>{dl.filter(x => ACTIVE.includes(x.status)).length}</b><small>Active jobs</small></div><div><b>{taka(cashOut)}</b><small>Cash with riders</small></div><div><b>{cnt.approved}</b><small>Active riders</small></div></div>
+    <div className="ob">{RIDER_TABS.map(([k, l, ic, s2]) => <button key={k} className={'s' + s2 + (f === k ? ' on' : '')} aria-pressed={f === k} onClick={() => setF(f === k ? '' : k)}><span className="oi"><Ic n={ic} s={16} /></span><small>{l}</small><b><Count to={cnt[k]} /></b></button>)}</div>
+    <div className="tl"><label className="sr"><Ic n="search" s={18} /><input className="in" type="search" inputMode="search" enterKeyHint="search" placeholder="Search name, phone, area" aria-label="Search riders" value={q} onChange={e => setQ(e.target.value)} /></label></div>
+    <p className="sum"><b>{list.length}</b> rider{list.length === 1 ? '' : 's'}{f && <> · <button className="lk" onClick={() => setF('')}>Show all ({riders.length})</button></>}</p>
+    <div className="sl">{list.map(r => <RiderCard key={r.user_id} r={r} n={stat[r.user_id]} onOpen={open} onVerify={verify} />)}
+      {!list.length && <p className="mut pad cd">{riders.length ? 'No riders match.' : `No riders yet. Share ${location.host}/rider with your delivery men: they sign up with their NID and appear here for verification.`}</p>}</div>
+    {cur && <Modal cls="pm" title="Rider" onClose={() => setSel(null)} footer={foot}>
+      <div className="sd-h"><span className="sc-av lg">{ini(cur.name)}</span><span className="sc-t"><b>{cur.name}</b><small>{cur.area || 'No area'} · {cur.status === 'approved' ? (cur.on_duty ? '🟢 online' : 'offline') : 'applied ' + ago(cur.created_at)}</small></span><span className={'pl ' + RIDER_PL[cur.status]}>{RIDER_LBL[cur.status]}</span></div>
+      {rej !== null && <div className="rsn"><b>Why are you rejecting this rider?</b><textarea className="in" rows="3" autoFocus placeholder="The rider will see this and can resubmit" value={rej} onChange={e => setRej(e.target.value)} />
+        <div className="rq">{RREASONS.map(x => <button key={x} type="button" onClick={() => setRej(x)}>{x}</button>)}</div>
+        <div className="acts"><button className="bt d sm" disabled={busy} onClick={doReject}>Confirm rejection</button><button className="bt g sm" onClick={() => setRej(null)}>Cancel</button></div></div>}
+      {cur.status === 'rejected' && cur.reject_reason && <div className="cd sd-note"><small>Rejection reason</small><p>{cur.reject_reason}</p></div>}
+      <div className="qa"><a className="bt g sm" href={'tel:' + cur.phone}><Ic n="phone" s={16} />Call</a><a className="bt sm wa" href={wa(cur.phone, `Hi ${cur.name.split(' ')[0]}, this is Pinkish.`)} target="_blank" rel="noopener noreferrer"><Ic n="chat" s={16} />WhatsApp</a>{cur.on_duty && okLL(cur.last_lat, cur.last_lng) && seenNow(cur) && <a className="bt g sm" href={`https://www.google.com/maps/search/?api=1&query=${cur.last_lat},${cur.last_lng}`} target="_blank" rel="noopener noreferrer"><Ic n="pin" s={16} />Live location</a>}</div>
+      <div className="sd-stats"><div><b>{n.active}</b><small>Active</small></div><div><b>{n.done}</b><small>Delivered 30d</small></div><div><b>{n.failed}</b><small>Failed 30d</small></div><div><b>{taka(n.fees)}</b><small>Earned 30d</small></div></div>
+      {n.cash > 0 && <div className="cd rd-cash"><span className="g1"><small>Cash the rider is holding</small><b>{taka(n.cash)}</b></span><button className="bt sm" disabled={busy} onClick={settle}>Mark received</button></div>}
+      {n.jobs.length > 0 && <><h3>Active jobs</h3><div className="cd lst">{n.jobs.map(x => { const o = om.get(String(x.order_id)); return <button className="rw rd-job" key={x.id} onClick={() => o && openOrder(o.id)}><span className="g1"><b>#{o?.order_no || '—'}</b><small>{o?.address?.address || ''}</small></span><span className={'pl ' + DLV[x.status][1]}>{DLV[x.status][0]}</span></button> })}</div></>}
+      <h3>Details</h3>
+      <div className="cd sd-info"><div><span>Phone</span><b>{cur.phone}</b></div><div><span>Area</span><b>{cur.area || '—'}</b></div><div><span>Vehicle</span><b>{VEH[cur.vehicle] || cur.vehicle}</b></div><div><span>NID number</span><b>{cur.nid_number || '—'}</b></div><div><span>Applied</span><b>{fmt(cur.created_at)}</b></div>{cur.verified_at && <div><span>Verified</span><b>{fmt(cur.verified_at)}</b></div>}{cur.last_seen && <div><span>Last seen</span><b>{ago(cur.last_seen)}</b></div>}</div>
+      <h3>NID</h3>
+      <div className="cd sd-doc">{!cur.id_doc_path ? <p className="wn">No document was uploaded.</p> : !doc ? <button className="bt g sm" onClick={showDoc}><Ic n="doc" s={16} />View NID</button>
+        : doc.busy ? <p className="mut">Opening…</p> : doc.pdf ? <a className="bt g sm" href={doc.url} target="_blank" rel="noopener noreferrer"><Ic n="doc" s={16} />Open PDF</a>
+        : <><img src={doc.url} alt="Rider NID" /><a className="bt g sm" href={doc.url} target="_blank" rel="noopener noreferrer">Open full size</a></>}
+        <small>Private file. The link expires in 5 minutes.</small></div>
+      {n.recent.length > 0 && <><h3>Last 30 days</h3><div className="cd lst">{n.recent.slice(0, 8).map(x => { const o = om.get(String(x.order_id)); return <div className="rw" key={x.id}><span className="g1"><b>#{o?.order_no || '—'}</b><small>{fmt(x.delivered_at || x.failed_at || x.updated_at)}{x.fail_reason && x.status === 'failed' ? ' · ' + x.fail_reason : ''}</small></span><span className={'pl ' + (DLV[x.status] || DLV.assigned)[1]}>{(DLV[x.status] || DLV.assigned)[0]}</span></div> })}</div></>}
     </Modal>}
   </div>
 }

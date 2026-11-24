@@ -363,3 +363,10 @@ export async function requestReturn({ order, items, kind, reason, details, refun
   }
   return Array.isArray(data) ? data[0] : data
 }
+// ---------------- Live delivery map ----------------
+// The rider's live position for the customer's own order, only while the parcel is out for delivery.
+// Returns null when there is nothing to show (not on the way yet, courier order, or the update is not installed).
+export async function myRiderLocation(orderId) {
+  if (!supabase || !isUuid(String(orderId))) return null
+  try { const { data, error } = await supabase.rpc('my_rider_location', { p_order: String(orderId) }); return error ? null : data || null } catch { return null }
+}

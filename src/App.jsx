@@ -1,29 +1,16 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as api from './api'
+import { HUB, RIDER_KM, MAX_KM, deliveryFor, kmTxt, okLL, havKm, modeOf, safeUrl, etaMin, seenAgo, fresh } from './lib/zone.js'
+import { LiveMap, loadLeaflet, usePoll } from './lib/LiveMap.jsx'
 
 const taka = n => '৳' + Math.round(n).toLocaleString()
 // Shared product links look like /?p=<id>: remember the id, then tidy the address bar.
 const DEEP = (() => { try { const u = new URL(location.href), p = u.searchParams.get('p'); if (p) { u.searchParams.delete('p'); history.replaceState(history.state, '', u.pathname + u.search + u.hash) } return p } catch { return null } })()
 
-// ===== Delivery zone (Bahaddarhat hub, Chattogram) =====
-// Keep these numbers identical to delivery_fee_for() in delivery-charge.sql
-const HUB = { lat: 22.3411, lng: 91.8428 }
-const IN_RANGE_KM = 4, MAX_KM = 30, FEE_IN = 40, FEE_OUT = 60
+// ===== Delivery zone (Bahaddarhat hub, Chattogram): shared with admin, rider and seller apps =====
+// ≤ 4 km: a Pinkish rider delivers · 4–30 km: Pathao or a partner courier delivers (see src/lib/zone.js)
 const OUT_MSG = `Sorry, we only deliver inside Chattogram (within ${MAX_KM} km of Bahaddarhat).`
-const havKm = (a, b, c, d) => {
-  const R = 6371, rad = Math.PI / 180, dx = (c - a) * rad, dy = (d - b) * rad
-  const h = Math.sin(dx / 2) ** 2 + Math.cos(a * rad) * Math.cos(c * rad) * Math.sin(dy / 2) ** 2
-  return R * 2 * Math.asin(Math.sqrt(h))
-}
-const hasNum = v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))
-const deliveryFor = loc => {
-  if (!hasNum(loc?.lat) || !hasNum(loc?.lng)) return { fee: FEE_IN, km: null, zone: 'inner', label: `৳${FEE_IN} · pin your location for exact pricing` }
-  const km = havKm(HUB.lat, HUB.lng, Number(loc.lat), Number(loc.lng))
-  if (km > MAX_KM) return { fee: null, km, zone: 'outside', label: 'Outside our delivery area' }
-  const fee = km <= IN_RANGE_KM ? FEE_IN : FEE_OUT
-  return { fee, km, zone: fee === FEE_IN ? 'inner' : 'outer', label: `৳${fee} · ${km.toFixed(1)} km from Bahaddarhat` }
-}
 const feeTxt = d => d.fee == null ? 'Outside area' : '৳' + d.fee
 const NAV = [['home', 'home', 'Home'], ['categories', 'grid', 'Categories'], ['cart', 'bag', 'Cart'], ['orders', 'receipt', 'Orders'], ['profile', 'user', 'Profile']]
 const TABS = NAV.map(n => n[0])
@@ -525,6 +512,13 @@ const SHOP_CSS = `
 .tk-row em{display:block;font-style:normal;font-size:12px;color:var(--mute);margin-top:4px}
 .tk-chip{flex:none;align-self:center;padding:5px 11px;border-radius:999px;font-size:12px;font-weight:700}
 .tk-chip.ok{background:#e4f7ec;color:#1f7a4d}.tk-chip.wait{background:#fff3dc;color:#a86a00}.tk-chip.no{background:#fde7ee;color:#c0245a}
+/* delivery code (Pinkish Rider) */
+.tk-dc{border-color:#f0b4cf;background:linear-gradient(160deg,#fff7fb,#fff 60%)}
+.tk-code{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0 10px}
+.tk-code small{display:block;color:var(--mute);font-size:12px}
+.tk-code b{display:block;font:800 30px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.3em;color:var(--p1)}
+.tk-code a{flex:none;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:999px;background:var(--grad);color:#fff;font-weight:700;font-size:13.5px;text-decoration:none}
+.tk-dc p.h{font-size:12.5px;color:var(--mute);margin:0 0 10px;line-height:1.45}
 /* bill */
 .tk-bill .r{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px;color:var(--mute)}
 .tk-bill .r span:last-child{color:var(--ink);font-weight:600;text-align:right}
@@ -1105,20 +1099,20 @@ const LOC_CSS = `
 .mp-man{border:1px dashed #d9c8e8;border-radius:22px;padding:14px;display:grid;gap:2px;background:#fffc}
 .mp-man h5{margin:0 0 10px;font-size:13px;color:var(--p1)}
 .mp-sect{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:.06em;text-transform:uppercase;margin:4px 2px 0}
+.dl-card.cour{border-color:#f3d3a0;background:linear-gradient(145deg,#fffaf0,#fff)}
+.dl-card .dl-sub{display:block;font-size:11.5px;color:var(--mute);margin-top:2px;line-height:1.35}
+.tk-live .lm{margin:2px 0 12px}
+.tk-wait{font-size:13px;color:var(--mute);margin:4px 0 12px;line-height:1.45}
+.tk-cr{border-color:#f3d3a0;background:linear-gradient(160deg,#fffaf0,#fff 60%)}
+.tk-cr .tk-ic{font-size:20px}.tk-tid{font:800 18px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em}
+.tk-go{display:flex;justify-content:center;margin:2px 0 10px;text-decoration:none}
 .leaflet-container{font:inherit;background:#ece4f7}.leaflet-control-attribution{font-size:9px!important;background:#ffffffcc!important}
 .leaflet-control-zoom{display:none}
 @media(max-width:480px){.mp-box{height:42dvh;border-radius:20px}.topbar .loc{padding-right:12px}}
 @media(min-width:900px){.mp{grid-template-columns:1.2fr 1fr;align-items:start}.mp-box{grid-row:span 3;height:480px}}
 `
 
-// Loads Leaflet (OpenStreetMap) once from a CDN; no npm install needed
-let leafletP
-const loadLeaflet = () => leafletP || (leafletP = new Promise((res, rej) => {
-  if (window.L) return res(window.L)
-  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css)
-  const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'
-  sc.onload = () => window.L ? res(window.L) : rej(new Error('leaflet')); sc.onerror = () => { leafletP = null; rej(new Error('leaflet')) }; document.head.appendChild(sc)
-}))
+// Leaflet is loaded once by src/lib/LiveMap.jsx (shared by all apps)
 const CTG = [22.3569, 91.7832]
 const nom = async (path, signal) => { const r = await fetch('https://nominatim.openstreetmap.org/' + path + '&format=jsonv2&addressdetails=1&accept-language=en', { signal }); if (!r.ok) throw new Error('geo'); return r.json() }
 const parseAddr = a => {
@@ -1133,6 +1127,15 @@ const LocChip = ({ loc, onClick }) => <button className="loc" aria-label="Change
 
 const fullAddr = l => l ? [l.line, l.area, l.city].filter(Boolean).join(', ') : ''
 const AREAS = ['GEC Circle', 'Agrabad', 'Nasirabad', 'Khulshi', 'Halishahar', 'Pahartali', 'Chawkbazar', 'Kotwali', 'Panchlaish', 'Bayezid', 'Patenga', 'Muradpur', 'Oxygen', '2 No Gate', 'Bahaddarhat']
+
+// Delivery charge + who delivers (Pinkish rider inside 4 km, partner courier beyond)
+const DeliveryCard = ({ d, far }) => <div className={'dl-card' + (d.fee == null ? ' bad' : '') + (d.mode === 'courier' ? ' cour' : '')}>
+  <span className="dl-ic">{d.mode === 'courier' ? '📦' : '🛵'}</span>
+  <div><small>Delivery charge{d.km != null ? ` · ${kmTxt(d.km)} from ${HUB.name}` : ''}</small>
+    <b>{d.fee == null ? (far ? 'Outside Chattogram — we cannot deliver here' : 'Outside our delivery area') : d.km == null ? 'Pin your location for the exact charge' : d.mode === 'courier' ? 'Delivered by Pathao or a partner courier' : 'Delivered by a Pinkish rider'}</b>
+    {d.mode === 'courier' && <span className="dl-sub">Outside our {RIDER_KM} km rider zone. You get a courier tracking ID once it ships.</span>}
+    {d.mode === 'pinkish' && d.km != null && <span className="dl-sub">Track your rider live on the map when it is on the way.</span>}</div>
+  <em>{feeTxt(d)}</em></div>
 
 function AddressScreen({ loc, back, onSave }) {
   const [f, setF] = useState(loc)
@@ -1159,6 +1162,8 @@ function AddressScreen({ loc, back, onSave }) {
       if (dead || !el.current) return
       const m = L.map(el.current, { center: pt || CTG, zoom: pt ? 17 : 13, zoomControl: false, attributionControl: true })
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m)
+      // the 4 km Pinkish rider zone: inside it our own rider delivers, outside a partner courier does
+      L.circle([HUB.lat, HUB.lng], { radius: RIDER_KM * 1000, color: '#e0457b', weight: 2, dashArray: '6 6', fillColor: '#e0457b', fillOpacity: 0.06, interactive: false }).addTo(m)
       m.on('movestart', () => setMoving(true))
       m.on('moveend', () => {
         setMoving(false)
@@ -1209,14 +1214,14 @@ function AddressScreen({ loc, back, onSave }) {
         <div ref={el} className="mp-map" />
         {mapOk === null && <div className="mp-ph"><i className="spin" /></div>}
         {mapOk === false && <div className="mp-ph">Map could not load.<br />You can still type your address below.</div>}
-        {mapOk && <><span className="mp-dot" /><span className="mp-pin"><PinSvg /></span><div className="mp-hint">{moving ? 'Release to set pin' : 'Drag the map to move the pin'}</div></>}
+        {mapOk && <><span className="mp-dot" /><span className="mp-pin"><PinSvg /></span><div className="mp-hint">{moving ? 'Release to set pin' : 'Drag the map · dashed circle = Pinkish rider zone'}</div></>}
         <button type="button" className={'mp-gps' + (gps ? ' ld' : '')} aria-label="Use my current location" onClick={locate}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
         </button>
       </div>
       {err && <p className="mp-err" role="alert">{err}</p>}
       <div className="mp-card"><span><Icon n="pin" /></span><div><small>Delivering to</small><b>{fullAddr(clean) || 'Move the pin or search to set location'}</b></div></div>
-      {(() => { const d = deliveryFor(clean); return <div className={'dl-card' + (d.fee == null ? ' bad' : '')}><span className="dl-ic">🛵</span><div><small>Delivery charge{d.km != null ? ` · ${d.km.toFixed(1)} km from Bahaddarhat` : ''}</small><b>{d.fee == null ? 'Outside Chattogram — we cannot deliver here' : d.km == null ? 'Pin your location for the exact charge' : 'Inside our delivery area'}</b></div><em>{feeTxt(d)}</em></div> })()}
+      <DeliveryCard d={deliveryFor(clean)} far />
       <div className="mp-man">
         <h5>✏️ Adjust manually</h5>
         <label className="lbl">City<input className="inp" value={f.city} onChange={set('city')} autoComplete="address-level2" /></label>
@@ -1376,6 +1381,46 @@ function SearchScreen({ q0 = '', f0 = F0, idx, prods, cats, shops, loading, back
     {!loading && !list.length ? <div className="emp"><div className="emp-i"><Icon n="search" /></div><h3>Nothing found</h3><p>{fCount(f) ? 'Try removing a filter or two.' : 'Check the spelling or try a shorter word.'}</p>{fCount(f) > 0 && <button className="btn" onClick={() => setF(F0)}>Clear filters</button>}</div> : <Grid list={list} loading={loading} {...gp} />}
     {sheet && <FilterSheet base={base} shops={shops} f={f} onApply={v => { setF(v); setSheet(false) }} onClose={closeSheet} />}
   </div></>
+}
+
+// --- live delivery: rider on the map (Pinkish zone) or courier tracking (outside 4 km) ---
+const LiveTrack = ({ o, st }) => {
+  const courier = modeOf(o) === 'courier', ad = o.address || {}, home = okLL(ad.lat, ad.lng)
+  const r = usePoll(() => api.myRiderLocation(o.id), 8000, !courier && st === 2 && /^[0-9a-f-]{36}$/i.test(String(o.id)), [o.id])
+  if (st >= 3 || st === 4) return null
+  if (courier) {
+    const url = safeUrl(o.courier_url)
+    return <section className="tk-card tk-cr"><header><h5>Courier delivery</h5><span className="tk-pill">{o.courier_name || 'Partner courier'}</span></header>
+      <div className="tk-row"><span className="tk-ic">📦</span><div>{o.courier_tracking
+        ? <><small>Tracking ID</small><b className="tk-tid">{o.courier_tracking}</b><p>Your parcel is with {o.courier_name || 'our courier partner'}. They will call you before delivery.</p></>
+        : <><small>Outside our {RIDER_KM} km rider zone</small><b>Pathao or a partner courier delivers this order</b><p>Pinkish packs it and hands it to the courier. Your tracking ID appears here, and you get a notification.</p></>}</div></div>
+      {url && <a className="btn tk-go" href={url} target="_blank" rel="noopener noreferrer">Track with {o.courier_name || 'courier'} →</a>}</section>
+  }
+  if (st !== 2) return null
+  const rl = r && okLL(r.lat, r.lng) ? r : null, km = rl && home ? havKm(+rl.lat, +rl.lng, +ad.lat, +ad.lng) : null, eta = etaMin(km)
+  const markers = [rl && { id: 'rider', kind: 'rider', lat: rl.lat, lng: rl.lng, label: (rl.name || 'Your rider') + ' · ' + seenAgo(rl.seen) }, home && { id: 'home', kind: 'home', lat: ad.lat, lng: ad.lng, label: 'You' }].filter(Boolean)
+  return <section className="tk-card tk-live"><header><h5>Live delivery</h5>{rl && <span className="tk-pill">{km != null ? (km < 0.15 ? 'Arriving now' : `${kmTxt(km)} · about ${eta} min`) : 'On the way'}</span>}</header>
+    {markers.length > 0 ? <LiveMap markers={markers} follow="rider" height={230} lazy={lowData()} chip={rl ? { text: (rl.name || 'Rider') + ' · ' + seenAgo(rl.seen), old: !fresh(rl.seen, 2) } : { text: 'Waiting for the rider\'s location…', old: true }} />
+      : <p className="tk-wait">Your rider is on the way. The live map appears as soon as their location comes in.</p>}
+    {!home && <p className="tk-wait">Tip: pin your location in Addresses next time, so the rider finds you faster.</p>}</section>
+}
+const lowData = () => { try { const c = navigator.connection; return !!(c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ''))) } catch { return false } }
+
+// --- delivery code from the Pinkish Rider system (only for the signed-in customer's own order) ---
+const DeliveryCode = ({ o, st }) => {
+  const [d, setD] = useState(null)
+  const live = st < 3 && st !== 4 && api.supabase && /^[0-9a-f-]{36}$/i.test(String(o.id))
+  useEffect(() => {
+    if (!live) return
+    let on = true
+    const pull = () => api.supabase.rpc('my_delivery', { p_order: String(o.id) }).then(({ data, error }) => { if (on && !error) setD(data || null) }, () => {})
+    pull(); const t = setInterval(pull, 20000)
+    return () => { on = false; clearInterval(t) }
+  }, [live, o.id])
+  if (!live || !d?.code) return null
+  return <section className="tk-card tk-dc"><header><h5>Delivery code</h5>{d.rider && <span className="tk-pill">Rider {d.rider}</span>}</header>
+    <div className="tk-code"><div><small>Give this to the rider</small><b>{d.code}</b></div>{d.rider_phone && <a href={'tel:' + d.rider_phone}><Icon n="call" />Call rider</a>}</div>
+    <p className="h">Share it only after you have your parcel in hand{o.payment_status !== 'paid' ? ' and paid the rider' : ''}. Pinkish staff will never ask for it on the phone.</p></section>
 }
 
 // --- returns & refunds ---
@@ -1887,7 +1932,7 @@ export default function App() {
 
   if (s === 'checkout') body = <><Hdr title="Delivery Details" back={back} /><div className="scr narrow"><Steps n={1} />
     {[['name', 'Full Name', 'name'], ['phone', 'Phone Number (+8801XXXXXXXXX)', 'tel'], ['address', 'House, Road, Area, Chattogram', 'street-address'], ['note', 'Delivery Instructions (Optional)', 'off']].map(([k, l, ac]) => <input key={k} className="inp" placeholder={l} autoComplete={ac} inputMode={k === 'phone' ? 'tel' : undefined} value={addr[k]} onChange={e => setAddr(a => ({ ...a, [k]: e.target.value }))} />)}
-    <div className={'dl-card' + (delivery.fee == null ? ' bad' : '')}><span className="dl-ic">🛵</span><div><small>Delivery charge{delivery.km != null ? ` · ${delivery.km.toFixed(1)} km` : ''}</small><b>{delivery.fee == null ? 'Outside our delivery area' : delivery.label}</b></div><em>{feeTxt(delivery)}</em></div>
+    <DeliveryCard d={delivery} />
     <div className="note">🔒 Your order will be delivered in discreet packaging.</div>
     <button className="btn" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : !addr.name.trim() ? say('Enter your full name') : addr.phone.replace(/\D/g, '').length < 10 ? say('Enter a valid phone number (at least 10 digits)') : !addr.address.trim() ? say('Enter your delivery address') : go('payment')}>Continue to Payment</button></div></>
 
@@ -1895,7 +1940,7 @@ export default function App() {
     {PAYS.map(([n, d], k) => <button key={n} className={'pay' + (pay === k ? ' on' : '')} onClick={() => setPay(k)}><PayLogo k={k} /><div><b>{n}</b><small>{d}</small></div><i /></button>)}
     {delivery.fee == null
       ? <div className="note" style={{ background: '#fff0f3cc', color: '#c62d4a' }}>⚠️ {OUT_MSG} Please choose a closer address.</div>
-      : <div className="note" style={{ background: '#eaf8efcc', color: '#2a8a52' }}>🛵 {delivery.label}</div>}
+      : <div className="note" style={{ background: '#eaf8efcc', color: '#2a8a52' }}>{delivery.mode === 'courier' ? '📦' : '🛵'} {delivery.label}</div>}
     <div className="note" style={{ background: '#eaf8efcc', color: '#2a8a52' }}>🛡️ SSL Secured Payment — your information is always protected.</div>
     <button className="btn" disabled={busy || delivery.fee == null} onClick={place}>{delivery.fee == null ? '📦 Outside delivery area' : busy ? <i className="spin" /> : <>{pay === 1 ? 'Continue to bKash' : pay === 2 ? 'Pay Now' : 'Place Order'} · <Money v={total} /></>}</button></div></>
 
@@ -1918,7 +1963,9 @@ export default function App() {
     const pst = o.payment === 'bKash' ? (o.payment_status === 'paid' ? ['Paid ✓', 'ok'] : o.payment_status === 'verifying' ? ['Verifying…', 'wait'] : ['Not paid yet', 'no']) : null
     body = <><Hdr title="Order Tracking" back={back} /><div className="scr narrow trkscr">
       <div className="tk-meta"><div><small>Order</small><b>#{o.order_no}</b></div><div><small>Placed</small><b>{t.toLocaleDateString([], { dateStyle: 'medium' })}</b><em>{t.toLocaleTimeString([], { timeStyle: 'short' })}</em></div><div><small>Total</small><b className="g">{taka(o.total)}</b></div></div>
-      <div className={'trk' + (st >= 3 ? ' fin' : '')}><div className="trk-top"><span className="trk-art"><StatusArt st={st} /></span><div className="trk-tx"><b>{['Order received!', 'We are preparing your order', 'Your order is on the way!', 'Delivered. Thank you!'][st]}</b><br />{['We will confirm it shortly.', 'It will be handed to our delivery partner soon.', 'Our delivery partner will reach you soon.', 'Hope you love it.'][st]}</div></div><div className="trk-rail"><div className="trk-line"><i className="trk-fill" style={{ width: (Math.min(st, 3) / 3 * 100) + '%' }} /></div>{STEPS.map((l, i) => <span key={l} className={'trk-n' + (i <= st ? ' on' : '') + (i === st && st < 3 ? ' cur' : '')} style={{ left: (i / 3 * 100) + '%' }} />)}</div><div className="trk-lb">{STEPS.map((l, i) => <small key={l} className={i <= st ? 'on' : ''}>{l}</small>)}</div></div>
+      <div className={'trk' + (st >= 3 ? ' fin' : '')}><div className="trk-top"><span className="trk-art"><StatusArt st={st} /></span><div className="trk-tx"><b>{['Order received!', 'We are preparing your order', 'Your order is on the way!', 'Delivered. Thank you!'][st]}</b><br />{modeOf(o) === 'courier' ? ['We will confirm it shortly.', 'We are packing it for our courier partner.', `${o.courier_name || 'Our courier partner'} is bringing it to you.`, 'Hope you love it.'][st] : ['We will confirm it shortly.', 'A Pinkish rider will pick it up soon.', 'Your Pinkish rider is on the way. Watch them on the map.', 'Hope you love it.'][st]}</div></div><div className="trk-rail"><div className="trk-line"><i className="trk-fill" style={{ width: (Math.min(st, 3) / 3 * 100) + '%' }} /></div>{STEPS.map((l, i) => <span key={l} className={'trk-n' + (i <= st ? ' on' : '') + (i === st && st < 3 ? ' cur' : '')} style={{ left: (i / 3 * 100) + '%' }} />)}</div><div className="trk-lb">{STEPS.map((l, i) => <small key={l} className={i <= st ? 'on' : ''}>{l}</small>)}</div></div>
+      <LiveTrack o={o} st={st} />
+      {modeOf(o) !== 'courier' && <DeliveryCode o={o} st={st} />}
       {its.length > 0 && <section className="tk-card"><header><h5>Items</h5><span className="tk-pill">{qn} item{qn === 1 ? '' : 's'}</span></header>{its.map((i, k) => <div className="ti" key={i.key || k}><Pic p={i} /><div><b>{i.name}</b><small>{i.variant && i.variant !== 'Standard' ? i.variant + ' · ' : ''}{taka(i.price)} × {i.qty}</small></div><b>{taka(i.price * i.qty)}</b></div>)}</section>}
       {((ad.address || ad.name) || o.payment) && <section className="tk-card"><header><h5>Delivery &amp; payment</h5></header>
         {(ad.address || ad.name) && <div className="tk-row"><span className="tk-ic"><Icon n="pin" /></span><div><small>Delivering to</small><b>{ad.name}{ad.phone && ' · ' + ad.phone}</b>{ad.address && <p>{ad.address}</p>}{ad.note && <em>Note: {ad.note}</em>}</div></div>}

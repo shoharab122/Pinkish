@@ -522,3 +522,9 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px #fff inset;-webkit-text-fil
   .sl-tools .sl-sel{flex:1 1 100%}
 }
 @media(prefers-reduced-motion:reduce){.sl-skel{animation:none}}
+
+/* ---------- live maps: pickup pin + rider coming ---------- */
+.sl-pin{display:grid;gap:12px}.sl-pin .sl-head{margin:0}.sl-pin .sl-err,.sl-pin .sl-ok{margin:0}
+.sl-zone{display:flex;gap:8px;align-items:flex-start;margin:0;padding:10px 12px;border-radius:14px;background:#fff4e5;color:#9a5a00;font-size:.84rem;font-weight:600;line-height:1.4}
+.sl-zone.in{background:#e4f6ec;color:var(--ok)}.sl-zone .ico{flex:none;margin-top:2px}
+.sl-live{display:grid;gap:6px}.sl-live .sl-mut{margin:0;font-size:.8rem}
