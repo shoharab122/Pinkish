@@ -15,11 +15,6 @@ const OUT_MSG = `Sorry, we only deliver inside Chattogram (within ${MAX_KM} km o
 const feeTxt = d => d.fee == null ? 'Outside area' : '৳' + d.fee
 const NAV = [['home', 'home', 'Home'], ['categories', 'grid', 'Categories'], ['cart', 'bag', 'Cart'], ['orders', 'receipt', 'Orders'], ['profile', 'user', 'Profile']]
 const TABS = NAV.map(n => n[0])
-const OB = [
-  { e: 'art:shop', t: ['Shop Everything', 'Made for Her'], d: 'Beauty, fashion, self-care and everyday essentials, all in one marketplace.' },
-  { e: 'art:store', t: ['Shops You Love', 'All in One Place'], d: 'Discover verified local sellers, follow your favourite shops and never miss a flash deal.' },
-  { e: 'art:delivery', t: ['Order in Seconds', 'Right to Your Door'], d: 'Pay with cash on delivery or bKash and track your order live across Chattogram.' },
-]
 const STEPS = ['Order Placed', 'Processing', 'Out for Delivery', 'Delivered']
 const PAYS = [['Cash on Delivery', 'Pay when you receive', '💵'], ['bKash', 'Send money, then enter your TrxID', '🌸'], ['Nagad', 'Pay with Nagad', '🟠'], ['Debit/Credit Card', 'Visa, Mastercard', '💳']]
 const OFFERS = [['Limited Offer', 'Privacy. Confidence.|Comfort. Wellness.', '🛡️'], ['Delivery from ৳40', 'Discreet delivery|across Chattogram', '🚚'], ['Use code SHIELD10', 'Get 10% off|your first order', '🎁']]
@@ -1639,67 +1634,42 @@ const Profile = memo(({ user, admin, count, wishCount, place, hasAddr, tab, go, 
   </div>
 })
 
-// ---------- Welcome (first visit): story-style slides, swipe, "Get started" pours the store in ----------
-const WEL_PTS = [['bag', 'Beauty, fashion & more'], ['truck', 'Delivery from ৳40'], ['card', 'Cash on delivery & bKash']]
-const WEL_MS = 4800 // time per slide before it moves on by itself
-function Welcome({ onStart, onLogin }) {
-  const [i, setI] = useState(0), [hold, setHold] = useState(false), [out, setOut] = useState(null)
-  const root = useRef(null), track = useRef(null), g = useRef(null), n = OB.length
-  const to = k => setI(Math.max(0, Math.min(n - 1, k)))
+// ---------- Welcome (first visit): one clean screen, like a modern marketplace ----------
+// Real products from the cached catalogue make the hero; no slides, no timers, CSS-only motion.
+const WEL_PTS = [['truck', 'Delivery', 'from ৳40'], ['card', 'Cash or bKash', 'on delivery'], ['shield', 'Verified', 'sellers']]
+function Welcome({ prods = NONE, cats = NONE, onStart, onLogin }) {
+  const [out, setOut] = useState(false)
+  // four best-looking products with a picture (highest rated first) for the mosaic
+  const pics = useMemo(() => prods.filter(p => p.image_url && p.is_active !== false && stockOf(p) !== 0).sort((a, b) => (b.rating || 0) - (a.rating || 0) || (b.reviews || 0) - (a.reviews || 0)).slice(0, 4), [prods])
+  const chips = useMemo(() => cats.slice(0, 8), [cats])
   useEffect(() => { warm(['/logo-mark.webp?v=2']) }, [])
-  useEffect(() => {
-    const k = e => { if (e.key === 'ArrowRight') setI(x => Math.min(n - 1, x + 1)); else if (e.key === 'ArrowLeft') setI(x => Math.max(0, x - 1)) }
-    addEventListener('keydown', k); return () => removeEventListener('keydown', k)
-  }, [n])
-  // leave with a liquid wipe that grows from the button that was pressed
-  const leave = (e, then) => {
-    if (out) return
-    writeLS('pk_wel', 1)
-    const box = root.current?.getBoundingClientRect()
-    if (lite() || !box) return then()
-    const r = e.currentTarget.getBoundingClientRect(), x = r.left + r.width / 2 - box.left, y = r.top + r.height / 2 - box.top
-    setOut({ x, y, s: Math.hypot(Math.max(x, box.width - x), Math.max(y, box.height - y)) / 20 + 1 })
-    setTimeout(then, 480)
-  }
-  // swipe: the track follows the finger directly (no React render per move), then snaps with a spring
-  const down = e => { if (e.button > 0) return; g.current = { x: e.clientX, y: e.clientY, h: null }; setHold(true) }
-  const move = e => {
-    const o = g.current; if (!o) return
-    const dx = e.clientX - o.x, dy = e.clientY - o.y
-    if (o.h == null && Math.abs(dx) + Math.abs(dy) > 8) { o.h = Math.abs(dx) > Math.abs(dy); if (o.h) e.currentTarget.setPointerCapture?.(e.pointerId) }
-    if (!o.h || !track.current) return
-    const edge = (i === 0 && dx > 0) || (i === n - 1 && dx < 0) ? 0.35 : 1 // rubber band at the ends
-    track.current.classList.add('drag'); track.current.style.transform = `translate3d(calc(${-i * 100}% + ${dx * edge}px),0,0)`
-  }
-  const up = e => {
-    const o = g.current; g.current = null; setHold(false)
-    const t = track.current; if (t) { t.classList.remove('drag'); t.style.transform = `translate3d(${-i * 100}%,0,0)` }
-    if (!o?.h) return
-    const dx = e.clientX - o.x
-    if (dx < -45) to(i + 1); else if (dx > 45) to(i - 1)
-  }
-  const next = () => { if (!lite() && !hold && i < n - 1) setI(i + 1) }
-  return <div ref={root} className={'wl' + (out ? ' out' : '')} style={{ '--n': WEL_MS + 'ms' }}>
-    <div className="wl-bg" aria-hidden="true"><i /><i /><i /></div>
+  const leave = then => { if (out) return; writeLS('pk_wel', 1); if (lite()) return then(); setOut(true); setTimeout(then, 220) }
+  return <div className={'wl' + (out ? ' out' : '')}>
     <header className="wl-top">
-      <span className="wl-logo"><span className="wl-lm"><img src="/logo-mark.webp?v=2" width="30" height="30" alt="" decoding="async" draggable="false" /></span><b className="wm"><span className="bp">Pink</span><span className="bi">ish</span></b></span>
-      <button type="button" className="wl-skip" onClick={e => leave(e, onStart)}>Skip</button>
+      <span className="wl-logo"><img src="/logo-mark.webp?v=2" width="30" height="30" alt="" decoding="async" draggable="false" /><b className="wm"><span className="bp">Pink</span><span className="bi">ish</span></b></span>
+      <button type="button" className="wl-skip" onClick={() => leave(onStart)}>Skip</button>
     </header>
-    <div className={'wl-bars' + (hold ? ' hold' : '')} role="tablist" aria-label="Welcome slides">{OB.map((_, k) => <button key={k} type="button" role="tab" aria-selected={k === i} aria-label={'Slide ' + (k + 1)} className={k < i ? 'dn' : k === i ? 'on' : ''} onClick={() => to(k)}>{k === i && <i key={'b' + i} onAnimationEnd={next} />}</button>)}</div>
-    <div className="wl-view" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-      <div ref={track} className="wl-track" style={{ transform: `translate3d(${-i * 100}%,0,0)` }}>
-        {OB.map((o, k) => <section key={k} className={'wl-sl' + (k === i ? ' on' : '')} aria-hidden={k !== i}>
-          <div className="wl-art"><span><Glyph v={o.e} /></span></div>
-          <h1>{o.t[0]}<em>{o.t[1]}</em></h1><p>{o.d}</p>
-        </section>)}
+
+    <div className="wl-body">
+      <div className="wl-hero">
+        <span className="wl-tag"><i />Chattogram's marketplace for her</span>
+        {pics.length >= 3
+          ? <div className={'wl-mos n' + pics.length} aria-hidden="true">{pics.map((p, k) => <span key={p.id}><img src={p.image_url} alt="" width="160" height="160" loading="eager" fetchpriority={k === 0 ? 'high' : undefined} decoding="async" draggable="false" />{k === 0 && api.dealLive(p) && <em>-{api.dealPct(p)}%</em>}</span>)}</div>
+          : <div className="wl-art" aria-hidden="true"><ShopArt /></div>}
       </div>
+
+      <h1>Everything you love,<em>delivered discreetly.</em></h1>
+      <p className="wl-sub">Beauty, fashion and self-care from verified local shops. Order in seconds, pay when it arrives.</p>
+
+      {chips.length > 0 && <div className="wl-cats" aria-label="Popular categories">{chips.map(c => <button type="button" key={c.id} onClick={() => leave(onStart)}><span><CatIcon c={c} /></span>{c.name}</button>)}</div>}
+
+      <ul className="wl-pts">{WEL_PTS.map(([ic, a, b]) => <li key={a}><i><Icon n={ic} /></i><span><b>{a}</b><small>{b}</small></span></li>)}</ul>
     </div>
-    <ul className="wl-pts">{WEL_PTS.map(([ic, t]) => <li key={t}><i><Icon n={ic} /></i>{t}</li>)}</ul>
+
     <div className="wl-cta">
-      <button type="button" className="btn wl-go" onClick={e => leave(e, onStart)}>Get started<i aria-hidden="true"><Icon n="chev" /></i></button>
-      <p className="wl-in">Already have an account? <button type="button" onClick={e => leave(e, onLogin)}>Log in</button></p>
+      <button type="button" className="btn wl-go" onClick={() => leave(onStart)}>Start shopping<Icon n="chev" /></button>
+      <p className="wl-in">Already have an account? <button type="button" onClick={() => leave(onLogin)}>Log in</button></p>
     </div>
-    {out && <i className="wl-wipe" aria-hidden="true" style={{ left: out.x, top: out.y, '--s': out.s }} />}
   </div>
 }
 
@@ -2067,7 +2037,7 @@ export default function App() {
   let body
   if (s === 'splash') return <div className="app"><div className="splash"><div className="lgcard"><div className="lk col" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="84" height="84" alt="" decoding="async" fetchpriority="high" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div></div><div>Privacy. Confidence. Comfort. Wellness.</div><div className="sbar"><i /></div></div></div>
 
-  if (s === 'ob') body = <Welcome onStart={() => tab('home')} onLogin={() => { tab('home'); goLogin() }} />
+  if (s === 'ob') body = <Welcome prods={prods} cats={cats} onStart={() => tab('home')} onLogin={() => { tab('home'); goLogin() }} />
 
   if (s === 'auth') body = <div className="auth">
     <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
@@ -2500,71 +2470,57 @@ html.lite .toast{background:#2a1a3a;color:#fff}
 @media(prefers-reduced-motion:reduce){.nv-blob{transition:opacity .2s}.fly{display:none}}
 `
 
-/* ===== Welcome screen ===== */
+/* ===== Welcome screen: light, simple, marketplace style ===== */
 const WEL_CSS = `
-.wl{flex:1;min-height:0;position:relative;overflow:hidden;isolation:isolate;display:flex;flex-direction:column;color:#fff;
-  padding:calc(14px + env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left));
-  background:radial-gradient(120% 70% at 50% -10%,#8e2a8c 0,#4a1668 50%,#2d0b4a 100%)}
-.wl-top,.wl-bars,.wl-view,.wl-pts,.wl-cta{position:relative;z-index:1;width:100%;max-width:460px;margin-inline:auto}
-.wl-bg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.wl-bg i{position:absolute;width:70vmax;height:70vmax;border-radius:50%;opacity:.5;will-change:transform}
-.wl-bg i:nth-child(1){left:-32vmax;top:-32vmax;background:radial-gradient(circle,#ff7eb6 0,#ff7eb600 62%);animation:wlA 18s ease-in-out infinite alternate}
-.wl-bg i:nth-child(2){right:-36vmax;top:18%;background:radial-gradient(circle,#7c5cf0 0,#7c5cf000 62%);animation:wlB 22s ease-in-out infinite alternate}
-.wl-bg i:nth-child(3){left:-12vmax;bottom:-42vmax;opacity:.35;background:radial-gradient(circle,#ff9a6b 0,#ff9a6b00 62%);animation:wlA 26s ease-in-out infinite alternate-reverse}
-.wl-bg::after{content:'';position:absolute;inset:0;background-image:radial-gradient(#ffffff2a 1.2px,#0000 1.6px);background-size:24px 24px;-webkit-mask-image:linear-gradient(#000,#0000 55%);mask-image:linear-gradient(#000,#0000 55%)}
-@keyframes wlA{to{transform:translate3d(12vmax,10vmax,0) scale(1.15)}}
-@keyframes wlB{to{transform:translate3d(-14vmax,-8vmax,0) scale(.9)}}
-.wl-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;animation:up .5s var(--out) both}
-.wl-logo{display:flex;align-items:center;gap:10px;min-width:0}
-.wl-lm{flex:none;width:44px;height:44px;border-radius:14px;background:#fff;display:grid;place-items:center;box-shadow:0 12px 26px -8px #1a063a99,0 0 0 4px #ffffff24}
-.wl-lm img{width:30px;height:30px;object-fit:contain;display:block}
-.wl-logo .wm{font-size:20px;background:#fff;padding:5px 12px 6px;border-radius:999px}
-.wl-skip{position:relative;overflow:hidden;isolation:isolate;flex:none;min-height:40px;padding:0 18px;border-radius:999px;font-size:14px;font-weight:600;color:#fff;background:#ffffff1f;border:1px solid #ffffff40;transition:background .25s}
-@media(hover:hover){.wl-skip:hover{background:#ffffff33}}
-.wl-bars{display:flex;gap:6px;margin-top:14px;flex:none}
-.wl-bars button{flex:1;height:22px;position:relative;overflow:hidden;isolation:isolate;background:none;border-radius:6px}
-.wl-bars button::before,.wl-bars i{content:'';position:absolute;left:0;right:0;top:9px;height:4px;border-radius:4px}
-.wl-bars button::before{background:#ffffff33;transition:background .3s}
-.wl-bars button.dn::before{background:#fff}
-.wl-bars i{background:#fff;transform-origin:left;animation:wlBar var(--n) linear both;box-shadow:0 0 10px #ffffffaa}
-.wl-bars.hold i{animation-play-state:paused}
-@keyframes wlBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-.wl-view{flex:1;min-height:0;display:flex;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;margin-top:6px;cursor:grab}
-.wl-view:active{cursor:grabbing}
-.wl-track{display:flex;width:100%;transition:transform .55s var(--out);will-change:transform}
-.wl-track.drag{transition:none}
-.wl-sl{flex:0 0 100%;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:8px 6px;opacity:.3;transition:opacity .45s}
-.wl-sl.on{opacity:1}
-.wl-art{position:relative;width:clamp(150px,32vh,232px);aspect-ratio:1;display:grid;place-items:center;margin-bottom:12px;border-radius:50%;
-  background:radial-gradient(circle at 35% 28%,#ffffffee,#ffd6e8bb 45%,#ffffff22 72%);box-shadow:0 30px 60px -20px #1a063acc,inset 0 2px 10px #fff,inset 0 -16px 30px #8e2a8c33}
-.wl-art::before,.wl-art::after{content:'';position:absolute;inset:-14px;border-radius:50%;border:1.5px solid #ffffff38}
-.wl-sl.on .wl-art::after{animation:wlRing 2.8s ease-out infinite}
-@keyframes wlRing{from{transform:scale(.92);opacity:.9}to{transform:scale(1.22);opacity:0}}
-.wl-art span{font-size:clamp(84px,19vh,136px);line-height:1;display:grid;place-items:center;filter:drop-shadow(0 12px 18px #4a166855)}
-.wl-art span img{width:.9em;height:auto;display:block}
-.wl-sl.on .wl-art span{animation:wlArt .7s var(--lqs) both,flt 3.4s ease-in-out .7s infinite}
-@keyframes wlArt{from{transform:scale(.6) rotate(-8deg);opacity:0}}
-.wl-sl h1{display:grid;font-size:clamp(25px,4vh,32px);line-height:1.12;font-weight:800;letter-spacing:-.4px}
-.wl-sl h1 em{font-style:normal;background:linear-gradient(90deg,#ffd1e5,#ff9ac4 50%,#ffc7a8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.wl-sl p{font-size:15px;line-height:1.5;color:#ffffffcc;max-width:340px}
-.wl-sl.on h1{animation:up .55s var(--out) .08s both}.wl-sl.on p{animation:up .55s var(--out) .16s both}
-.wl-pts{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:6px;flex:none}
-.wl-pts li{display:grid;justify-items:center;gap:6px;padding:10px 4px;border-radius:18px;background:#ffffff14;border:1px solid #ffffff2b;font-size:12px;font-weight:600;line-height:1.2;text-align:center;animation:up .5s var(--out) .1s both}
-.wl-pts li:nth-child(2){animation-delay:.16s}.wl-pts li:nth-child(3){animation-delay:.22s}
-.wl-pts i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#fff;color:var(--p2)}
-.wl-pts .ico{width:15px;height:15px}
-.wl-cta{flex:none;display:grid;gap:8px;margin-top:16px;animation:up .6s var(--out) .14s both}
-.btn.wl-go{min-height:58px;font-size:17px;display:flex;align-items:center;justify-content:center;gap:12px;background:linear-gradient(120deg,#ff7a9c,#ff3358 55%,#b8174f);background-size:200% 100%;box-shadow:inset 0 1.5px 0 #ffffff99,inset 0 -10px 18px #6a0f3a55,0 18px 34px -8px #ff3358bb}
-.wl-go i{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#ffffff33;font-style:normal;animation:wlNudge 1.6s ease-in-out infinite}
-.wl-go i .ico{width:18px;height:18px}
-@keyframes wlNudge{50%{transform:translate3d(4px,0,0)}}
-.wl-in{text-align:center;font-size:13.5px;color:#ffffffcc;margin:0}
-.wl-in button{color:#fff;font-weight:800;text-decoration:underline;text-underline-offset:3px;padding:8px 4px}
-.wl-wipe{position:absolute;z-index:20;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:#f7effb;pointer-events:none;transform:scale(0);animation:wlWipe .5s cubic-bezier(.65,0,.35,1) forwards;will-change:transform}
-@keyframes wlWipe{to{transform:scale(var(--s))}}
-.wl.out :is(.wl-top,.wl-bars,.wl-view,.wl-pts,.wl-cta){animation:wlOut .3s var(--out) both}
-@keyframes wlOut{to{opacity:0;transform:scale(.95)}}
-@media(max-height:660px){.wl-pts{display:none}.wl-sl p{font-size:14px}.wl-sl{gap:6px}.wl-art{margin-bottom:6px}}
-@media(max-height:520px){.wl-art{width:110px}.wl-art span{font-size:72px}.wl-sl p{display:none}}
-@media(min-width:900px){.wl{padding-top:32px;padding-bottom:32px}}
+.wl{flex:1;min-height:0;position:relative;overflow:hidden;display:flex;flex-direction:column;color:var(--ink,#2a1a3a);
+  padding:calc(12px + env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));
+  background:radial-gradient(90% 45% at 100% 0,#ffd9e8 0,#ffd9e800 70%),radial-gradient(80% 40% at 0 8%,#eadcff 0,#eadcff00 70%),#fbf7fd}
+.wl>*{width:100%;max-width:440px;margin-inline:auto}
+.wl-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none}
+.wl-logo{display:flex;align-items:center;gap:8px;min-width:0}
+.wl-logo img{width:30px;height:30px;object-fit:contain;display:block}
+.wl-logo .wm{font-size:21px}
+.wl-skip{min-height:38px;padding:0 16px;border-radius:999px;font-size:14px;font-weight:600;color:var(--p1);background:#fff;border:1px solid #eee3f5;box-shadow:0 4px 12px -8px #4a166855}
+.wl-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;display:flex;flex-direction:column;padding:14px 0 6px}
+.wl-body::-webkit-scrollbar{display:none}
+.wl-hero{position:relative;border-radius:28px;padding:16px;background:linear-gradient(135deg,#4a1668,#8e2a8c 55%,#e0457b);box-shadow:0 22px 40px -22px #8e2a8ccc;overflow:hidden;flex:none;animation:up .5s var(--out) both}
+.wl-hero::after{content:'';position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,#ffffff2e,#fff0 70%);pointer-events:none}
+.wl-tag{position:relative;z-index:1;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:#ffffff26;border:1px solid #ffffff3d;color:#fff;font-size:12px;font-weight:600}
+.wl-tag i{width:7px;height:7px;border-radius:50%;background:#7dffb4;box-shadow:0 0 0 3px #7dffb433}
+.wl-mos{position:relative;z-index:1;display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px;height:clamp(170px,30vh,250px)}
+.wl-mos span{position:relative;border-radius:20px;overflow:hidden;background:#fff;box-shadow:0 10px 22px -12px #1a063a99;animation:up .5s var(--out) both}
+.wl-mos span:nth-child(2){animation-delay:.06s}.wl-mos span:nth-child(3){animation-delay:.12s}.wl-mos span:nth-child(4){animation-delay:.18s}
+.wl-mos.n3 span:first-child{grid-row:span 2}
+.wl-mos img{width:100%;height:100%;object-fit:cover;display:block}
+.wl-mos em{position:absolute;left:8px;top:8px;padding:3px 8px;border-radius:999px;background:#ff3358;color:#fff;font:700 11px/1.3 system-ui,sans-serif;font-style:normal}
+.wl-art{position:relative;z-index:1;height:clamp(160px,28vh,230px);display:grid;place-items:center;margin-top:10px}
+.wl-art>*{height:100%;width:auto;max-width:100%;animation:flt 4s ease-in-out infinite}
+.wl h1{display:grid;margin:20px 0 0;font-size:clamp(25px,4.2vh,31px);line-height:1.12;font-weight:800;letter-spacing:-.5px;color:var(--p1);animation:up .5s var(--out) .06s both}
+.wl h1 em{font-style:normal;background:linear-gradient(90deg,#8e2a8c,#e0457b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.wl-sub{margin:8px 0 0;font-size:14.5px;line-height:1.5;color:#6f6380;animation:up .5s var(--out) .1s both}
+.wl-cats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:16px -18px 0;padding:2px 18px;flex:none;animation:up .5s var(--out) .14s both}
+.wl-cats::-webkit-scrollbar{display:none}
+.wl-cats button{flex:none;display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 14px 0 6px;border-radius:999px;background:#fff;border:1px solid #eee3f5;font-size:13px;font-weight:600;color:var(--p1);white-space:nowrap;transition:transform .2s}
+.wl-cats button:active{transform:scale(.95)}
+.wl-cats span{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#f6effb;color:var(--p2);font-size:15px;overflow:hidden}
+.wl-cats span img{width:20px;height:20px;object-fit:contain}
+.wl-cats .cico{width:16px;height:16px}
+.wl-pts{list-style:none;padding:0;margin:14px 0 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:none;animation:up .5s var(--out) .18s both}
+.wl-pts li{display:flex;align-items:center;gap:8px;padding:10px;border-radius:16px;background:#fff;border:1px solid #f0e7f6;min-width:0}
+.wl-pts i{flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#fde7f0;color:var(--p3)}
+.wl-pts .ico{width:16px;height:16px}
+.wl-pts span{min-width:0;display:grid;line-height:1.2}
+.wl-pts b{font-size:12px;color:var(--p1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl-pts small{font-size:11px;color:#8b8197;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl-cta{flex:none;display:grid;gap:6px;padding-top:12px;animation:up .5s var(--out) .2s both}
+.btn.wl-go{min-height:56px;font-size:16.5px;display:flex;align-items:center;justify-content:center;gap:8px}
+.wl-go .ico{width:18px;height:18px}
+.wl-in{text-align:center;font-size:13.5px;color:#6f6380;margin:0}
+.wl-in button{color:var(--p2);font-weight:800;padding:8px 4px}
+.wl.out>*{animation:wlOut .22s ease both}
+@keyframes wlOut{to{opacity:0;transform:translateY(-6px)}}
+@media(max-height:640px){.wl-pts{display:none}.wl-mos,.wl-art{height:150px}.wl h1{margin-top:14px}}
+@media(max-width:360px){.wl-pts li{flex-direction:column;text-align:center;padding:8px 4px}.wl-pts b,.wl-pts small{white-space:normal}}
+@media(min-width:900px){.wl{padding-top:28px;padding-bottom:28px}.wl>*{max-width:480px}}
+@media(prefers-reduced-motion:reduce){.wl *,.wl.out>*{animation:none!important}}
 `
