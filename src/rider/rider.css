@@ -77,8 +77,7 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 @keyframes rxToast{from{opacity:0;transform:translate(-50%,12px) scale(.94)}}
 .rx-spin{width:34px;height:34px;border-radius:50%;border:3px solid #e9dcf2;border-top-color:var(--p3);border-right-color:var(--p2);animation:rxSpin .8s linear infinite;margin:auto}
 @keyframes rxSpin{to{transform:rotate(360deg)}}
-.rx-skel{height:150px;border-radius:24px;background:linear-gradient(90deg,#fff 0,#f3ecf8 50%,#fff 100%);background-size:200% 100%;animation:rxSh 1.2s linear infinite}
-@keyframes rxSh{to{background-position:-200% 0}}
+.rx-skel{position:relative;overflow:hidden;height:150px;border-radius:24px;background:#fff;border:1px solid var(--ln)}
 
 /* ---------- cards / pills / forms ---------- */
 .rx-card{background:#fff;border:1px solid var(--ln);border-radius:24px;padding:18px;box-shadow:var(--sh);margin:12px 0}
@@ -99,7 +98,8 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-pw input{padding-right:72px!important}
 .rx-pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);height:40px;padding:0 12px;border-radius:12px;font-weight:700;font-size:13px;color:var(--p2)}
 .rx-chips{display:flex;flex-wrap:wrap;gap:8px}
-.rx-chips button{min-height:42px;padding:0 16px;border-radius:999px;border:1.5px solid #e7dcef;background:#fff;font-weight:600;font-size:14px;transition:all .2s}
+.rx-chips button{min-height:42px;padding:0 16px;border-radius:999px;border:1.5px solid #e7dcef;background:#fff;font-weight:600;font-size:14px;transition:background-color .2s,border-color .2s,color .2s,transform .2s var(--spring)}
+.rx-chips button:active{transform:scale(.95)}
 .rx-chips button.on{background:var(--p0);border-color:var(--p0);color:#fff}
 .rx-file{position:relative;display:flex;gap:12px;align-items:center;border:2px dashed #dccbea;border-radius:18px;padding:14px;background:#fbf8fd;cursor:pointer}
 .rx-file input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
@@ -127,9 +127,11 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-hero li{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:999px;background:#ffffff1f;border:1px solid #ffffff2e}
 .rx-authc{position:relative;z-index:2;width:calc(100% - 24px);max-width:440px;margin:-40px auto calc(24px + var(--sb));padding:20px 18px;border-radius:28px}
 .rx-authc h2{font-size:23px;margin:4px 0 12px}
-.rx-tabs{display:flex;gap:4px;padding:4px;border-radius:16px;background:var(--soft);margin-bottom:16px}
-.rx-tabs button{flex:1;min-height:44px;border-radius:12px;font-weight:700;font-size:14.5px;color:var(--mut);transition:all .25s var(--ease)}
-.rx-tabs button.on{background:var(--p0);color:#fff;box-shadow:0 8px 16px -8px #2d0b4aaa}
+.rx-tabs{position:relative;display:flex;gap:4px;padding:4px;border-radius:16px;background:var(--soft);margin-bottom:16px}
+.rx-tabs::before{content:'';position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 6px);border-radius:12px;background:var(--p0);box-shadow:0 8px 16px -8px #2d0b4aaa;transition:transform .45s var(--spring)}
+.rx-tabs.up::before{transform:translateX(calc(100% + 4px))}
+.rx-tabs button{position:relative;z-index:1;flex:1;min-height:44px;border-radius:12px;font-weight:700;font-size:14.5px;color:var(--mut);transition:color .3s var(--ease)}
+.rx-tabs button.on{color:#fff}
 .rx-google{gap:10px;color:var(--ink)!important}
 .rx-gnote{text-align:center;font-size:12.5px;margin:8px 0 0}
 .rx-or{display:flex;align-items:center;gap:12px;margin:16px 0;font-size:12px;color:var(--mut)}
@@ -175,11 +177,11 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-loc small{color:var(--mut);font-size:12px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rx-loc b{font-size:15px;color:var(--p0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rx-duty{flex:none;display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 14px 0 11px;border-radius:999px;background:#fff;border:1px solid var(--ln);font-size:13px;font-weight:700;color:var(--mut);box-shadow:var(--sh);transition:background .25s var(--ease),color .25s,border-color .25s}
-.rx-duty i{width:10px;height:10px;border-radius:50%;background:#c9bdd4;transition:background .25s}
+.rx-duty i{position:relative;width:10px;height:10px;border-radius:50%;background:#c9bdd4;transition:background .25s}
 .rx-duty.on{background:var(--p0);border-color:var(--p0);color:#fff}
-.rx-duty.on i{background:#3ddc84;box-shadow:0 0 0 4px #3ddc8433;animation:rxPulse 1.8s infinite}
+.rx-duty.on i{background:#3ddc84;box-shadow:0 0 0 4px #3ddc8433}
+.rx-duty.on i::after{content:'';position:absolute;inset:0;border-radius:50%;background:#3ddc84;animation:rxRing 1.8s ease-out infinite}
 .rx-duty:disabled{opacity:.7}
-@keyframes rxPulse{50%{box-shadow:0 0 0 7px #3ddc8400}}
 .rx-av{border-radius:50%;background:var(--grad);color:#fff;display:grid;place-items:center;font-weight:800;flex:none}
 .rx-av.sm{width:44px;height:44px;font-size:17px}
 .rx-av.lg{width:88px;height:88px;font-size:34px;border:4px solid #fff}
@@ -256,7 +258,7 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-route{margin:16px 0 4px}
 .rx-rline{position:relative;height:44px;margin:0 10px}
 .rx-rbar{position:absolute;left:0;right:0;top:32px;height:0;border-top:2px dotted #d6c4e6}
-.rx-rbar b{position:absolute;left:0;top:-2px;height:2px;background:repeating-linear-gradient(90deg,var(--p3) 0 3px,#0000 3px 6px);transition:width .6s var(--ease)}
+.rx-rbar b{position:absolute;left:0;right:0;top:-2px;height:2px;background:repeating-linear-gradient(90deg,var(--p3) 0 3px,#0000 3px 6px);transition:clip-path .7s var(--ease)}
 .rx-rline>i{position:absolute;top:32px;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #d6c4e6;display:grid;place-items:center;color:#b9a6cb;z-index:1}
 .rx-rline>i.dn{background:var(--p3);border-color:var(--p3);color:#fff;box-shadow:0 0 0 3px #e0457b26}
 .rx-rline>em{position:absolute;top:0;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;font-style:normal;pointer-events:none;transition:left .6s var(--ease)}
@@ -321,15 +323,19 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 /* =====================================================================
    Job screen: map on top, header floating over it, dark tracking sheet
    ===================================================================== */
-.rx-view{min-height:100vh;min-height:100dvh;padding-bottom:calc(28px + var(--sb))}
+.rx-view{min-height:100vh;min-height:100dvh;padding-bottom:calc(28px + var(--sb));overflow-x:clip}
 .rx-side{position:relative}
-.rx-vh{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:calc(10px + var(--st)) 14px 10px;background:#f7effbeb;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.rx-vh{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:calc(10px + var(--st)) 14px 10px;background:#f7effbf7}
 .rx-vh>div{flex:1;min-width:0;text-align:center}
 .rx-vh b{display:block;font-family:var(--serif);font-size:19px;color:var(--p0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rx-vh small{display:block;color:var(--mut)}
-.rx-vh.over{position:absolute;left:0;right:0;top:0;pointer-events:none;background:linear-gradient(#f7effbf5 0,#f7effbb8 62%,#f7effb00);-webkit-backdrop-filter:none;backdrop-filter:none;padding-bottom:28px}
+.rx-vh.over{position:absolute;left:0;right:0;top:0;pointer-events:none;background:linear-gradient(#f7effbf5 0,#f7effbb8 62%,#f7effb00);padding-bottom:28px}
 .rx-vh.over button{pointer-events:auto}
-.rx-mapwrap{position:relative;height:clamp(300px,50vh,480px);background:#ece6f1;overflow:hidden}
+.rx-mapwrap{position:relative;height:var(--rx-mh,clamp(300px,50vh,480px));background:#ece6f1;overflow:hidden;transition:height .38s var(--ease)}
+/* while the sheet is being dragged: follow the finger, and the map underneath must not steal the drag */
+.rx-side.drag .rx-mapwrap{transition:none}
+.rx-side.drag .rx-map{pointer-events:none}
+.rx-side.drag{-webkit-user-select:none;user-select:none}
 .rx-map{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
 .rx-map iframe{width:100%;height:100%;border:0;display:block;filter:grayscale(.7) contrast(.95)}
 /* address (Google) map and the tap-to-load placeholder end where the dark sheet starts, so the sheet no longer covers Google's buttons */
@@ -347,7 +353,15 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-track{position:relative;z-index:3;overflow:hidden;margin:-30px 0 0;padding:10px 18px 14px;border-radius:30px 30px 28px 28px;color:#fff;
   background:linear-gradient(170deg,#3a1160,#2d0b4a 45%,#220739);box-shadow:0 -10px 30px -18px #2d0b4a99,0 24px 44px -18px #2d0b4ae6}
 .rx-track.nomap{margin:8px 10px 0;border-radius:28px}
-.rx-grab{display:block;width:42px;height:4px;border-radius:4px;background:#ffffff40;margin:0 auto 14px}
+/* slide handle: the whole top of the sheet (handle + order row) can be dragged */
+.rx-grip{touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.rx-grip *{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.rx-side.drag .rx-grip{cursor:grabbing}
+.rx-grab{display:flex;justify-content:center;align-items:center;width:100%;height:26px;margin:-10px 0 4px;border-radius:14px;touch-action:none;cursor:inherit}
+.rx-grab i,.rx-grab.off{display:block;width:42px;height:4px;border-radius:4px;background:#ffffff40;transition:background .2s,width .25s var(--spring)}
+.rx-grab.off{margin:0 auto 14px;height:4px}
+.rx-grab:active i,.rx-side.drag .rx-grab i{background:#ffffff99;width:54px}
+.rx-grab:focus-visible{outline-offset:-2px}
 .rx-trh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .rx-trh>span{display:flex;flex-direction:column;min-width:0;gap:2px}
 .rx-trh>span.r{align-items:flex-end;gap:5px}
@@ -363,7 +377,7 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-tgrid small{display:block;color:#ffffff80;font-size:11.5px}
 .rx-tgrid b{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rx-art.dk{position:absolute;right:-14px;bottom:78px;width:106px;height:auto;z-index:0}
-.rx-tfoot{position:relative;z-index:1;display:flex;align-items:center;gap:10px;margin-top:18px;padding:8px;border-radius:999px;background:#ffffff14;border:1px solid #ffffff1a;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.rx-tfoot{position:relative;z-index:1;display:flex;align-items:center;gap:10px;margin-top:18px;padding:8px;border-radius:999px;background:#ffffff14;border:1px solid #ffffff1a}
 .rx-tn{flex:1;min-width:0;display:flex;flex-direction:column}
 .rx-tn b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rx-tn small{color:#ffffff99}
@@ -376,11 +390,13 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 .rx-steps li{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--mut)}
 .rx-steps li::before{content:'';position:absolute;top:14px;right:50%;width:100%;height:2px;background:#e3d6ee;z-index:0}
 .rx-steps li:first-child::before{display:none}
-.rx-steps li.dn::before,.rx-steps li.on::before{background:var(--p3)}
-.rx-steps i{position:relative;z-index:1;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:700;background:#fff;border:2px solid #e3d6ee;color:var(--mut)}
+.rx-steps li::after{content:'';position:absolute;top:14px;right:50%;width:100%;height:2px;background:var(--p3);z-index:0;transform:scaleX(0);transform-origin:left;transition:transform .55s var(--ease)}
+.rx-steps li:first-child::after{display:none}
+.rx-steps li.dn::after,.rx-steps li.on::after{transform:none;animation:rxGrow .6s var(--ease) .12s backwards}
+.rx-steps i{position:relative;z-index:1;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:700;background:#fff;border:2px solid #e3d6ee;color:var(--mut);transition:background-color .3s,border-color .3s,color .3s}
 .rx-steps li.dn i{background:var(--p3);border-color:var(--p3);color:#fff}
 .rx-steps li.on{color:var(--p0)}
-.rx-steps li.on i{background:var(--p0);border-color:var(--p0);color:#fff;box-shadow:0 0 0 4px #2d0b4a1f}
+.rx-steps li.on i{background:var(--p0);border-color:var(--p0);color:#fff;box-shadow:0 0 0 4px #2d0b4a1f;animation:rxPop .5s var(--spring) .45s backwards}
 .rx-new h3{margin-bottom:12px}
 .rx-kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .rx-kv div{background:var(--soft);border-radius:16px;padding:10px;min-width:0}
@@ -438,12 +454,14 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 /* bottom sheet */
 .rx-sheet{position:fixed;inset:0;z-index:90;display:flex;align-items:flex-end;justify-content:center;background:#1a063a8c;animation:rxFade .2s}
 @keyframes rxFade{from{opacity:0}}
-.rx-sh{width:100%;max-width:520px;max-height:88vh;max-height:88dvh;overflow:auto;overscroll-behavior:contain;background:#fff;border-radius:28px 28px 0 0;padding:16px 18px calc(18px + var(--sb));outline:0;animation:rxUp .32s var(--ease)}
-@keyframes rxUp{from{transform:translateY(40px);opacity:.4}}
-.rx-shh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.rx-sh{width:100%;max-width:520px;max-height:88vh;max-height:88dvh;overflow:auto;overscroll-behavior:contain;background:#fff;border-radius:28px 28px 0 0;padding:16px 18px calc(18px + var(--sb));outline:0;animation:rxUp .38s var(--spring);transition:transform .28s var(--ease)}
+@keyframes rxUp{from{transform:translateY(100%)}}
+.rx-shh{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-16px -18px 14px;padding:22px 18px 0;touch-action:none;cursor:grab}
+.rx-shg{position:absolute;top:8px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:4px;background:#e3d6ee}
 .rx-shh b{font-family:var(--serif);font-size:19px;color:var(--p0)}
 .rx-reasons{display:flex;flex-wrap:wrap;gap:8px}
-.rx-reasons button{min-height:42px;padding:8px 14px;border-radius:999px;border:1.5px solid #e7dcef;background:#fff;font-size:14px;font-weight:500;text-align:left;transition:background .2s,color .2s,border-color .2s}
+.rx-reasons button{min-height:42px;padding:8px 14px;border-radius:999px;border:1.5px solid #e7dcef;background:#fff;font-size:14px;font-weight:500;text-align:left;transition:background .2s,color .2s,border-color .2s,transform .2s var(--spring)}
+.rx-reasons button:active{transform:scale(.96)}
 .rx-reasons button.on{background:var(--p0);border-color:var(--p0);color:#fff}
 
 /* earnings */
@@ -513,7 +531,7 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 @media(max-width:330px){.rx-loc small{display:none}.rx-navin>:is(button,a):not(.rx-fab) span{display:none}}
 /* landscape phones: shorter map, slimmer bar */
 @media(max-height:500px) and (orientation:landscape){
-  .rx-mapwrap{height:240px}
+  .rx-mapwrap{height:var(--rx-mh,240px)}
   .rx-navin{height:56px}.rx-navin>:is(button,a):not(.rx-fab){height:48px;flex-direction:row;gap:6px}
   .rx-navin>button.on::after{display:none}
   .rx-fab{width:46px;height:46px}
@@ -551,7 +569,7 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
   .rx-app.full{max-width:none}
   .rx-view.job{display:grid;grid-template-columns:minmax(400px,480px) minmax(0,1fr);gap:32px;max-width:1220px;margin:0 auto;padding:24px 28px 40px;align-items:start}
   .rx-side{position:relative}
-  .rx-side .rx-mapwrap{height:min(52vh,440px);border-radius:28px;border:1px solid var(--ln)}
+  .rx-side .rx-mapwrap{height:var(--rx-mh,min(52vh,440px));border-radius:28px;border:1px solid var(--ln)}
   .rx-side .rx-vh{border-radius:28px 28px 0 0}
   .rx-side .rx-vh:not(.over){position:relative;background:none;padding:0 0 12px}
   .rx-track,.rx-track.nomap{margin-left:0;margin-right:0}
@@ -559,4 +577,142 @@ html,body{margin:0;background:#f7effb;overscroll-behavior-y:none}
 }
 /* the map + sheet column only sticks when the whole column fits on screen (otherwise its call buttons were cut off) */
 @media(min-width:960px) and (min-height:960px){.rx-side{position:sticky;top:24px}}
+
+/* =====================================================================
+   Motion
+   Screen changes use the View Transitions API (see swap() in Rider.jsx):
+   a job slides in from the right and back out, tabs slide toward their
+   side of the bottom bar, the bar itself stays put. Everything else is
+   entrance and feedback animation on transform / opacity / clip-path
+   only, so it stays smooth on low-end phones.
+   ===================================================================== */
+@keyframes rxRise{from{opacity:0;transform:translateY(14px)}}
+@keyframes rxFadeIn{from{opacity:0}}
+@keyframes rxFadeOut{to{opacity:0}}
+@keyframes rxPop{0%{opacity:0;transform:scale(.6)}65%{opacity:1;transform:scale(1.08)}100%{transform:none}}
+@keyframes rxShake{0%,100%{transform:none}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@keyframes rxGrow{from{transform:scaleX(0)}}
+@keyframes rxDraw{from{clip-path:inset(0 100% 0 0)}}
+@keyframes rxRide{from{left:0}}
+@keyframes rxBob{50%{transform:translateY(-3px) rotate(-4deg)}}
+@keyframes rxRing{from{transform:scale(1);opacity:.6}to{transform:scale(2.2);opacity:0}}
+@keyframes rxRingL{from{transform:scale(1);opacity:.5}to{transform:scale(1.35);opacity:0}}
+@keyframes rxArt{from{opacity:0;transform:translateX(24px) rotate(4deg)}}
+@keyframes rxBlink{50%{opacity:.35}}
+@keyframes rxDown{to{transform:translateY(105%)}}
+@keyframes rxShim{to{transform:translateX(100%)}}
+@keyframes rxToastOut{to{opacity:0;transform:translate(-50%,14px) scale(.94)}}
+
+/* ---------- screen transitions ---------- */
+.rx-nav{view-transition-name:rx-nav}
+.rx-toast{view-transition-name:rx-toast}
+.rx-offline{view-transition-name:rx-offline}
+html[data-rx-nav]::view-transition-old(root),html[data-rx-nav]::view-transition-new(root){animation-duration:.36s;animation-timing-function:cubic-bezier(.2,.8,.2,1);animation-fill-mode:both}
+html[data-rx-nav]::view-transition-old(root){animation-duration:.26s;animation-timing-function:cubic-bezier(.4,0,1,1)}
+html[data-rx-nav=fwd]::view-transition-old(root){animation-name:rxVtOutL}
+html[data-rx-nav=fwd]::view-transition-new(root){animation-name:rxVtInR}
+html[data-rx-nav=back]::view-transition-old(root){animation-name:rxVtOutR}
+html[data-rx-nav=back]::view-transition-new(root){animation-name:rxVtInL}
+html[data-rx-nav=next]::view-transition-old(root){animation-name:rxVtOutLs}
+html[data-rx-nav=next]::view-transition-new(root){animation-name:rxVtInRs}
+html[data-rx-nav=prev]::view-transition-old(root){animation-name:rxVtOutRs}
+html[data-rx-nav=prev]::view-transition-new(root){animation-name:rxVtInLs}
+@keyframes rxVtOutL{to{opacity:0;transform:translateX(-20%)}}
+@keyframes rxVtInR{from{opacity:0;transform:translateX(32%)}}
+@keyframes rxVtOutR{to{opacity:0;transform:translateX(26%)}}
+@keyframes rxVtInL{from{opacity:0;transform:translateX(-18%)}}
+@keyframes rxVtOutLs{to{opacity:0;transform:translateX(-7%)}}
+@keyframes rxVtInRs{from{opacity:0;transform:translateX(9%)}}
+@keyframes rxVtOutRs{to{opacity:0;transform:translateX(7%)}}
+@keyframes rxVtInLs{from{opacity:0;transform:translateX(-9%)}}
+/* the bottom bar drops away when a job opens and springs back on return */
+::view-transition-old(rx-nav):only-child{animation:rxNavOut .24s cubic-bezier(.4,0,1,1) both}
+::view-transition-new(rx-nav):only-child{animation:rxNavIn .46s cubic-bezier(.3,1.3,.5,1) both}
+@keyframes rxNavOut{to{opacity:0;transform:translateY(130%)}}
+@keyframes rxNavIn{from{opacity:0;transform:translateY(130%)}}
+/* browsers without view transitions: the new screen fades in */
+@supports not (view-transition-name:none){.rx-view{animation:rxFadeIn .3s var(--ease) backwards}}
+
+/* ---------- entrances (tab content, lists, job stages) ---------- */
+.rx-pane>*,.rx-list>*,.rx-stage>*,.rx-hist>div,.rx-today>*,.rx-quick>button{animation:rxRise .44s var(--ease) backwards}
+:is(.rx-pane,.rx-list,.rx-stage,.rx-today,.rx-quick)>:nth-child(2),.rx-hist>div:nth-child(2){animation-delay:.05s}
+:is(.rx-pane,.rx-list,.rx-stage,.rx-today)>:nth-child(3),.rx-hist>div:nth-child(3){animation-delay:.1s}
+:is(.rx-pane,.rx-list,.rx-stage,.rx-today)>:nth-child(4),.rx-hist>div:nth-child(4){animation-delay:.15s}
+:is(.rx-pane,.rx-list,.rx-stage)>:nth-child(5),.rx-hist>div:nth-child(5){animation-delay:.2s}
+:is(.rx-pane,.rx-list,.rx-stage)>:nth-child(6),.rx-hist>div:nth-child(6){animation-delay:.24s}
+:is(.rx-pane,.rx-list,.rx-stage)>:nth-child(n+7),.rx-hist>div:nth-child(n+7){animation-delay:.28s}
+/* long history: rows off screen skip layout and paint until scrolled to */
+.rx-hist>div{content-visibility:auto;contain-intrinsic-size:auto 66px}
+.rx-num{font-variant-numeric:tabular-nums}
+
+/* ---------- illustrations ---------- */
+.rx-quick .rx-art{animation:rxArt .7s var(--spring) .15s backwards}
+.rx-quick button:nth-child(2) .rx-art{animation-delay:.22s}
+.rx-art.hero{animation:rxArt .7s var(--spring) .25s backwards}
+.rx-art.dk{animation:rxArt .7s var(--spring) .35s backwards}
+.rx-ill{animation:rxRise .7s var(--ease) backwards}
+.rx-hero h1{animation:rxRise .55s var(--ease) .08s backwards}
+.rx-hero p{animation:rxRise .55s var(--ease) .14s backwards}
+.rx-hero ul{animation:rxRise .55s var(--ease) .2s backwards}
+.rx-authc,.rx-page>.rx-card{animation:rxRise .5s var(--ease) .1s backwards}
+.rx-swap{animation:rxRise .32s var(--ease) backwards}
+
+/* ---------- route tracker: line draws, dots pop, rider rides along ---------- */
+.rx-rbar b{animation:rxDraw .9s var(--ease) .15s backwards}
+.rx-rline>em{animation:rxRide .9s var(--ease) .15s backwards}
+.rx-rline>i.dn{animation:rxPop .45s var(--spring) backwards}
+.rx-rline>i.dn:nth-of-type(1){animation-delay:.12s}.rx-rline>i.dn:nth-of-type(2){animation-delay:.38s}.rx-rline>i.dn:nth-of-type(3){animation-delay:.64s}.rx-rline>i.dn:nth-of-type(4){animation-delay:.9s}
+.rx-job.out .rx-rline>em span,.rx-track[data-st=out] .rx-rline>em span{animation:rxBob 1.4s ease-in-out infinite}
+.rx-job.new::before{animation:rxBlink 1.6s ease-in-out infinite}
+
+/* ---------- job screen ---------- */
+.rx-stop.done .rx-sic{animation:rxPop .5s var(--spring) backwards}
+.rx-stop{transition:opacity .4s var(--ease)}
+.rx-code b{animation:rxPop .55s var(--spring) .2s backwards}
+.rx-tick i{transition:background-color .2s,border-color .2s,transform .3s var(--spring)}
+.rx-tick.on i{transform:scale(1.1)}
+.rx-tick:active i{transform:scale(.88)}
+.rx-collect>b,.rx-paid,.rx-warn{animation:rxRise .4s var(--ease) backwards}
+.rx-err{animation:rxShake .42s var(--ease)}
+.rx-rb .ico,.rx-ib .ico{transition:transform .25s var(--spring)}
+.rx-rb:active .ico{transform:scale(.85)}
+.rx-track{animation:rxRise .5s var(--ease) .08s backwards}
+
+/* ---------- bottom bar + duty ---------- */
+.rx-navin>:is(button,a):not(.rx-fab) .ico{transition:transform .35s var(--spring)}
+.rx-navin>button.on .ico{transform:translateY(-2px) scale(1.08)}
+.rx-navin>button.on::after{animation:rxPop .35s var(--spring)}
+.rx-navin em{animation:rxPop .4s var(--spring)}
+.rx-fab{position:relative}
+.rx-fab .ico{transition:transform .4s var(--spring)}
+.rx-fab:active .ico{transform:scale(.8)}
+.rx-fab.on::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid #e0457b;pointer-events:none;animation:rxRingL 2.2s ease-out infinite}
+.rx-duty{transition:background .3s var(--ease),color .3s,border-color .3s,transform .2s var(--spring)}
+.rx-duty:active{transform:scale(.94)}
+
+/* ---------- waiting / profile ---------- */
+.rx-big{position:relative;animation:rxPop .6s var(--spring) .15s backwards}
+.rx-big.wait::after{content:'';position:absolute;inset:0;border-radius:50%;border:2px solid var(--p2);animation:rxRingL 2.4s ease-out infinite}
+.rx-ring{animation:rxPop .6s var(--spring) backwards}
+
+/* ---------- toast + sheet exits ---------- */
+.rx-toast.out{animation:rxToastOut .26s var(--ease) forwards}
+.rx-sheet.out{animation:rxFadeOut .22s ease forwards}
+.rx-sheet.out .rx-sh{animation:rxDown .22s cubic-bezier(.4,0,1,1) forwards}
+.rx-shh:active{cursor:grabbing}
+
+/* ---------- skeletons (first load, open jobs) ---------- */
+.rx-sk{display:block;position:relative;overflow:hidden;background:#ece2f3;border-radius:999px}
+.rx-sk::after,.rx-skel::after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,#fff0,#ffffffa6,#fff0);animation:rxShim 1.3s ease-in-out infinite}
+.rx-skr{display:flex;align-items:center;gap:10px}
+.rx-skr>span{flex:1;display:grid;gap:6px}
+.rx-sk.c{width:46px;height:46px;flex:none;border-radius:50%}
+.rx-sk.s{width:40%;height:10px}.rx-sk.m{width:62%;height:14px}
+.rx-sk.p{width:92px;height:40px;flex:none}
+.rx-sk.bar{height:54px;margin-top:18px}
+.rx-sk.tile{height:118px;border-radius:24px}
+.rx-sk.h{width:150px;height:18px;margin:22px 0 10px}
+.rx-sk.card{height:210px;border-radius:28px;margin-bottom:22px}
+.rx-sk.st{height:74px;border-radius:20px}
+@media(min-width:700px){.rx-sk.tile{height:140px}}
 @media(prefers-reduced-motion:reduce){.rx *,.rx *::before,.rx *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
