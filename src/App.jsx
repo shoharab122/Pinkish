@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as api from './api'
 import { HUB, RIDER_KM, MAX_KM, deliveryFor, kmTxt, okLL, havKm, modeOf, safeUrl, etaMin, seenAgo, fresh } from './lib/zone.js'
@@ -16,15 +16,15 @@ const feeTxt = d => d.fee == null ? 'Outside area' : '৳' + d.fee
 const NAV = [['home', 'home', 'Home'], ['categories', 'grid', 'Categories'], ['cart', 'bag', 'Cart'], ['orders', 'receipt', 'Orders'], ['profile', 'user', 'Profile']]
 const TABS = NAV.map(n => n[0])
 const OB = [
-  { e: 'art:privacy', t: ['Your Privacy', 'Our Priority'], d: 'Get essential personal care products delivered to your doorstep, discreetly and safely.' },
-  { e: '🛡️', t: ['Daily Essentials', 'Without the Awkwardness'], d: 'Condoms and sanitary pads, all variants, delivered with dignity.' },
-  { e: 'art:delivery', t: ['Discreet Delivery', 'Across Chattogram'], d: 'Plain packaging. No product name. No judgment.' },
+  { e: 'art:shop', t: ['Shop Everything', 'Made for Her'], d: 'Beauty, fashion, self-care and everyday essentials, all in one marketplace.' },
+  { e: 'art:store', t: ['Shops You Love', 'All in One Place'], d: 'Discover verified local sellers, follow your favourite shops and never miss a flash deal.' },
+  { e: 'art:delivery', t: ['Order in Seconds', 'Right to Your Door'], d: 'Pay with cash on delivery or bKash and track your order live across Chattogram.' },
 ]
 const STEPS = ['Order Placed', 'Processing', 'Out for Delivery', 'Delivered']
 const PAYS = [['Cash on Delivery', 'Pay when you receive', '💵'], ['bKash', 'Send money, then enter your TrxID', '🌸'], ['Nagad', 'Pay with Nagad', '🟠'], ['Debit/Credit Card', 'Visa, Mastercard', '💳']]
 const OFFERS = [['Limited Offer', 'Privacy. Confidence.|Comfort. Wellness.', '🛡️'], ['Delivery from ৳40', 'Discreet delivery|across Chattogram', '🚚'], ['Use code SHIELD10', 'Get 10% off|your first order', '🎁']]
 const SORTS = { pop: ['Popular', (a, b) => (b.reviews || 0) - (a.reviews || 0)], new: ['Newest', (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)], lo: ['Price: Low → High', (a, b) => a.price - b.price], hi: ['Price: High → Low', (a, b) => b.price - a.price], rate: ['Top rated', (a, b) => b.rating - a.rating] }
-const RIPPLE = '.bshop,.cc,.btn,.fab,.add,.cat,.card,.pay,.menu,.ib,.tabs button,.chips button,.var button,.heart,.qty button,.promo button,.social'
+const RIPPLE = '.nav button,.oc,.nt-i,.store.link,.wl-skip,.wl-bars button,.bshop,.cc,.btn,.fab,.add,.cat,.card,.pay,.menu,.ib,.tabs button,.chips button,.var button,.heart,.qty button,.promo button,.social'
 const NOMOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // graceful API wrapper: never throws, returns fallback
@@ -534,6 +534,22 @@ const SHOP_CSS = `
 @media(prefers-reduced-motion:reduce){.trk *,.trk:before,.trk:after,.trkscr *{animation:none!important}}
 `
 const POP = '.add,.fab,.qty button,.ib'
+const LP = { x: 0, y: 0, t: 0 } // last tap / click position, shared by the liquid effects
+const lite = () => NOMOTION || document.documentElement.classList.contains('lite')
+// "Added to cart": the product picture flies in an arc to the cart button, which then bounces (Web Animations API, compositor only)
+function flyToCart(src) {
+  try {
+    if (lite() || Date.now() - LP.t > 1500 || !Element.prototype.animate) return
+    const tgt = [...document.querySelectorAll('.nav button[data-k="cart"],.ib[aria-label="Open cart"]')].find(el => el.offsetParent !== null && el.getBoundingClientRect().width > 0)
+    if (!tgt) return
+    const r = tgt.getBoundingClientRect(), dx = r.left + r.width / 2 - LP.x, dy = r.top + r.height / 2 - LP.y
+    const f = document.createElement('i'); f.className = 'fly'; f.style.cssText = `left:${LP.x - 24}px;top:${LP.y - 24}px`
+    if (src) { const im = new Image(); im.src = src; im.alt = ''; im.decoding = 'async'; f.appendChild(im) }
+    document.body.appendChild(f)
+    const a = f.animate([{ transform: 'translate3d(0,0,0) scale(.6)', opacity: 0 }, { transform: 'translate3d(0,0,0) scale(1.05)', opacity: 1, offset: .12 }, { transform: `translate3d(${dx * .45}px,${dy * .45 - 90}px,0) scale(.85)`, offset: .5 }, { transform: `translate3d(${dx}px,${dy}px,0) scale(.2)`, opacity: .4 }], { duration: 720, easing: 'cubic-bezier(.45,0,.55,1)' })
+    a.onfinish = a.oncancel = () => { f.remove(); tgt.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.28,.82)' }, { transform: 'scale(.9,1.12)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'ease-out' }) }
+  } catch { /* decoration only */ }
+}
 
 /* Delegated listeners power the liquid feel everywhere: ripple, pointer-tracking light and squish-pop (no per-component handlers) */
 // Keeps the UI smooth on weak phones / heavy load:
@@ -564,7 +580,7 @@ function useLiquid() {
   useEffect(() => {
     let st = document.getElementById('lq-css')
     if (!st) { st = document.createElement('style'); st.id = 'lq-css'; document.head.appendChild(st) }
-    const all = LIQUID_CSS + LOC_CSS + SHOP_CSS + GATE_CSS + FEAT_CSS
+    const all = LIQUID_CSS + LOC_CSS + SHOP_CSS + GATE_CSS + FEAT_CSS + MOTION_CSS + WEL_CSS
     if (st.textContent !== all) st.textContent = all
     if (NOMOTION) return
     const light = (el, e) => {
@@ -572,6 +588,7 @@ function useLiquid() {
       el.style.setProperty('--mx', e.clientX - r.left + 'px'); el.style.setProperty('--my', e.clientY - r.top + 'px')
     }
     const down = e => {
+      LP.x = e.clientX; LP.y = e.clientY; LP.t = Date.now()
       const el = e.target.closest?.(RIPPLE)
       if (!el || el.disabled) return
       const r = el.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2.2, s = document.createElement('span')
@@ -774,7 +791,7 @@ const PrivacyArt = () => (
 )
 // Custom illustration for the third onboarding slide: plain unbranded parcel, location pin, speed lines, "delivered" badge
 const DeliveryArt = () => (
-  <svg viewBox="0 0 200 200" width="1.15em" height="1.15em" role="img" aria-label="Plain, discreet delivery" style={{ display: 'block' }}>
+  <svg viewBox="0 0 200 200" width="1.15em" height="1.15em" role="img" aria-label="Fast delivery to your door" style={{ display: 'block' }}>
     <defs>
       <linearGradient id="da-top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ffe3ef" /><stop offset="1" stopColor="#f9b4d0" /></linearGradient>
       <linearGradient id="da-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c45bd0" /><stop offset="1" stopColor="#8e3bb8" /></linearGradient>
@@ -804,7 +821,56 @@ const DeliveryArt = () => (
     <circle cx="170" cy="130" r="4" fill="#fff" opacity=".8" /><circle cx="30" cy="160" r="3" fill="#fff" opacity=".7" />
   </svg>
 )
-const Glyph = ({ v }) => v === 'art:privacy' ? <PrivacyArt /> : v === 'art:delivery' ? <DeliveryArt /> : (v === '🛡️' || v === '🛡' || /^(https?:|\/)/.test(v || '')) ? <img src={/^(https?:|\/)/.test(v) ? v : '/logo-mark.webp?v=2'} alt="" decoding="async" draggable="false" /> : <>{v}</>
+// Welcome slide 1: shopping bags, a lipstick and a heart tag
+const ShopArt = () => (
+  <svg viewBox="0 0 200 200" width="1.15em" height="1.15em" role="img" aria-label="Shop beauty, fashion and essentials" style={{ display: 'block' }}>
+    <defs>
+      <linearGradient id="sh-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a23fb8" /><stop offset="1" stopColor="#ec4a7c" /></linearGradient>
+      <linearGradient id="sh-b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ffe3ef" /><stop offset="1" stopColor="#f79ac0" /></linearGradient>
+      <linearGradient id="sh-c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ff7a9c" /><stop offset="1" stopColor="#d1236a" /></linearGradient>
+      <filter id="sh-s" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="8" stdDeviation="7" floodColor="#c23a78" floodOpacity=".35" /></filter>
+    </defs>
+    <ellipse cx="100" cy="170" rx="58" ry="8" fill="#b02f93" opacity=".18" />
+    <g filter="url(#sh-s)">
+      <path d="M40 74 h62 l-5 92 H45 z" fill="url(#sh-b)" />
+      <path d="M57 74 v-10 a14 14 0 0 1 28 0 v10" fill="none" stroke="#d93d7a" strokeWidth="5" strokeLinecap="round" />
+      <path d="M86 60 h72 l-6 108 H92 z" fill="url(#sh-a)" />
+      <path d="M106 60 v-12 a16 16 0 0 1 32 0 v12" fill="none" stroke="#7a1f7e" strokeWidth="6" strokeLinecap="round" />
+      <path d="M122 100 c-8 -7 -18 -1 -14 8 c3 6 14 13 14 13 s11 -7 14 -13 c4 -9 -6 -15 -14 -8 z" fill="#fff" />
+    </g>
+    <g transform="translate(150 118) rotate(18)" filter="url(#sh-s)">
+      <rect x="0" y="22" width="18" height="30" rx="3" fill="#4a1668" /><rect x="2" y="10" width="14" height="14" rx="2" fill="#e6c26e" />
+      <path d="M3 10 V2 l12 -6 v16 z" fill="url(#sh-c)" />
+    </g>
+    <path d="M34 42 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z" fill="#fff" />
+    <path d="M168 40 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" fill="#fff" opacity=".9" />
+    <circle cx="26" cy="120" r="4" fill="#fff" opacity=".8" />
+  </svg>
+)
+// Welcome slide 2: a little storefront with a striped awning and a heart sign
+const StoreArt = () => (
+  <svg viewBox="0 0 200 200" width="1.15em" height="1.15em" role="img" aria-label="Verified shops in one marketplace" style={{ display: 'block' }}>
+    <defs>
+      <linearGradient id="st-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a23fb8" /><stop offset="1" stopColor="#ec4a7c" /></linearGradient>
+      <linearGradient id="st-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#fde7f0" /></linearGradient>
+      <filter id="st-s" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="8" stdDeviation="7" floodColor="#c23a78" floodOpacity=".35" /></filter>
+    </defs>
+    <ellipse cx="100" cy="168" rx="62" ry="8" fill="#b02f93" opacity=".18" />
+    <g filter="url(#st-s)">
+      <rect x="46" y="78" width="108" height="86" rx="8" fill="url(#st-w)" />
+      <path d="M38 58 h124 l-6 26 H44 z" fill="url(#st-a)" />
+      <g fill="#fff" opacity=".85"><path d="M58 58 h16 l-3 26 h-15 z" /><path d="M92 58 h16 v26 h-16 z" /><path d="M126 58 h16 l2 26 h-15 z" /></g>
+      <path d="M44 84 q9 10 18 0 q9 10 18 0 q9 10 18 0 q9 10 18 0 q9 10 18 0 q9 10 18 0" fill="none" stroke="#d93d7a" strokeWidth="4" strokeLinecap="round" />
+      <rect x="60" y="104" width="34" height="60" rx="5" fill="url(#st-a)" /><circle cx="86" cy="136" r="3" fill="#fff" />
+      <rect x="104" y="104" width="38" height="30" rx="5" fill="#f3e9fb" stroke="#e0b6d6" strokeWidth="2" />
+      <path d="M123 116 c-5 -4 -11 0 -8 5 c2 4 8 7 8 7 s6 -3 8 -7 c3 -5 -3 -9 -8 -5 z" fill="#ec4a7c" />
+    </g>
+    <g filter="url(#st-s)"><circle cx="152" cy="46" r="16" fill="#2fa86a" /><path d="M144 46 l6 6 10 -11" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" /></g>
+    <path d="M30 50 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z" fill="#fff" />
+    <circle cx="176" cy="104" r="3" fill="#fff" opacity=".8" /><circle cx="24" cy="126" r="4" fill="#fff" opacity=".7" />
+  </svg>
+)
+const Glyph = ({ v }) => v === 'art:shop' ? <ShopArt /> : v === 'art:store' ? <StoreArt /> : v === 'art:privacy' ? <PrivacyArt /> : v === 'art:delivery' ? <DeliveryArt /> : (v === '🛡️' || v === '🛡' || /^(https?:|\/)/.test(v || '')) ? <img src={/^(https?:|\/)/.test(v) ? v : '/logo-mark.webp?v=2'} alt="" decoding="async" draggable="false" /> : <>{v}</>
 // Category logos: modern line icons picked from the category name (custom image icons set by admin still win)
 const CAT_SVG = {
   clothes: <path d="M8 3 3 6l2 4 3-1.5V21h8V8.5L19 10l2-4-5-3a4 4 0 0 1-8 0z" />,
@@ -1033,7 +1099,44 @@ function BannerImpl({ shop, go, open, cats, prods }) {
 
 const Banner = memo(BannerImpl)
 
-const Nav = memo(({ s, count, tab }) => <nav className={'nav' + (TABS.includes(s) ? '' : ' hide-m')}><div className="nv-brand"><div className="lk" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" /><span className="wm" style={{ filter: 'none', opacity: 1, fontSize: 26 }}><span className="bp" style={{ color: '#e0457b', filter: 'none', opacity: 1, fontSize: 'inherit' }}>Pink</span><span className="bi" style={{ color: '#000', filter: 'none', opacity: 1, fontSize: 'inherit' }}>ish</span></span></div></div>{NAV.map(([k, ic, l]) => <button key={k} className={s === k ? 'on' : ''} aria-current={s === k ? 'page' : undefined} onClick={() => tab(k)}><span><Icon n={ic} /></span>{l}{k === 'cart' && count > 0 && <em key={count}>{count}</em>}</button>)}</nav>)
+// Liquid tab bar: one gradient "drop" glides between tabs. The edge in the direction of travel leads and the other
+// edge follows a moment later, so the drop stretches and settles like a liquid. Buttons that shift are FLIP-animated.
+// Only one small element moves; nothing in the page re-renders while it animates.
+const Nav = memo(({ s, count, tab }) => {
+  const ref = useRef(null), blob = useRef(null), last = useRef({ i: -1, pos: null })
+  const i = TABS.indexOf(s)
+  useLayoutEffect(() => {
+    const nav = ref.current, b = blob.current; if (!nav || !b) return
+    const btns = [...nav.querySelectorAll('button[data-k]')]
+    const place = instant => {
+      const on = btns[TABS.indexOf(s)]
+      if (!on || !on.offsetWidth) { b.classList.remove('on'); return }
+      const l = on.offsetLeft, t = on.offsetTop
+      if (instant) b.classList.add('nt')
+      b.style.cssText = `--l:${l}px;--t:${t}px;--r:${nav.clientWidth - l - on.offsetWidth}px;--b:${nav.clientHeight - t - on.offsetHeight}px`
+      b.classList.add('on')
+      if (instant) { void b.offsetWidth; b.classList.remove('nt') }
+    }
+    const prev = last.current
+    b.dataset.d = i >= prev.i ? 'f' : 'b'
+    // FLIP: buttons that moved because the active tab grew slide to their new place instead of jumping
+    if (prev.pos && !lite()) btns.forEach((x, k) => {
+      const o = prev.pos[k]; if (!o) return
+      const dx = o[0] - x.offsetLeft, dy = o[1] - x.offsetTop
+      if (!dx && !dy) return
+      x.style.transition = 'none'; x.style.transform = `translate(${dx}px,${dy}px)`; void x.offsetWidth
+      x.style.transition = ''; x.style.transform = ''
+    })
+    place(prev.i < 0 || i < 0)
+    last.current = { i, pos: btns.map(x => [x.offsetLeft, x.offsetTop]) }
+    if (typeof ResizeObserver === 'undefined') return
+    let first = true
+    const ro = new ResizeObserver(() => { if (first) { first = false; return } place(true); last.current.pos = btns.map(x => [x.offsetLeft, x.offsetTop]) })
+    ro.observe(nav)
+    return () => ro.disconnect()
+  }, [s, i])
+  return <nav ref={ref} className={'nav lq' + (TABS.includes(s) ? '' : ' hide-m')}><i ref={blob} className="nv-blob" aria-hidden="true" /><div className="nv-brand"><div className="lk" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" /><span className="wm" style={{ filter: 'none', opacity: 1, fontSize: 26 }}><span className="bp" style={{ color: '#e0457b', filter: 'none', opacity: 1, fontSize: 'inherit' }}>Pink</span><span className="bi" style={{ color: '#000', filter: 'none', opacity: 1, fontSize: 'inherit' }}>ish</span></span></div></div>{NAV.map(([k, ic, l]) => <button key={k} data-k={k} className={s === k ? 'on' : ''} aria-current={s === k ? 'page' : undefined} aria-label={l} onClick={() => s === k ? document.querySelector('.main .scr')?.scrollTo({ top: 0, behavior: lite() ? 'auto' : 'smooth' }) : tab(k)}><span><Icon n={ic} /></span><b className="nl">{l}</b>{k === 'cart' && count > 0 && <em key={count}>{count}</em>}</button>)}</nav>
+})
 
 
 // ---------- Marketplace: deals, countdown, notifications, Q&A ----------
@@ -1536,6 +1639,70 @@ const Profile = memo(({ user, admin, count, wishCount, place, hasAddr, tab, go, 
   </div>
 })
 
+// ---------- Welcome (first visit): story-style slides, swipe, "Get started" pours the store in ----------
+const WEL_PTS = [['bag', 'Beauty, fashion & more'], ['truck', 'Delivery from ৳40'], ['card', 'Cash on delivery & bKash']]
+const WEL_MS = 4800 // time per slide before it moves on by itself
+function Welcome({ onStart, onLogin }) {
+  const [i, setI] = useState(0), [hold, setHold] = useState(false), [out, setOut] = useState(null)
+  const root = useRef(null), track = useRef(null), g = useRef(null), n = OB.length
+  const to = k => setI(Math.max(0, Math.min(n - 1, k)))
+  useEffect(() => { warm(['/logo-mark.webp?v=2']) }, [])
+  useEffect(() => {
+    const k = e => { if (e.key === 'ArrowRight') setI(x => Math.min(n - 1, x + 1)); else if (e.key === 'ArrowLeft') setI(x => Math.max(0, x - 1)) }
+    addEventListener('keydown', k); return () => removeEventListener('keydown', k)
+  }, [n])
+  // leave with a liquid wipe that grows from the button that was pressed
+  const leave = (e, then) => {
+    if (out) return
+    writeLS('pk_wel', 1)
+    const box = root.current?.getBoundingClientRect()
+    if (lite() || !box) return then()
+    const r = e.currentTarget.getBoundingClientRect(), x = r.left + r.width / 2 - box.left, y = r.top + r.height / 2 - box.top
+    setOut({ x, y, s: Math.hypot(Math.max(x, box.width - x), Math.max(y, box.height - y)) / 20 + 1 })
+    setTimeout(then, 480)
+  }
+  // swipe: the track follows the finger directly (no React render per move), then snaps with a spring
+  const down = e => { if (e.button > 0) return; g.current = { x: e.clientX, y: e.clientY, h: null }; setHold(true) }
+  const move = e => {
+    const o = g.current; if (!o) return
+    const dx = e.clientX - o.x, dy = e.clientY - o.y
+    if (o.h == null && Math.abs(dx) + Math.abs(dy) > 8) { o.h = Math.abs(dx) > Math.abs(dy); if (o.h) e.currentTarget.setPointerCapture?.(e.pointerId) }
+    if (!o.h || !track.current) return
+    const edge = (i === 0 && dx > 0) || (i === n - 1 && dx < 0) ? 0.35 : 1 // rubber band at the ends
+    track.current.classList.add('drag'); track.current.style.transform = `translate3d(calc(${-i * 100}% + ${dx * edge}px),0,0)`
+  }
+  const up = e => {
+    const o = g.current; g.current = null; setHold(false)
+    const t = track.current; if (t) { t.classList.remove('drag'); t.style.transform = `translate3d(${-i * 100}%,0,0)` }
+    if (!o?.h) return
+    const dx = e.clientX - o.x
+    if (dx < -45) to(i + 1); else if (dx > 45) to(i - 1)
+  }
+  const next = () => { if (!lite() && !hold && i < n - 1) setI(i + 1) }
+  return <div ref={root} className={'wl' + (out ? ' out' : '')} style={{ '--n': WEL_MS + 'ms' }}>
+    <div className="wl-bg" aria-hidden="true"><i /><i /><i /></div>
+    <header className="wl-top">
+      <span className="wl-logo"><span className="wl-lm"><img src="/logo-mark.webp?v=2" width="30" height="30" alt="" decoding="async" draggable="false" /></span><b className="wm"><span className="bp">Pink</span><span className="bi">ish</span></b></span>
+      <button type="button" className="wl-skip" onClick={e => leave(e, onStart)}>Skip</button>
+    </header>
+    <div className={'wl-bars' + (hold ? ' hold' : '')} role="tablist" aria-label="Welcome slides">{OB.map((_, k) => <button key={k} type="button" role="tab" aria-selected={k === i} aria-label={'Slide ' + (k + 1)} className={k < i ? 'dn' : k === i ? 'on' : ''} onClick={() => to(k)}>{k === i && <i key={'b' + i} onAnimationEnd={next} />}</button>)}</div>
+    <div className="wl-view" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+      <div ref={track} className="wl-track" style={{ transform: `translate3d(${-i * 100}%,0,0)` }}>
+        {OB.map((o, k) => <section key={k} className={'wl-sl' + (k === i ? ' on' : '')} aria-hidden={k !== i}>
+          <div className="wl-art"><span><Glyph v={o.e} /></span></div>
+          <h1>{o.t[0]}<em>{o.t[1]}</em></h1><p>{o.d}</p>
+        </section>)}
+      </div>
+    </div>
+    <ul className="wl-pts">{WEL_PTS.map(([ic, t]) => <li key={t}><i><Icon n={ic} /></i>{t}</li>)}</ul>
+    <div className="wl-cta">
+      <button type="button" className="btn wl-go" onClick={e => leave(e, onStart)}>Get started<i aria-hidden="true"><Icon n="chev" /></i></button>
+      <p className="wl-in">Already have an account? <button type="button" onClick={e => leave(e, onLogin)}>Log in</button></p>
+    </div>
+    {out && <i className="wl-wipe" aria-hidden="true" style={{ left: out.x, top: out.y, '--s': out.s }} />}
+  </div>
+}
+
 export default function App() {
   const [oflt, setOflt] = useState('all')
   useLiquid(); usePerf()
@@ -1544,7 +1711,7 @@ export default function App() {
   const [cats, setCats] = useState(() => readLS('pk_c', [])), [prods, setProds] = useState(() => readLS('pk_p', [])), [shops, setShops] = useState(() => readLS('pk_s', {})), [loading, setLoading] = useState(() => !readLS('pk_p', []).length)
   const [cart, setCart] = useState(() => readLS('ms_cart', []))
   const [orders, setOrders] = useState([]), [liveSt, setLiveSt] = useState({})
-  const [ob, setOb] = useState(0), [mode, setMode] = useState(() => api.RECOVERY_LINK ? 'reset' : api.LINK_EXPIRED ? 'forgot' : 'login')
+  const [mode, setMode] = useState(() => api.RECOVERY_LINK ? 'reset' : api.LINK_EXPIRED ? 'forgot' : 'login')
   const [form, setForm] = useState({ name: '', phone: '', id: '', pw: '', pw2: '' }), [showPw, setShowPw] = useState(false), [shake, setShake] = useState(false), [busy, setBusy] = useState(false)
   const [loc, setLoc] = useState(() => ({ city: 'Chattogram', area: '', line: '', ...readLS('ms_loc', {}) }))
   const [addr, setAddr] = useState(() => {
@@ -1730,7 +1897,7 @@ export default function App() {
   useEffect(() => {
     if (cur.s !== 'splash') return
     let on = true
-    Promise.all([safe(() => api.restoreUser()), new Promise(r => setTimeout(r, user ? 250 : 800))]).then(([u]) => { if (!on) return; if (recov.current || api.LINK_EXPIRED) return tab('auth'); if (u) setUser(u); let r = ''; try { r = sessionStorage.getItem('pk_after') || ''; sessionStorage.removeItem('pk_after') } catch { /* storage unavailable */ } if (r === 'checkout' && (u || user)) { tab('cart'); say('You are logged in. Continue to checkout.', 3000) } else tab('home') })
+    Promise.all([safe(() => api.restoreUser()), new Promise(r => setTimeout(r, user ? 250 : 800))]).then(([u]) => { if (!on) return; if (recov.current || api.LINK_EXPIRED) return tab('auth'); if (u) setUser(u); let r = ''; try { r = sessionStorage.getItem('pk_after') || ''; sessionStorage.removeItem('pk_after') } catch { /* storage unavailable */ } if (r === 'checkout' && (u || user)) { tab('cart'); say('You are logged in. Continue to checkout.', 3000) } else if (!u && !user && !DEEP && !readLS('pk_wel', 0)) { setDir('fade'); setStack([{ s: 'ob' }]) } else tab('home') })
     return () => { on = false }
   }, [])
   useEffect(() => { if (s === 'orders' || s === 'tracking') safe(() => api.getOrders(user?.id), null).then(o => { if (o) setOrders(o) }) }, [s, user])
@@ -1810,6 +1977,7 @@ export default function App() {
     if (left <= 0) return say(stockOf(byIdR.current.get(String(p.id))) === 0 ? 'Sorry, this item is sold out' : 'You already have all the stock in your cart', 2400)
     const k = Math.min(n, left), variant = v || p.variants?.[0], price = p.price * (variant?.mult || 1), key = p.id + (variant?.label || '')
     setCart(c => c.some(i => i.key === key) ? c.map(i => i.key === key ? { ...i, qty: i.qty + k } : i) : [...c, { key, id: p.id, name: p.name, emoji: p.emoji, image_url: p.image_url, variant: variant?.label, price, qty: k }])
+    flyToCart(p.image_url); try { navigator.vibrate?.(12) } catch { /* no haptics */ }
     say(k < n ? `Only ${k} more in stock. Added ${k}.` : 'Added to cart', k < n ? 2600 : 1800)
   }, [say]) // eslint-disable-line react-hooks/exhaustive-deps
   const gp = useMemo(() => ({ add: addToCart, open, wish: wishSet, like }), [addToCart, open, wishSet, like])
@@ -1899,11 +2067,7 @@ export default function App() {
   let body
   if (s === 'splash') return <div className="app"><div className="splash"><div className="lgcard"><div className="lk col" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="84" height="84" alt="" decoding="async" fetchpriority="high" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div></div><div>Privacy. Confidence. Comfort. Wellness.</div><div className="sbar"><i /></div></div></div>
 
-  if (s === 'ob') { const o = OB[ob]; body = <div className="ob">
-    <div className="row"><span /><button onClick={() => tab('home')} style={{ color: '#8b8197' }}>Skip</button></div>
-    <div key={ob} className="hero pop"><span className="float"><Glyph v={o.e} /></span></div><div key={'t' + ob} className="fadeUp"><h1>{o.t[0]}<br />{o.t[1]}</h1><p>{o.d}</p></div>
-    <div className="row"><div className="dots">{OB.map((_, i) => <i key={i} className={i === ob ? 'on' : ''} />)}</div>
-      {ob < 2 ? <button className="fab" aria-label="Next" onClick={() => setOb(ob + 1)}>→</button> : <button className="btn" style={{ width: 200 }} onClick={() => tab('home')}>Get Started</button>}</div></div> }
+  if (s === 'ob') body = <Welcome onStart={() => tab('home')} onLogin={() => { tab('home'); goLogin() }} />
 
   if (s === 'auth') body = <div className="auth">
     <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
@@ -2288,3 +2452,119 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
       {sugg.length > 0 && <Rail title="You may also like" list={sugg} add={addToCart} open={open} wish={wish} like={like} />}</div>
     <div className="buybar"><div><small>Total price</small><b><Money v={price * n} />{deal && <s className="old">{taka(p.old_price * (v?.mult || 1) * n)}</s>}</b></div><button className={'btn buy' + (added ? ' done' : '')} disabled={out} onClick={add}><Icon n="bag" />{out ? 'Sold out' : added ? 'Added ✓' : 'Add to Cart'}</button></div></>
 }
+/* ===== Motion system: every effect animates transform / opacity only, so the GPU does the work ===== */
+const MOTION_CSS = `
+:root{--out:cubic-bezier(.16,1,.3,1);--lqs:cubic-bezier(.34,1.32,.5,1)}
+/* page transitions: push slides in from the right, back slides in from the left, tabs rise and fade */
+.pg.fwd{animation:pgFwd .38s var(--out) both}
+.pg.back{animation:pgBack .34s var(--out) both}
+.pg.fade{animation:pgFade .32s var(--out) both}
+@keyframes pgFwd{from{opacity:0;transform:translate3d(40px,0,0) scale(.985)}to{opacity:1;transform:none}}
+@keyframes pgBack{from{opacity:0;transform:translate3d(-32px,0,0) scale(.985)}to{opacity:1;transform:none}}
+@keyframes pgFade{from{opacity:0;transform:translate3d(0,12px,0) scale(.985)}to{opacity:1;transform:none}}
+.pg.fwd .hdr .ht{animation:up .45s var(--out) .06s both}
+/* liquid tab bar: one gradient drop glides between tabs */
+.nav.lq{isolation:isolate}
+.nv-blob{position:absolute;z-index:0;left:var(--l,0);right:var(--r,100%);top:var(--t,0);bottom:var(--b,100%);border-radius:999px;pointer-events:none;opacity:0;--dl:0s;--dr:0s;
+  background:linear-gradient(120deg,#6b1b77,#a42a8a 45%,#ff3358);
+  box-shadow:inset 0 1.5px 0 #ffffff80,inset 0 -8px 14px #2d0b4a40,0 10px 22px -6px #ff3358aa;
+  transition:left .48s var(--lqs) var(--dl),right .48s var(--lqs) var(--dr),top .48s var(--lqs) var(--dl),bottom .48s var(--lqs) var(--dr),opacity .25s}
+.nv-blob[data-d=f]{--dl:.08s}.nv-blob[data-d=b]{--dr:.08s}
+.nv-blob.on{opacity:1}.nv-blob.nt{transition:none}
+.nv-blob::before{content:'';position:absolute;inset:2px 12% 52%;border-radius:999px;background:linear-gradient(#ffffff73,#fff0)}
+.nav.lq button.on::before{opacity:0!important}
+.nav.lq button{overflow:hidden}
+.nav.lq .nl{display:inline-block;font-weight:inherit;transition:none!important} /* label size must snap, so the drop can measure the final width */
+.nav.lq button.on .nl{animation:nlIn .42s var(--out) both}
+@keyframes nlIn{from{opacity:0;transform:translate3d(-8px,0,0)}}
+@media(hover:hover){.nav.lq button:not(.on):hover::before{opacity:.7;transform:none}}
+@media(min-width:900px){.nv-blob{border-radius:18px}.nv-blob::before{border-radius:16px;inset:2px 6px 52%}}
+/* add to cart: the product flies to the cart */
+.fly{position:fixed;z-index:3000;width:48px;height:48px;border-radius:50%;overflow:hidden;pointer-events:none;background:var(--grad);box-shadow:0 10px 24px #8e2a8c66,0 0 0 3px #fff;will-change:transform}
+.fly img{width:100%;height:100%;object-fit:cover;display:block;background:#fff}
+/* press feedback that composes with hover lifts (uses the separate scale property) */
+.card,.cat,.oc,.nt-i,.store.link{transition:transform .35s var(--spring),box-shadow .3s,scale .25s var(--spring)}
+.card:active,.cat:active,.oc:active,.nt-i:active,.store.link:active{scale:.97}
+.nt-i{overflow:hidden;isolation:isolate}
+/* products further down the page float in as they scroll into view (no JavaScript; Chromium only, others show them plainly) */
+@supports (animation-timeline:view()){@media(prefers-reduced-motion:no-preference){
+  html:not(.lite) .grid .card:nth-child(n+7){animation:cardIn linear both;animation-timeline:view();animation-range:entry 5% entry 60%}
+}}
+@keyframes cardIn{from{opacity:0;translate:0 28px;scale:.94}to{opacity:1;translate:0 0;scale:1}}
+/* toast lands like a drop */
+@keyframes toast{0%{opacity:0;transform:translate(-50%,18px) scale(.86,.72)}55%{opacity:1;transform:translate(-50%,-3px) scale(1.04,.97)}100%{opacity:1;transform:translateX(-50%)}}
+/* lite mode used to paint the toast white on white */
+html.lite .toast{background:#2a1a3a;color:#fff}
+/* splash: the logo card breathes in */
+.splash .lgcard{animation:wlArt .7s var(--lqs) both}
+@media(prefers-reduced-motion:reduce){.nv-blob{transition:opacity .2s}.fly{display:none}}
+`
+
+/* ===== Welcome screen ===== */
+const WEL_CSS = `
+.wl{flex:1;min-height:0;position:relative;overflow:hidden;isolation:isolate;display:flex;flex-direction:column;color:#fff;
+  padding:calc(14px + env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left));
+  background:radial-gradient(120% 70% at 50% -10%,#8e2a8c 0,#4a1668 50%,#2d0b4a 100%)}
+.wl-top,.wl-bars,.wl-view,.wl-pts,.wl-cta{position:relative;z-index:1;width:100%;max-width:460px;margin-inline:auto}
+.wl-bg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.wl-bg i{position:absolute;width:70vmax;height:70vmax;border-radius:50%;opacity:.5;will-change:transform}
+.wl-bg i:nth-child(1){left:-32vmax;top:-32vmax;background:radial-gradient(circle,#ff7eb6 0,#ff7eb600 62%);animation:wlA 18s ease-in-out infinite alternate}
+.wl-bg i:nth-child(2){right:-36vmax;top:18%;background:radial-gradient(circle,#7c5cf0 0,#7c5cf000 62%);animation:wlB 22s ease-in-out infinite alternate}
+.wl-bg i:nth-child(3){left:-12vmax;bottom:-42vmax;opacity:.35;background:radial-gradient(circle,#ff9a6b 0,#ff9a6b00 62%);animation:wlA 26s ease-in-out infinite alternate-reverse}
+.wl-bg::after{content:'';position:absolute;inset:0;background-image:radial-gradient(#ffffff2a 1.2px,#0000 1.6px);background-size:24px 24px;-webkit-mask-image:linear-gradient(#000,#0000 55%);mask-image:linear-gradient(#000,#0000 55%)}
+@keyframes wlA{to{transform:translate3d(12vmax,10vmax,0) scale(1.15)}}
+@keyframes wlB{to{transform:translate3d(-14vmax,-8vmax,0) scale(.9)}}
+.wl-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;animation:up .5s var(--out) both}
+.wl-logo{display:flex;align-items:center;gap:10px;min-width:0}
+.wl-lm{flex:none;width:44px;height:44px;border-radius:14px;background:#fff;display:grid;place-items:center;box-shadow:0 12px 26px -8px #1a063a99,0 0 0 4px #ffffff24}
+.wl-lm img{width:30px;height:30px;object-fit:contain;display:block}
+.wl-logo .wm{font-size:20px;background:#fff;padding:5px 12px 6px;border-radius:999px}
+.wl-skip{position:relative;overflow:hidden;isolation:isolate;flex:none;min-height:40px;padding:0 18px;border-radius:999px;font-size:14px;font-weight:600;color:#fff;background:#ffffff1f;border:1px solid #ffffff40;transition:background .25s}
+@media(hover:hover){.wl-skip:hover{background:#ffffff33}}
+.wl-bars{display:flex;gap:6px;margin-top:14px;flex:none}
+.wl-bars button{flex:1;height:22px;position:relative;overflow:hidden;isolation:isolate;background:none;border-radius:6px}
+.wl-bars button::before,.wl-bars i{content:'';position:absolute;left:0;right:0;top:9px;height:4px;border-radius:4px}
+.wl-bars button::before{background:#ffffff33;transition:background .3s}
+.wl-bars button.dn::before{background:#fff}
+.wl-bars i{background:#fff;transform-origin:left;animation:wlBar var(--n) linear both;box-shadow:0 0 10px #ffffffaa}
+.wl-bars.hold i{animation-play-state:paused}
+@keyframes wlBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.wl-view{flex:1;min-height:0;display:flex;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;margin-top:6px;cursor:grab}
+.wl-view:active{cursor:grabbing}
+.wl-track{display:flex;width:100%;transition:transform .55s var(--out);will-change:transform}
+.wl-track.drag{transition:none}
+.wl-sl{flex:0 0 100%;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:8px 6px;opacity:.3;transition:opacity .45s}
+.wl-sl.on{opacity:1}
+.wl-art{position:relative;width:clamp(150px,32vh,232px);aspect-ratio:1;display:grid;place-items:center;margin-bottom:12px;border-radius:50%;
+  background:radial-gradient(circle at 35% 28%,#ffffffee,#ffd6e8bb 45%,#ffffff22 72%);box-shadow:0 30px 60px -20px #1a063acc,inset 0 2px 10px #fff,inset 0 -16px 30px #8e2a8c33}
+.wl-art::before,.wl-art::after{content:'';position:absolute;inset:-14px;border-radius:50%;border:1.5px solid #ffffff38}
+.wl-sl.on .wl-art::after{animation:wlRing 2.8s ease-out infinite}
+@keyframes wlRing{from{transform:scale(.92);opacity:.9}to{transform:scale(1.22);opacity:0}}
+.wl-art span{font-size:clamp(84px,19vh,136px);line-height:1;display:grid;place-items:center;filter:drop-shadow(0 12px 18px #4a166855)}
+.wl-art span img{width:.9em;height:auto;display:block}
+.wl-sl.on .wl-art span{animation:wlArt .7s var(--lqs) both,flt 3.4s ease-in-out .7s infinite}
+@keyframes wlArt{from{transform:scale(.6) rotate(-8deg);opacity:0}}
+.wl-sl h1{display:grid;font-size:clamp(25px,4vh,32px);line-height:1.12;font-weight:800;letter-spacing:-.4px}
+.wl-sl h1 em{font-style:normal;background:linear-gradient(90deg,#ffd1e5,#ff9ac4 50%,#ffc7a8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.wl-sl p{font-size:15px;line-height:1.5;color:#ffffffcc;max-width:340px}
+.wl-sl.on h1{animation:up .55s var(--out) .08s both}.wl-sl.on p{animation:up .55s var(--out) .16s both}
+.wl-pts{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:6px;flex:none}
+.wl-pts li{display:grid;justify-items:center;gap:6px;padding:10px 4px;border-radius:18px;background:#ffffff14;border:1px solid #ffffff2b;font-size:12px;font-weight:600;line-height:1.2;text-align:center;animation:up .5s var(--out) .1s both}
+.wl-pts li:nth-child(2){animation-delay:.16s}.wl-pts li:nth-child(3){animation-delay:.22s}
+.wl-pts i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#fff;color:var(--p2)}
+.wl-pts .ico{width:15px;height:15px}
+.wl-cta{flex:none;display:grid;gap:8px;margin-top:16px;animation:up .6s var(--out) .14s both}
+.btn.wl-go{min-height:58px;font-size:17px;display:flex;align-items:center;justify-content:center;gap:12px;background:linear-gradient(120deg,#ff7a9c,#ff3358 55%,#b8174f);background-size:200% 100%;box-shadow:inset 0 1.5px 0 #ffffff99,inset 0 -10px 18px #6a0f3a55,0 18px 34px -8px #ff3358bb}
+.wl-go i{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#ffffff33;font-style:normal;animation:wlNudge 1.6s ease-in-out infinite}
+.wl-go i .ico{width:18px;height:18px}
+@keyframes wlNudge{50%{transform:translate3d(4px,0,0)}}
+.wl-in{text-align:center;font-size:13.5px;color:#ffffffcc;margin:0}
+.wl-in button{color:#fff;font-weight:800;text-decoration:underline;text-underline-offset:3px;padding:8px 4px}
+.wl-wipe{position:absolute;z-index:20;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:#f7effb;pointer-events:none;transform:scale(0);animation:wlWipe .5s cubic-bezier(.65,0,.35,1) forwards;will-change:transform}
+@keyframes wlWipe{to{transform:scale(var(--s))}}
+.wl.out :is(.wl-top,.wl-bars,.wl-view,.wl-pts,.wl-cta){animation:wlOut .3s var(--out) both}
+@keyframes wlOut{to{opacity:0;transform:scale(.95)}}
+@media(max-height:660px){.wl-pts{display:none}.wl-sl p{font-size:14px}.wl-sl{gap:6px}.wl-art{margin-bottom:6px}}
+@media(max-height:520px){.wl-art{width:110px}.wl-art span{font-size:72px}.wl-sl p{display:none}}
+@media(min-width:900px){.wl{padding-top:32px;padding-bottom:32px}}
+`
