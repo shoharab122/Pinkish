@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import './rider.css'
 import { signIn, signUp, signOut, onAuthChange, resetPassword, signInWithGoogle, supabase, onNotification } from '../api.js'
 import { LiveMap } from '../lib/LiveMap.jsx'
@@ -31,6 +32,33 @@ const lowData = () => { try { const c = navigator.connection; return !!(c && (c.
 const FRAMED = (() => { try { return window.top !== window.self } catch { return true } })()
 const FAIL = ['Customer not answering the phone', 'Customer not at the address', 'Wrong or incomplete address', 'Customer refused the parcel', 'Customer asked for another day', 'Parcel damaged']
 const DECLINE = ['Too far from me', 'Vehicle problem', 'Not feeling well', 'Too many jobs right now']
+// ---------- motion ----------
+// riders who turned on "reduce motion" get instant screen changes
+const calm = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false } }
+// Screen changes slide like a native app with the View Transitions API (Chrome / Android 111+, Safari 18+).
+// dir: 'fwd' (open a job), 'back' (leave a job), 'next' / 'prev' (bottom tabs). Other browsers get a CSS fade-in.
+let navTok = 0
+const swap = (dir, fn) => {
+  const d = document, r = d.documentElement
+  if (!d.startViewTransition || calm() || d.hidden) return fn()
+  const tok = ++navTok; r.dataset.rxNav = dir
+  const done = () => { if (navTok === tok) delete r.dataset.rxNav }
+  try { d.startViewTransition(() => flushSync(fn)).finished.then(done, done) } catch { done(); fn() }
+}
+// numbers count up to their new value instead of jumping (only transform-free text updates, ~0.65 s)
+function Num({ v, f = taka }) {
+  const n = Number(v) || 0, start = calm() ? n : 0, [d, setD] = useState(start), cur = useRef(start)
+  useEffect(() => {
+    const a = cur.current; if (a === n) return
+    if (calm() || document.hidden) { cur.current = n; setD(n); return }
+    let raf, t0
+    const step = t => { if (t0 == null) t0 = t; const k = Math.min(1, (t - t0) / 650), x = a + (n - a) * (1 - (1 - k) ** 3); cur.current = k < 1 ? x : n; setD(cur.current); if (k < 1) raf = requestAnimationFrame(step) }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [n])
+  return <span className="rx-num">{f(d)}</span>
+}
+const int = x => Math.round(x)
 const toUserObj = a => a ? { id: a.id, email: a.email, name: a.user_metadata?.full_name || a.user_metadata?.name || '', mobile: a.user_metadata?.phone || '' } : null
 
 const IC = {
@@ -80,8 +108,13 @@ const Hero = () => <svg className="rx-ill" viewBox="0 0 320 210" aria-hidden="tr
 
 /* ---------- small hooks ---------- */
 function useToast() {
-  const [t, setT] = useState(''), h = useRef(0)
-  const say = useCallback(m => { setT(m); clearTimeout(h.current); h.current = setTimeout(() => setT(''), 3400) }, [])
+  // { m: text, id, out }: a new id restarts the pop-in, `out` plays the slide-away before it is removed
+  const [t, setT] = useState(null), h = useRef(0), n = useRef(0)
+  const say = useCallback(m => {
+    clearTimeout(h.current); setT({ m, id: ++n.current, out: false })
+    h.current = setTimeout(() => { setT(p => p && { ...p, out: true }); h.current = setTimeout(() => setT(null), 260) }, 3400)
+  }, [])
+  useEffect(() => () => clearTimeout(h.current), [])
   return [t, say]
 }
 function useOnline() {
@@ -166,9 +199,10 @@ function Auth({ onUser, lock }) {
     </div>
     <div className="rx-card rx-authc">
       {done ? <div className="rx-done"><span className="rx-big"><Ico n="mail" s={36} /></span><h2>Check your email</h2><p className="rx-mut">We sent a confirmation link to <b>{done}</b>. Open it, then come back and log in.</p><button className="rx-btn" onClick={() => sw('in')}>Go to login</button></div> : <>
-        {mode !== 'forgot' && <div className="rx-tabs" role="tablist"><button role="tab" aria-selected={mode === 'in'} className={mode === 'in' ? 'on' : ''} onClick={() => sw('in')}>Log in</button><button role="tab" aria-selected={mode === 'up'} className={mode === 'up' ? 'on' : ''} onClick={() => sw('up')}>Become a rider</button></div>}
+        {mode !== 'forgot' && <div className={'rx-tabs' + (mode === 'up' ? ' up' : '')} role="tablist"><button role="tab" aria-selected={mode === 'in'} className={mode === 'in' ? 'on' : ''} onClick={() => sw('in')}>Log in</button><button role="tab" aria-selected={mode === 'up'} className={mode === 'up' ? 'on' : ''} onClick={() => sw('up')}>Become a rider</button></div>}
+        <div className="rx-swap" key={mode}>
         <h2>{mode === 'in' ? 'Welcome back' : mode === 'up' ? 'Create your rider account' : 'Reset your password'}</h2>
-        {err && <div className="rx-err" role="alert">{err}</div>}{info && <div className="rx-ok" role="status">{info}</div>}
+        {err && <div key={err} className="rx-err" role="alert">{err}</div>}{info && <div className="rx-ok" role="status">{info}</div>}
         {mode !== 'forgot' && <>
           <button type="button" className="rx-btn wide ghost rx-google" onClick={google}><GoogleG />Continue with Google</button>
           <p className="rx-mut rx-gnote">Have a Pinkish account? Use the same Gmail. No new password needed.</p>
@@ -183,6 +217,7 @@ function Auth({ onUser, lock }) {
           <button className="rx-btn wide" disabled={busy}>{busy ? 'Please wait…' : mode === 'in' ? 'Log in' : mode === 'up' ? 'Continue' : 'Send reset link'}</button>
         </form>
         <p className="rx-alt">{mode === 'in' ? <button type="button" onClick={() => sw('forgot')}>Forgot your password?</button> : mode === 'forgot' ? <button type="button" onClick={() => sw('in')}>Back to login</button> : <span className="rx-mut">Next you add your NID. Pinkish verifies every rider before the first job.</span>}</p>
+        </div>
       </>}
     </div>
   </div>
@@ -211,7 +246,7 @@ function Apply({ user, rider, onDone, logout }) {
       <div className="rx-head"><span className="rx-hic"><Ico n="id" s={24} /></span><div><h1>{rider ? 'Fix and resubmit' : 'Verify yourself'}</h1><p className="rx-mut">Pinkish checks every rider. It usually takes 1 working day.</p></div></div>
       {user.email && <div className="rx-who">Signed in as <b>{user.email}</b></div>}
       {rider?.status === 'rejected' && <div className="rx-err"><b>Not approved:</b> {rider.reject_reason || 'Please check your details and NID photo.'}</div>}
-      {err && <div className="rx-err" role="alert">{err}</div>}
+      {err && <div key={err} className="rx-err" role="alert">{err}</div>}
       <form onSubmit={go} noValidate>
         <Field label="Full name (as on NID)"><input value={f.name} onChange={set('name')} maxLength={80} autoComplete="name" /></Field>
         <Field label="Mobile number (customers and sellers call this)"><input type="tel" inputMode="numeric" value={f.phone} onChange={set('phone')} placeholder="01XXXXXXXXX" maxLength={16} /></Field>
@@ -233,7 +268,7 @@ function Waiting({ rider, onRefresh, logout }) {
   return <div className="rx-page narrow">
     <header className="rx-simple"><Brand /><button className="rx-ib" aria-label="Log out" onClick={logout}><Ico n="out" /></button></header>
     <div className="rx-card center">
-      <span className={'rx-big' + (sus ? ' bad' : '')}><Ico n={sus ? 'ban' : 'clock'} s={36} /></span>
+      <span className={'rx-big' + (sus ? ' bad' : ' wait')}><Ico n={sus ? 'ban' : 'clock'} s={36} /></span>
       <h1>{sus ? 'Account paused' : 'Application sent'}</h1>
       <p className="rx-mut">{sus ? 'Your rider account is paused. Contact Pinkish support for details.' : 'Pinkish is checking your NID. This page updates by itself, and you can close the app and come back later.'}</p>
       <div className="rx-sum"><div><span>Name</span><b>{rider.name}</b></div><div><span>Phone</span><b>{rider.phone}</b></div><div><span>Area</span><b>{rider.area}</b></div><div><span>Vehicle</span><b>{(VEHICLES.find(v => v[0] === rider.vehicle) || [, rider.vehicle])[1]}</b></div></div>
@@ -246,17 +281,26 @@ function Waiting({ rider, onRefresh, logout }) {
    Sheets and job pieces
    ===================================================================== */
 function Sheet({ title, onClose, children }) {
-  const box = useRef(null), close = useRef(onClose)
+  const box = useRef(null), close = useRef(onClose), tm = useRef(0), drag = useRef(null), [out, setOut] = useState(false)
   close.current = onClose
+  // slides down before it is removed (it used to vanish in one frame)
+  const shut = useCallback(() => { if (tm.current) return; if (calm()) return close.current(); setOut(true); tm.current = setTimeout(() => close.current(), 220) }, [])
   // runs once: a new onClose on every render must not re-lock the page scroll (it stayed locked after closing)
   useEffect(() => {
-    const k = e => e.key === 'Escape' && close.current(); addEventListener('keydown', k)
+    const k = e => e.key === 'Escape' && shut(); addEventListener('keydown', k)
     const prev = document.body.style.overflow; document.body.style.overflow = 'hidden'
     const back = document.activeElement; box.current?.focus()
-    return () => { removeEventListener('keydown', k); document.body.style.overflow = prev; back?.focus?.() }
-  }, [])
-  return <div className="rx-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={e => e.target === e.currentTarget && onClose()}>
-    <div className="rx-sh" ref={box} tabIndex={-1}><div className="rx-shh"><b>{title}</b><button className="rx-ib sm" aria-label="Close" onClick={onClose}><Ico n="x" s={18} /></button></div>{children}</div>
+    return () => { removeEventListener('keydown', k); clearTimeout(tm.current); document.body.style.overflow = prev; back?.focus?.() }
+  }, [shut])
+  // drag the top of the sheet down to close it (like a native bottom sheet)
+  const down = e => { if (e.button > 0 || e.target.closest('button')) return; drag.current = { y: e.clientY, dy: 0 }; box.current.style.transition = 'none'; e.currentTarget.setPointerCapture?.(e.pointerId) }
+  const move = e => { const d = drag.current; if (!d) return; d.dy = Math.max(0, e.clientY - d.y); box.current.style.transform = d.dy ? `translateY(${d.dy}px)` : '' }
+  const up = () => { const d = drag.current, b = box.current; drag.current = null; if (!d || !b) return; b.style.transition = ''; if (d.dy > 90) shut(); else b.style.transform = '' }
+  return <div className={'rx-sheet' + (out ? ' out' : '')} role="dialog" aria-modal="true" aria-label={title} onClick={e => e.target === e.currentTarget && shut()}>
+    <div className="rx-sh" ref={box} tabIndex={-1}>
+      <div className="rx-shh" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}><i className="rx-shg" aria-hidden="true" /><b>{title}</b><button className="rx-ib sm" aria-label="Close" onClick={shut}><Ico n="x" s={18} /></button></div>
+      {children}
+    </div>
   </div>
 }
 function ReasonSheet({ title, reasons, cta, danger, onPick, onClose }) {
@@ -265,7 +309,7 @@ function ReasonSheet({ title, reasons, cta, danger, onPick, onClose }) {
   return <Sheet title={title} onClose={onClose}>
     <div className="rx-reasons">{reasons.map(r => <button key={r} type="button" className={v === r ? 'on' : ''} onClick={() => setV(r)}>{r}</button>)}</div>
     <textarea className="rx-ta" rows={2} maxLength={200} placeholder="Or write what happened" value={reasons.includes(v) ? '' : v} onChange={e => setV(e.target.value)} />
-    {err && <div className="rx-err">{err}</div>}
+    {err && <div key={err} className="rx-err" role="alert">{err}</div>}
     <button className={'rx-btn wide' + (danger ? ' bad' : '')} disabled={busy} onClick={go}>{busy ? 'Sending…' : cta}</button>
   </Sheet>
 }
@@ -297,7 +341,7 @@ function Route({ j, dark, left, right, tag }) {
   const p = progress(j), r = reached(j)
   return <div className={'rx-route' + (dark ? ' dk' : '')}>
     <div className="rx-rline" aria-hidden="true">
-      <span className="rx-rbar"><b style={{ width: p * 100 + '%' }} /></span>
+      <span className="rx-rbar"><b style={{ clipPath: `inset(0 ${((1 - p) * 100).toFixed(2)}% 0 0)` }} /></span>
       {STOPS.map((x, i) => <i key={i} className={(i < r ? 'dn' : '') + (i === 3 ? ' z' : '')} style={{ left: x * 100 + '%' }}>{i < r ? <Ico n="check" s={11} /> : i === 3 ? <Ico n="pin" s={11} /> : null}</i>)}
       <em style={{ left: p * 100 + '%' }}><small>{tag || STAGE[j.status]?.[0] || ''}</small><span><Ico n="bike" s={14} /></span></em>
     </div>
@@ -360,7 +404,7 @@ function Deliver({ j, ops, onDone, say }) {
       : cod > 0 ? <div className="rx-collect"><small>Collect in cash</small><b>{taka(cod)}</b><label className={'rx-tick' + (cash ? ' on' : '')}><input type="checkbox" checked={cash} onChange={e => setCash(e.target.checked)} /><i>{cash ? '✓' : ''}</i>I collected {taka(cod)} in cash</label></div>
         : <div className="rx-paid"><Ico n="check" s={18} />Paid online. Do not take any money.</div>}
     {need && <label className="rx-otp"><span>Customer's delivery code</span><input inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" maxLength={4} placeholder="••••" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))} aria-label="4-digit delivery code" /><small>The customer sees it in the Pinkish app (order tracking and notifications). {j.code_attempts > 0 ? `${5 - j.code_attempts} tries left.` : ''}</small></label>}
-    {err && <div className="rx-err" role="alert">{err}</div>}
+    {err && <div key={err} className="rx-err" role="alert">{err}</div>}
     <button className="rx-btn wide ok" disabled={busy || cod == null}><Ico n="check" s={20} />{busy ? 'Checking…' : 'Complete delivery'}</button>
   </form>
 }
@@ -400,6 +444,103 @@ function EmbedMap({ src }) {
     : <div className="rx-map"><iframe title="Delivery location" src={src} loading="lazy" referrerPolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" allow="" /></div>}</div>
 }
 
+// Slide the dark tracking sheet: drag it down for a bigger map, up for a smaller one, tap the handle to switch.
+// It snaps to small / normal / big. The size lives in a CSS variable on .rx-side, so the map styles stay in CSS.
+// Phones use real touch events with preventDefault (iPhone Safari ignores it on pointer events and starts
+// selecting text or scrolling the page instead); a mouse uses pointer events.
+function useMapSlide(on) {
+  const side = useRef(null), grip = useRef(null), ended = useRef(0), def = useRef(0), [size, setSize] = useState('def'), sizeRef = useRef('def')
+  const wrap = () => side.current?.querySelector('.rx-mapwrap')
+  // biggest map: the sheet slides down until only its handle and the order row peek out at the bottom of the screen
+  const limits = () => {
+    const w = wrap(), tr = side.current?.querySelector('.rx-track'), row = side.current?.querySelector('.rx-trh')
+    let hi = Math.round(innerHeight * 0.78)
+    if (w && tr && row) {
+      const top = Math.max(0, w.getBoundingClientRect().top), peek = row.getBoundingClientRect().bottom - tr.getBoundingClientRect().top + 14
+      const lap = w.getBoundingClientRect().bottom - tr.getBoundingClientRect().top // the sheet overlaps the map (30px)
+      hi = Math.round(innerHeight - top - peek + lap)
+    }
+    return [150, Math.max(def.current + 60, hi)]
+  }
+  const apply = useCallback(sz => {
+    const el = side.current; if (!el) return
+    el.classList.remove('drag')
+    const [lo, hi] = limits()
+    if (sz === 'def') el.style.removeProperty('--rx-mh'); else el.style.setProperty('--rx-mh', (sz === 'min' ? lo : hi) + 'px')
+    sizeRef.current = sz; setSize(sz)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!on) apply('def') }, [on, apply])
+  useEffect(() => {
+    const g0 = grip.current; if (!on || !g0) return
+    let d = null
+    const start = (y, target) => {
+      const w = wrap(); if (!w || target.closest?.('a')) return false
+      const h = w.getBoundingClientRect().height
+      if (!side.current.style.getPropertyValue('--rx-mh')) def.current = h
+      d = { y, h, ly: y, lt: performance.now(), v: 0, moved: false }
+      // switch the map off for clicks right away: the Google address map is a separate page (iframe) and once the
+      // pointer slides over it the browser hands every move and the release to Google, so the bar froze
+      side.current.classList.add('drag')
+      return true
+    }
+    const drag = y => {
+      if (!d) return
+      const dy = y - d.y, t = performance.now()
+      if (t > d.lt) d.v = 0.7 * ((y - d.ly) / (t - d.lt)) + 0.3 * d.v // px per ms, smoothed
+      d.ly = y; d.lt = t
+      if (!d.moved && Math.abs(dy) < 6) return
+      if (!d.moved) { d.moved = true; side.current.classList.add('drag'); getSelection?.()?.removeAllRanges?.() }
+      const [lo, hi] = limits()
+      side.current.style.setProperty('--rx-mh', Math.round(Math.min(hi, Math.max(lo, d.h + dy))) + 'px')
+    }
+    const end = () => {
+      const g = d; d = null; if (!g) return
+      if (!g.moved) return side.current?.classList.remove('drag')
+      ended.current = Date.now() // the click that follows a drag must not also switch the size
+      // snap in the swipe's direction: a short pull down opens the next bigger map, a push up the next smaller one
+      const dy = g.ly - g.y, [lo, hi] = limits(), df = def.current || g.h
+      const pts = [['min', lo], ['def', df], ['max', hi]], aim = g.h + dy + g.v * 180
+      const dir = Math.abs(dy) > 30 || Math.abs(g.v) > 0.4 ? Math.sign(dy || g.v) : 0
+      const ahead = dir ? pts.filter(p => (p[1] - g.h) * dir > 12) : []
+      apply((ahead.length ? ahead : pts).sort((a, b) => Math.abs(a[1] - aim) - Math.abs(b[1] - aim))[0][0])
+    }
+    // touch (phones and tablets)
+    const ts = e => { if (e.touches.length === 1) start(e.touches[0].clientY, e.target); else { d = null; side.current?.classList.remove('drag') } }
+    const tm = e => { if (!d) return; if (e.cancelable) e.preventDefault(); drag(e.touches[0].clientY) }
+    const te = () => end()
+    // mouse (desktop)
+    // The bar does not hold (capture) the mouse: that sent the click to the bar instead of the handle, so a click on
+    // the handle never switched the map size. The page listens to the moves and the release while the drag lasts.
+    const pm = e => {
+      if (e.pointerType !== 'mouse' || !d || d.wheel) return
+      if (!e.buttons) return pu(e) // button already up: the release was lost, finish now
+      e.preventDefault(); drag(e.clientY)
+    }
+    const pu = e => { if (e.pointerType !== 'mouse') return; removeEventListener('pointermove', pm, true); removeEventListener('pointerup', pu, true); removeEventListener('pointercancel', pu, true); if (d && !d.wheel) end() }
+    const pd = e => {
+      if (e.pointerType !== 'mouse' || e.button > 0 || !start(e.clientY, e.target)) return
+      addEventListener('pointermove', pm, true); addEventListener('pointerup', pu, true); addEventListener('pointercancel', pu, true)
+    }
+    // laptop trackpad / mouse wheel on the bar: two-finger swipe down pulls the sheet down (bigger map), up pushes it back
+    let wt = 0
+    const wh = e => {
+      if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return // pinch-zoom or sideways swipe: leave it to the browser
+      const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1)
+      if (!d) { if (!start(0, e.target)) return; d.wheel = true }
+      if (!d.wheel) return
+      e.preventDefault()
+      drag(d.ly - px)
+      clearTimeout(wt); wt = setTimeout(end, 160)
+    }
+    const L = [['touchstart', ts, { passive: true }], ['touchmove', tm, { passive: false }], ['touchend', te], ['touchcancel', te], ['pointerdown', pd], ['wheel', wh, { passive: false }]]
+    L.forEach(([n, f, o]) => g0.addEventListener(n, f, o))
+    return () => { clearTimeout(wt); L.forEach(([n, f]) => g0.removeEventListener(n, f)); removeEventListener('pointermove', pm, true); removeEventListener('pointerup', pu, true); removeEventListener('pointercancel', pu, true); side.current?.classList.remove('drag') }
+  }, [on, apply]) // eslint-disable-line react-hooks/exhaustive-deps
+  // a tap (or Enter/Space on the handle) switches between the normal and the big map
+  const tap = () => { if (Date.now() - ended.current < 400) return; if (!def.current) def.current = wrap()?.getBoundingClientRect().height || 0; apply(sizeRef.current === 'def' ? 'max' : 'def') }
+  return { side, grip, size, tap }
+}
+
 function JobView({ j, ops, pos, onBack, reload, say }) {
   const [busy, setBusy] = useState(false), [err, setErr] = useState(''), [sheet, setSheet] = useState(''), [spin, setSpin] = useState(false)
   const c = counts(j), ready = c.got >= c.n, st = j.status, cu = j.customer || {}, hasMap = okLL(cu.lat, cu.lng) || !!mapEmbed(cu.address, cu.lat, cu.lng)
@@ -417,14 +558,17 @@ function JobView({ j, ops, pos, onBack, reload, say }) {
   const run = async (fn, ok) => { setBusy(true); setErr(''); try { await fn(); if (ok) say(ok); await reload() } catch (x) { setErr(msg(x)) } setBusy(false) }
   const steps = ['Accept', 'Collect', 'Deliver'], at = st === 'assigned' ? 0 : st === 'accepted' ? 1 : 2
   const kmTo = pos && okLL(cu.lat, cu.lng) ? havKm(pos.lat, pos.lng, +cu.lat, +cu.lng) : null
+  const slide = useMapSlide(hasMap)
   return <div className="rx-view job">
-    <div className="rx-side">
+    <div className="rx-side" ref={slide.side}>
       <header className={'rx-vh' + (overMap ? ' over' : '')}><button className="rx-ib" aria-label="Back" onClick={onBack}><Ico n="back" /></button><div><b>Live tracking</b><small>#{j.order_no} · {units(j)} item{units(j) === 1 ? '' : 's'}</small></div><button className={'rx-ib' + (spin ? ' spin' : '')} aria-label="Refresh" disabled={busy || spin} onClick={refresh}><Ico n="refresh" /></button></header>
       <JobMap j={j} cu={cu} pos={pos} ops={ops} />
-      <div className={'rx-track' + (hasMap ? '' : ' nomap')}>
-        <span className="rx-grab" />
-        <div className="rx-trh"><span><small>Order ID</small><b>#{j.order_no}</b></span><span className="r"><small>Status</small><span className={'rx-st ' + (STAGE[st]?.[1] || 'new')}>{STAGE[st]?.[0]}</span></span></div>
-        <Route j={j} dark left={'Assigned ' + hm(j.assigned_at || j.created_at)} right={st === 'out' && kmTo != null ? `~${etaMin(kmTo)} min · ${kmTxt(kmTo)}` : 'Deliver to'} tag={st === 'out' && kmTo != null ? kmTxt(kmTo) + ' away' : undefined} />
+      <div className={'rx-track' + (hasMap ? '' : ' nomap')} data-st={st}>
+        <div className={hasMap ? 'rx-grip' : undefined} ref={hasMap ? slide.grip : undefined}>
+          {hasMap ? <button type="button" className="rx-grab" title="Drag down for the full map, drag up to make it smaller" aria-label={slide.size === 'def' ? 'Make the map bigger' : 'Make the map normal size'} onClick={slide.tap}><i aria-hidden="true" /></button> : <span className="rx-grab off" aria-hidden="true" />}
+          <div className="rx-trh"><span><small>Order ID</small><b>#{j.order_no}</b></span><span className="r"><small>Status</small><span className={'rx-st ' + (STAGE[st]?.[1] || 'new')}>{STAGE[st]?.[0]}</span></span></div>
+          <Route j={j} dark left={'Assigned ' + hm(j.assigned_at || j.created_at)} right={st === 'out' && kmTo != null ? `~${etaMin(kmTo)} min · ${kmTxt(kmTo)}` : 'Deliver to'} tag={st === 'out' && kmTo != null ? kmTxt(kmTo) + ' away' : undefined} />
+        </div>
         <div className="rx-tgrid">
           <div><small>From</small><b>{fromName(j)}</b></div>
           <div><small>To</small><b>{short(cu.address)}</b></div>
@@ -443,7 +587,9 @@ function JobView({ j, ops, pos, onBack, reload, say }) {
     </div>
     <div className="rx-vb">
       <ol className="rx-steps">{steps.map((s, i) => <li key={s} className={i < at ? 'dn' : i === at ? 'on' : ''}><i>{i < at ? '✓' : i + 1}</i>{s}</li>)}</ol>
-      {err && <div className="rx-err" role="alert">{err}</div>}
+      {err && <div key={err} className="rx-err" role="alert">{err}</div>}
+      {/* keyed by status: each new stage (accepted, on the way) rises in instead of popping in */}
+      <div className="rx-stage" key={st}>
       {st === 'assigned' && <div className="rx-card rx-new">
         <h3>New delivery job</h3>
         <div className="rx-kv"><div><span>You earn</span><b>{taka(j.fee)}</b></div><div><span>Cash to collect</span><b>{j.cod == null ? 'Check' : taka(j.cod)}</b></div><div><span>Pickups</span><b>{c.n || 'Hub'}</b></div></div>
@@ -466,6 +612,7 @@ function JobView({ j, ops, pos, onBack, reload, say }) {
 
       {st === 'out' && <><Deliver j={j} ops={ops} onDone={() => { onBack(); reload() }} say={say} /><button className="rx-link bad" onClick={() => setSheet('fail')}>Could not deliver</button></>}
       {telHref(ops.support_phone) && <a className="rx-help" href={telHref(ops.support_phone)}><Ico n="phone" s={16} />Problem? Call Pinkish support</a>}
+      </div>
     </div>
     {sheet === 'decline' && <ReasonSheet title="Why can't you take this job?" reasons={DECLINE} cta="Decline job" onClose={() => setSheet('')} onPick={async r => { await declineJob(j.id, r); setSheet(''); say('Job returned to Pinkish'); onBack(); reload() }} />}
     {sheet === 'fail' && <ReasonSheet title="What happened?" reasons={FAIL} cta="Report and keep the parcel" danger onClose={() => setSheet('')} onPick={async r => { await failJob(j.id, r); setSheet(''); say('Reported. Keep the parcel safe and bring it back to Pinkish.'); onBack(); reload() }} />}
@@ -482,7 +629,7 @@ function Jobs({ data, onOpen, goFind, goEarn, q }) {
   const k = q.trim().toLowerCase().replace(/^#/, '')
   const list = [...active].filter(j => !k || `${j.order_no} ${j.customer?.address || ''} ${fromName(j)}`.toLowerCase().includes(k)).sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3))
   const [cur, ...rest] = list
-  const today = <div className="rx-today"><div><small>Today</small><b>{stats.today || 0}</b><span>delivered</span></div><div><small>Earned today</small><b>{taka(stats.today_fee)}</b><span>fees</span></div><div className={stats.cash > 0 ? 'cash' : ''}><small>Cash with you</small><b>{taka(stats.cash)}</b><span>give to Pinkish</span></div></div>
+  const today = <div className="rx-today"><div><small>Today</small><b><Num v={stats.today} f={int} /></b><span>delivered</span></div><div><small>Earned today</small><b><Num v={stats.today_fee} /></b><span>fees</span></div><div className={stats.cash > 0 ? 'cash' : ''}><small>Cash with you</small><b><Num v={stats.cash} /></b><span>give to Pinkish</span></div></div>
   if (k) return <>
     <div className="rx-hrow"><h2 className="rx-h2">Search results {list.length > 0 && <em>{list.length}</em>}</h2></div>
     {list.length ? <div className="rx-list">{list.map(j => <JobCard key={j.id} j={j} onOpen={onOpen} />)}</div> : <p className="rx-mut">No job matches “{q}”.</p>}
@@ -514,7 +661,7 @@ function Find({ data, say, reload, onOpen }) {
   return <>
     <div className="rx-hrow"><h2 className="rx-h2">Near you {rows?.length > 0 && <em>{rows.length}</em>}</h2><button className="rx-ib sm" aria-label="Refresh" onClick={load}><Ico n="refresh" s={18} /></button></div>
     {!on && <div className="rx-warn"><Ico n="alert" s={18} />Go online to take a job.</div>}
-    {err && <div className="rx-err" role="alert">{err}</div>}
+    {err && <div key={err} className="rx-err" role="alert">{err}</div>}
     {rows === null ? <div className="rx-skel" /> : !rows.length ? <div className="rx-empty"><span><Ico n="search" s={30} /></span><b>No open jobs</b><p>This list refreshes by itself every few seconds.</p></div>
       : <div className="rx-list">{rows.map(o => <div className="rx-job pool" key={o.order_id}>
         <span className="rx-jh"><span className="rx-thumb"><Ico n="box" s={20} /></span><span className="rx-jid"><small>{ago(o.created_at)}</small><b>#{o.order_no}</b></span>{o.fee > 0 && <span className="rx-st fee">+{taka(o.fee)}</span>}</span>
@@ -528,8 +675,8 @@ function Find({ data, say, reload, onOpen }) {
 function Earn({ data }) {
   const { stats = {}, history = [], ops = {} } = data, [lim, setLim] = useState(30)
   return <>
-    <div className="rx-earn"><small>Last 7 days</small><b>{taka(stats.week_fee)}</b><span>{stats.week || 0} deliveries</span></div>
-    <div className="rx-today"><div><small>Today</small><b>{taka(stats.today_fee)}</b><span>{stats.today || 0} done</span></div><div><small>30 days</small><b>{taka(stats.month_fee)}</b><span>{stats.month || 0} done</span></div><div className={stats.cash > 0 ? 'cash' : ''}><small>Cash with you</small><b>{taka(stats.cash)}</b><span>not handed in</span></div></div>
+    <div className="rx-earn"><small>Last 7 days</small><b><Num v={stats.week_fee} /></b><span>{stats.week || 0} deliveries</span></div>
+    <div className="rx-today"><div><small>Today</small><b><Num v={stats.today_fee} /></b><span>{stats.today || 0} done</span></div><div><small>30 days</small><b><Num v={stats.month_fee} /></b><span>{stats.month || 0} done</span></div><div className={stats.cash > 0 ? 'cash' : ''}><small>Cash with you</small><b><Num v={stats.cash} /></b><span>not handed in</span></div></div>
     {stats.cash > 0 && <div className="rx-warn"><Ico n="cash" s={18} />Hand {taka(stats.cash)} to Pinkish. It is cleared here once Pinkish confirms they received it.{telHref(ops.support_phone) ? <a href={telHref(ops.support_phone)}> Call</a> : null}</div>}
     <h2 className="rx-h2">Last 30 days</h2>
     {!history.length ? <p className="rx-mut">Finished jobs show up here.</p> : <div className="rx-hist">{history.slice(0, lim).map(h => <div key={h.id} className={h.status}>
@@ -608,7 +755,11 @@ function RiderApp({ user, logout }) {
     navigator.vibrate?.(30)
     setDutyBusy(true); try { await setDuty(!onDuty); say(onDuty ? 'You are offline' : 'You are online. New jobs will buzz.'); await load() } catch (x) { say(msg(x)) } setDutyBusy(false)
   }
-  const go = t => { setTab(t); setOpen(null); scr.current?.scrollTo?.(0, 0); window.scrollTo?.(0, 0) }
+  const top = () => { scr.current?.scrollTo?.(0, 0); try { window.scrollTo(0, 0) } catch { /* old browsers */ } }
+  // tabs slide toward the side they sit on in the bottom bar; a job slides in from the right and back out
+  const go = t => { const a = TABS.indexOf(tab), b = TABS.indexOf(t), fn = () => { setTab(t); setOpen(null); top() }; if (t === tab && !open) return fn(); swap(open ? 'back' : b < a ? 'prev' : 'next', fn) }
+  const openJob = useCallback(id => swap('fwd', () => { setOpen(id); top() }), [])
+  const closeJob = useCallback(() => swap('back', () => { setOpen(null); top() }), [])
   const refresh = async () => { if (spin) return; setSpin(true); await load(); setSpin(false) }
   const job = open && data?.active?.find(j => j.id === open)
   useEffect(() => { if (open && data && !job) setOpen(null) }, [open, data, job])
@@ -616,13 +767,13 @@ function RiderApp({ user, logout }) {
   useEffect(() => { try { window.scrollTo(0, 0) } catch { /* old browsers */ } }, [open])
   const nActive = data?.active?.length || 0, pool = !!data?.ops?.pool
   const name = first(data?.me?.name)
-  if (!data) return <div className="rx-page narrow center-v">{err ? <div className="rx-card center"><span className="rx-big bad"><Ico n="alert" s={34} /></span><p>{err}</p><button className="rx-btn" onClick={load}>Try again</button><button className="rx-link" onClick={logout}>Log out</button></div> : <div className="rx-spin" aria-label="Loading" />}</div>
+  if (!data) return err ? <div className="rx-page narrow center-v"><div className="rx-card center"><span className="rx-big bad"><Ico n="alert" s={34} /></span><p>{err}</p><button className="rx-btn" onClick={load}>Try again</button><button className="rx-link" onClick={logout}>Log out</button></div></div> : <SkelHome />
   const navB = (k, l, ic, n) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><Ico n={ic} s={22} /><span>{l}</span>{n > 0 && <em>{n}</em>}</button>
   const TITLE = { find: ['Open jobs', 'Inside the ' + RIDER_KM + ' km Pinkish zone'], earn: ['Earnings', 'Fees and cash for the last 30 days'], me: ['Profile', 'Your rider account'] }
   const area = data.me?.area
   return <div className={'rx-app' + (job ? ' full' : '')}>
     {!online && <div className="rx-offline">No internet. Showing your last update.</div>}
-    {job ? <JobView j={job} ops={data.ops || {}} pos={pos} onBack={() => setOpen(null)} reload={load} say={say} /> : <>
+    {job ? <JobView j={job} ops={data.ops || {}} pos={pos} onBack={closeJob} reload={load} say={say} /> : <>
       <header className="rx-home">
         <div className="rx-hr1">
           <div className="rx-loc"><span className="rx-locic"><Ico n="bike" s={20} /></span><span><small>Hello, {name} 👋</small><b>{area ? 'Delivering in ' + area : 'Pinkish Rider'}</b></span></div>
@@ -642,10 +793,12 @@ function RiderApp({ user, logout }) {
       </header>
       <main className="rx-scr" ref={scr}>
         {err && <div className="rx-err">{err}</div>}
-        {tab === 'jobs' && <Jobs data={data} onOpen={setOpen} goFind={() => go('find')} goEarn={() => go('earn')} q={q} />}
-        {tab === 'find' && <Find data={data} say={say} reload={load} onOpen={id => { setTab('jobs'); setOpen(id) }} />}
-        {tab === 'earn' && <Earn data={data} />}
-        {tab === 'me' && <Me data={data} user={user} logout={logout} />}
+        <div className="rx-pane" key={tab}>
+          {tab === 'jobs' && <Jobs data={data} onOpen={openJob} goFind={() => go('find')} goEarn={() => go('earn')} q={q} />}
+          {tab === 'find' && <Find data={data} say={say} reload={load} onOpen={id => swap('fwd', () => { setTab('jobs'); setOpen(id); top() })} />}
+          {tab === 'earn' && <Earn data={data} />}
+          {tab === 'me' && <Me data={data} user={user} logout={logout} />}
+        </div>
       </main>
       <nav className="rx-nav" aria-label="Rider sections"><div className="rx-navin">
         {navB('jobs', 'Home', 'home', nActive)}
@@ -655,9 +808,19 @@ function RiderApp({ user, logout }) {
         {navB('me', 'Profile', 'user')}
       </div></nav>
     </>}
-    {toast && <div className="rx-toast" role="status">{toast}</div>}
+    {toast && <div key={toast.id} className={'rx-toast' + (toast.out ? ' out' : '')} role="status">{toast.m}</div>}
   </div>
 }
+const TABS = ['jobs', 'find', 'earn', 'me']
+// first load: the home layout appears at once as a shimmering outline (feels faster than a spinner)
+const SkelHome = () => <div className="rx-app" aria-busy="true" aria-label="Loading">
+  <div className="rx-home">
+    <div className="rx-skr"><i className="rx-sk c" /><span><i className="rx-sk s" /><i className="rx-sk m" /></span><i className="rx-sk p" /></div>
+    <i className="rx-sk bar" />
+    <div className="rx-quick"><i className="rx-sk tile" /><i className="rx-sk tile" /></div>
+  </div>
+  <div className="rx-scr"><i className="rx-sk h" /><i className="rx-sk card" /><div className="rx-today"><i className="rx-sk st" /><i className="rx-sk st" /><i className="rx-sk st" /></div></div>
+</div>
 
 /* =====================================================================
    Root
