@@ -5,6 +5,7 @@ import { HUB, RIDER_KM, MAX_KM, deliveryFor, kmTxt, okLL, havKm, modeOf, safeUrl
 import { LiveMap, loadLeaflet, usePoll } from './lib/LiveMap.jsx'
 
 const taka = n => '৳' + Math.round(n).toLocaleString()
+const NONE = [] // shared empty list: keeps memoised children from redrawing
 // Shared product links look like /?p=<id>: remember the id, then tidy the address bar.
 const DEEP = (() => { try { const u = new URL(location.href), p = u.searchParams.get('p'); if (p) { u.searchParams.delete('p'); history.replaceState(history.state, '', u.pathname + u.search + u.hash) } return p } catch { return null } })()
 
@@ -905,6 +906,17 @@ const BkashPay = ({ total, cart, promo, addr, back, say, onDone }) => {
     <button className="btn" disabled={busy} onClick={submit}>{busy ? <i className="spin" /> : 'Submit payment'}</button>
   </div></>
 }
+// Toast: owns its own state, so showing a message redraws only this bubble, not the whole store.
+function Toast({ api: r }) {
+  const [m, setM] = useState(''), t = useRef(0)
+  useEffect(() => {
+    const o = r.current
+    o.fn = (msg, ms) => { clearTimeout(t.current); setM(msg); t.current = setTimeout(() => setM(''), ms) }
+    if (o.pend) { const [a, b] = o.pend; o.pend = null; o.fn(a, b) } // a message sent while the splash screen was up
+    return () => { clearTimeout(t.current); o.fn = null }
+  }, [r])
+  return m ? <div className="toast" role="status">{m}</div> : null
+}
 const Hdr = ({ title, back, right }) => <div className="hdr"><button className="ib" aria-label="Back" onClick={back}><Icon n="back" /></button><span className="ht">{title}</span>{right || <span className="ib ghost" />}</div>
 const Heart = ({ on, toggle, inl }) => <button className={'heart' + (on ? ' on' : '') + (inl ? ' inl' : '')} aria-label="Wishlist" aria-pressed={on} onClick={e => { e.stopPropagation(); toggle() }}>{on ? '♥' : '♡'}</button>
 
@@ -927,30 +939,56 @@ const heroBg = x => {
 }
 // Home hero: every slide (text, button, link, colours, picture) and the autoplay speed are set in the admin panel.
 // Mobile: swipe left/right, tap anywhere to open the slide's link, pauses while touched, no autoplay with reduced motion.
+// The banner settings are fetched once per visit and kept on the device, so the real banner shows instantly
+// (no default banner flashing first) and going back to Home never downloads them again.
+const HERO0 = { slides: OFFERS.map(o => ({ chip: o[0], lines: o[1], emoji: o[2] })), auto: true, speed: 4 }
+let heroMem = null, heroAt = 0
+const ARS = {} // picture shape cache: width / height, shared across visits to Home
 function BannerImpl({ shop, go, open, cats, prods }) {
-  const [cfg, setCfg] = useState(() => ({ slides: OFFERS.map(o => ({ chip: o[0], lines: o[1], emoji: o[2] })), auto: true, speed: 4 }))
-  const [i, setI] = useState(0), [hold, setHold] = useState(false), sw = useRef(null)
-  useEffect(() => { let on = true; api.getHeroFull().then(h => { if (on && h) { setCfg(h); setI(0) } }).catch(() => {}); return () => { on = false } }, [])
+  const [cfg, setCfg] = useState(() => heroMem || readLS('pk_hero', null) || HERO0)
+  const [i, setI] = useState(0), [hold, setHold] = useState(false), [inView, setInView] = useState(true), sw = useRef(null), box = useRef(null)
+  const cfgR = useRef(cfg); cfgR.current = cfg
+  useEffect(() => {
+    if (heroMem && Date.now() - heroAt < 120000) return
+    let on = true
+    api.getHeroFull().then(h => {
+      heroAt = Date.now(); const v = h || HERO0; heroMem = v
+      if (h) writeLS('pk_hero', h); else try { localStorage.removeItem('pk_hero') } catch { /* storage unavailable */ }
+      if (on && JSON.stringify(cfgR.current) !== JSON.stringify(v)) { setCfg(v); setI(0) }
+    }).catch(() => {})
+    return () => { on = false }
+  }, [])
   const list = cfg.slides, n = list.length, cur = i % n
+  // Only the slides that have been on screen (and the next one) load their pictures: hidden slides cost no mobile data.
+  const [seen, setSeen] = useState(() => new Set([0, 1]))
+  useEffect(() => { const nx = (cur + 1) % n; setSeen(s => (s.has(cur) && s.has(nx) ? s : new Set([...s, cur, nx]))) }, [cur, n])
+  useEffect(() => { setSeen(new Set([0, 1])) }, [list])
   // Picture shapes: a wide (landscape) picture next to text never fits on a phone, so it is shown as a whole-picture slide instead.
-  const [ars, setArs] = useState({})
+  const [ars, setArs] = useState(() => ({ ...ARS }))
   useEffect(() => {
     let on = true
-    list.forEach(x => {
-      if (!x.image || x.layout === 'cover') return
-      const im = new Image()
-      im.onload = () => { if (on) setArs(a => a[x.image] ? a : { ...a, [x.image]: (im.naturalWidth || 1) / (im.naturalHeight || 1) }) }
-      im.onerror = () => { if (on) setArs(a => a[x.image] ? a : { ...a, [x.image]: 1 }) }
+    list.forEach((x, k) => {
+      if (!seen.has(k) || !x.image || x.layout === 'cover' || ARS[x.image] !== undefined) return
+      const im = new Image(), done = v => { ARS[x.image] = v; if (on) setArs(a => (a[x.image] === v ? a : { ...a, [x.image]: v })) }
+      im.decoding = 'async'
+      im.onload = () => done((im.naturalWidth || 1) / (im.naturalHeight || 1))
+      im.onerror = () => done(1)
       im.src = x.image
     })
     return () => { on = false }
-  }, [list])
-  const reduce = useMemo(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches, [])
+  }, [list, seen])
+  // autoplay stops while the banner is scrolled off screen or the tab is hidden (no work nobody can see)
   useEffect(() => {
-    if (!cfg.auto || n < 2 || hold || reduce) return
-    const t = setTimeout(() => setI(x => (x + 1) % n), cfg.speed * 1000)
+    const el = box.current; if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { threshold: 0.25 })
+    io.observe(el); return () => io.disconnect()
+  }, [])
+  const reduce = NOMOTION
+  useEffect(() => {
+    if (!cfg.auto || n < 2 || hold || reduce || !inView) return
+    const t = setTimeout(() => { if (!document.hidden) setI(x => (x + 1) % n) }, cfg.speed * 1000)
     return () => clearTimeout(t)
-  }, [i, n, cfg.auto, cfg.speed, hold, reduce])
+  }, [i, n, cfg.auto, cfg.speed, hold, reduce, inView])
   const live = x => x.cta !== '' || !!x.link
   const act = x => {
     const l = String(x.link || '')
@@ -970,21 +1008,22 @@ function BannerImpl({ shop, go, open, cats, prods }) {
   // On phones the banner takes the shape of a whole-picture slide, so the full picture shows with no empty bars.
   const ar0 = x0.image && x0.layout !== 'cover' ? ars[x0.image] : 0
   const fit = !!ar0 && (x0.layout === 'full' || ar0 >= 1.25)
-  return <div className="bw" role="region" aria-roledescription="carousel" aria-label="Offers">
+  return <div className="bw" ref={box} role="region" aria-roledescription="carousel" aria-label="Offers">
     <div className={'banner hb' + (live(x0) ? ' lk' : '') + (fit ? ' fit' : '')} style={fit ? { '--ar': Math.min(3, Math.max(1.15, ar0)) } : undefined} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={e => { if (sw.current) sw.current.m = true; setHold(false) }} onClick={() => { if (!sw.current?.m && live(x0)) act(x0) }}>
       {list.map((x, k) => {
         const cov = x.layout === 'cover' && !!x.image, art = x.image || x.emoji || '🛡️', btn = x.cta === undefined ? 'Shop Now' : x.cta
         // "Picture only": the whole picture is always visible (never cropped); a blurred copy fills any spare space
         const wide = !!x.image && x.layout !== 'cover' && (x.layout === 'full' || ars[x.image] >= 1.25)
+        const ld = seen.has(k), pr = k === 0 ? 'high' : undefined
         if (wide) return <div key={k} className={'bs full' + (k === cur ? ' on' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
-          <img className="bfull-bg" src={x.image} alt="" aria-hidden="true" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />
-          <img className="bfull" src={x.image} alt="Special offer" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />
+          {ld && <><img className="bfull-bg" src={x.image} alt="" aria-hidden="true" decoding="async" draggable="false" />
+          <img className="bfull" src={x.image} alt="Special offer" decoding="async" draggable="false" fetchpriority={pr} /></>}
         </div>
         return <div key={k} className={'bs' + (k === cur ? ' on' : '') + (cov ? ' cov' : '') + (!cov && x.image ? ' pic' : '') + (x.tone === 'dark' ? ' dk' : '')} style={{ background: heroBg(x) }} aria-hidden={k !== cur} aria-label={`Slide ${k + 1} of ${n}`}>
-          {cov && <img className="bcov" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />}
+          {cov && ld && <img className="bcov" src={x.image} alt="" decoding="async" draggable="false" fetchpriority={pr} />}
           <div className="bt">{x.chip && <span className="bchip">{x.chip}</span>}<h3>{x.lines.split('|').map((l, j) => <span key={j}>{l}</span>)}</h3>{x.sub && <p className="bsub">{x.sub}</p>}
             {btn && <button type="button" className="bshop" tabIndex={k === cur ? 0 : -1} onClick={e => { e.stopPropagation(); act(x) }}>{btn}<i>↗</i></button>}</div>
-          {!cov && (x.image ? (ars[x.image] === undefined ? null : <img className="bart" src={x.image} alt="" decoding="async" draggable="false" loading={k === 0 ? 'eager' : 'lazy'} />) : <div className="be"><Glyph v={art} /></div>)}
+          {!cov && (x.image ? (ars[x.image] === undefined || !ld ? null : <img className="bart" src={x.image} alt="" decoding="async" draggable="false" fetchpriority={pr} />) : <div className="be"><Glyph v={art} /></div>)}
         </div>
       })}
     </div>
@@ -1244,13 +1283,13 @@ const CartItem = memo(({ i, qty }) => <div className="item ci rise"><Pic p={i} /
       <div className="qty"><button aria-label="Decrease" onClick={() => qty(i.key, -1)}>−</button><span>{i.qty}</span><button aria-label="Increase" onClick={() => qty(i.key, 1)}>+</button></div></div></div></div>)
 
 const HINT = ['Waiting for confirmation', 'Being prepared for you', 'On its way to you', 'Delivered. Enjoy!']
-const OrderCard = ({ o, st, open, ret }) => { const its = o.items || [], n = its.reduce((a, i) => a + (i.qty || 1), 0), names = its.slice(0, 2).map(i => i.name).join(', ')
+const OrderCard = memo(({ o, st, open, ret }) => { const its = o.items || [], n = its.reduce((a, i) => a + (i.qty || 1), 0), names = its.slice(0, 2).map(i => i.name).join(', ')
   return <div className={'oc rise s' + st} role="button" tabIndex={0} aria-label={`Order ${o.order_no}, ${STEPS[st]}`} onClick={() => open(o)} onKeyDown={e => e.key === 'Enter' && open(o)}>
     <div className="oc-h"><div><b>#{o.order_no}</b><small>{new Date(o.created_at).toLocaleDateString([], { dateStyle: 'medium' })}</small></div><span className={'sp s' + st}><i />{STEPS[st]}</span></div>
     <div className={'oc-m' + (its.length === 1 ? ' one' : '')}><div className="ths">{its.slice(0, 3).map((i, k) => <Pic key={k} p={i} />)}{its.length > 3 && <span className="more">+{its.length - 3}</span>}</div>
       <div className="oc-t"><span>{names || 'Order'}{its.length > 2 ? ` +${its.length - 2} more` : ''}</span><small>{n} item{n === 1 ? '' : 's'}</small></div><b className="oc-p">{taka(o.total)}</b></div>
     <div className="prg" aria-hidden="true">{STEPS.map((_, k) => <i key={k} className={k <= st ? 'on' : ''} />)}</div>
-    <div className="oc-f">{ret ? <span className={'rtag r-' + ret.status}>↩ Return: {api.returnLabel(ret)}</span> : <span>{HINT[st]}</span>}<em>{st < 3 ? 'Track order' : 'View details'}<Icon n="chev" /></em></div></div> }
+    <div className="oc-f">{ret ? <span className={'rtag r-' + ret.status}>↩ Return: {api.returnLabel(ret)}</span> : <span>{HINT[st]}</span>}<em>{st < 3 ? 'Track order' : 'View details'}<Icon n="chev" /></em></div></div> })
 
 // ===================== Stock · share · seller contact · search & filters · returns =====================
 const LOW = 5
@@ -1504,7 +1543,7 @@ export default function App() {
   const [user, setUser] = useState(() => { try { return api.getUser() } catch { return null } })
   const [cats, setCats] = useState(() => readLS('pk_c', [])), [prods, setProds] = useState(() => readLS('pk_p', [])), [shops, setShops] = useState(() => readLS('pk_s', {})), [loading, setLoading] = useState(() => !readLS('pk_p', []).length)
   const [cart, setCart] = useState(() => readLS('ms_cart', []))
-  const [orders, setOrders] = useState([]), [toast, setToast] = useState(''), [liveSt, setLiveSt] = useState({})
+  const [orders, setOrders] = useState([]), [liveSt, setLiveSt] = useState({})
   const [ob, setOb] = useState(0), [mode, setMode] = useState(() => api.RECOVERY_LINK ? 'reset' : api.LINK_EXPIRED ? 'forgot' : 'login')
   const [form, setForm] = useState({ name: '', phone: '', id: '', pw: '', pw2: '' }), [showPw, setShowPw] = useState(false), [shake, setShake] = useState(false), [busy, setBusy] = useState(false)
   const [loc, setLoc] = useState(() => ({ city: 'Chattogram', area: '', line: '', ...readLS('ms_loc', {}) }))
@@ -1517,7 +1556,7 @@ export default function App() {
   const [np, setNp] = useState({ name: '', price: '', category_id: '', image_url: '' })
   const [wish, setWish] = useState(() => readLS('ms_wish', []))
   const [dir, setDir] = useState('fade'), [sort, setSort] = useState('pop'), [chip, setChip] = useState('All'), dq = useDeferredValue(q)
-  const toastT = useRef(0), wishPrev = useRef(null), wishUser = useRef(''), prodsR = useRef([]), recov = useRef(!!api.RECOVERY_LINK)
+  const toastR = useRef({}), wishPrev = useRef(null), wishUser = useRef(''), prodsR = useRef([]), recov = useRef(!!api.RECOVERY_LINK)
 
   const [gate, setGate] = useState(null) // why the "please log in" sheet is open (null = closed)
   const [rv, setRv] = useState(() => readLS('pk_rv', [])), [recent, setRecent] = useState(() => readLS('pk_rs', [])), [sgOn, setSgOn] = useState(false)
@@ -1561,8 +1600,9 @@ export default function App() {
     window.addEventListener('popstate', h)
     return () => window.removeEventListener('popstate', h)
   }, [popOne])
-  const say = useCallback((m, ms = 1800) => { clearTimeout(toastT.current); setToast(m); toastT.current = setTimeout(() => setToast(''), ms) }, [])
+  const say = useCallback((m, ms = 1800) => { const o = toastR.current; if (o.fn) o.fn(m, ms); else o.pend = [m, ms] }, [])
   const open = useCallback(p => go('product', { p }), [go])
+  const openTrack = useCallback(order => go('tracking', { order }), [go])
   const like = useCallback(id => setWish(w => w.includes(id) ? w.filter(x => x !== id) : [...w, id]), [])
   const logout = useCallback(async () => { await safe(() => api.signOut()); setUser(null); tab('home'); say('You have been logged out') }, [tab, say])
   const saveLoc = useCallback(v => {
@@ -1603,7 +1643,7 @@ export default function App() {
     if (next) load(next === 'p' ? 'p' : undefined)
   }, [say])
 
-  useEffect(() => { load(); return () => clearTimeout(toastT.current) }, [load])
+  useEffect(() => { load() }, [load])
   // while the person looks at the first products, quietly fetch the next pictures so scrolling shows them instantly
   useEffect(() => {
     if (!prods.length) return
@@ -1639,7 +1679,7 @@ export default function App() {
   const openNote = useCallback(n => {
     if (!n.is_read) { setNotifs(a => a.map(x => x.id === n.id ? { ...x, is_read: true } : x)); safe(() => api.markNotificationsRead(user?.id, [n.id])) }
     const [kind, id] = String(n.link || '').split(':')
-    if (kind === 'product') { const p = prodsR.current.find(x => String(x.id) === id); p ? open(p) : say('This product is no longer available') }
+    if (kind === 'product') { const p = byIdR.current.get(id); p ? open(p) : say('This product is no longer available') }
     else if (kind === 'shop') { const sh = shops[id]; sh && go('shop', { shop: sh }) }
     else if (kind === 'order') safe(() => api.getOrders(user?.id), null).then(list => { if (!list) return; setOrders(list); const o = list.find(x => String(x.order_no) === id); o ? go('tracking', { order: o }) : tab('orders') })
   }, [user?.id, open, go, tab, say, shops])
@@ -1668,6 +1708,8 @@ export default function App() {
   useEffect(() => { const t = setTimeout(() => writeLS('ms_cart', cart), 250); return () => clearTimeout(t) }, [cart])
   useEffect(() => { const t = setTimeout(() => writeLS('ms_wish', wish), 250); return () => clearTimeout(t) }, [wish])
   prodsR.current = prods
+  // one lookup table instead of scanning the whole catalogue (cart stock checks, product screen, notifications)
+  const byId = useMemo(() => new Map(prods.map(x => [String(x.id), x])), [prods]), byIdR = useRef(byId); byIdR.current = byId
   // mirror the wishlist to Supabase so the admin panel can see it (silent no-op when offline / table missing)
   useEffect(() => {
     const sb = api.supabase
@@ -1711,9 +1753,9 @@ export default function App() {
   const deep = useRef(DEEP)
   useEffect(() => {
     if (!deep.current || s === 'splash' || !prods.length) return
-    const p = prods.find(x => String(x.id) === String(deep.current)); deep.current = null
+    const p = byId.get(String(deep.current)); deep.current = null
     p ? open(p) : say('This product is no longer available')
-  }, [s, prods, open, say])
+  }, [s, prods, byId, open, say])
   // live status for the tracking screen (works for guests too, via the track_order() database function)
   useEffect(() => {
     const o0 = s === 'tracking' ? cur.order : null
@@ -1738,12 +1780,13 @@ export default function App() {
   const delivery = useMemo(() => deliveryFor(loc), [loc])
   const total = Math.max(0, subtotal - disc + (delivery.fee || 0))
   const catCount = useMemo(() => { const m = new Map(); for (const p of prods) m.set(p.category_id, (m.get(p.category_id) || 0) + 1); return m }, [prods])
-  const idx = useMemo(() => { const cn = new Map(cats.map(c => [c.id, c.name])); return prods.map(p => ({ p, n: norm(p.name), t: norm([p.name, p.brand, p.tag, cn.get(p.category_id), p.shop_id ? shops[p.shop_id]?.name : 'pinkish'].filter(Boolean).join(' ')) })) }, [prods, cats, shops])
+  const idxOn = useRef(false); if (dq || sgOn || s === 'search') idxOn.current = true
+  const idx = useMemo(() => { if (!idxOn.current) return NONE; const cn = new Map(cats.map(c => [c.id, c.name])); return prods.map(p => ({ p, n: norm(p.name), t: norm([p.name, p.brand, p.tag, cn.get(p.category_id), p.shop_id ? shops[p.shop_id]?.name : 'pinkish'].filter(Boolean).join(' ')) })) }, [prods, cats, shops, idxOn.current]) // eslint-disable-line react-hooks/exhaustive-deps
   const hits = useMemo(() => (dq.trim() ? searchIn(idx, dq) : prods), [idx, prods, dq])
-  const rvList = useMemo(() => { if (!rv.length) return []; const m = new Map(prods.map(x => [x.id, x])); return rv.map(id => m.get(id)).filter(Boolean).slice(0, 12) }, [rv, prods])
+  const rvList = useMemo(() => (rv.length ? rv.map(id => byId.get(String(id))).filter(Boolean).slice(0, 12) : []), [rv, byId])
   const pop = useMemo(() => dq ? hits : hits.slice(0, 6), [dq, hits])
   const deals = useMemo(() => prods.filter(api.dealLive).sort((a, b) => new Date(a.deal_ends_at) - new Date(b.deal_ends_at)).slice(0, 12), [prods])
-  const bestList = useMemo(() => { const m = new Map(prods.map(x => [String(x.id), x])); return best.map(id => m.get(id)).filter(Boolean).slice(0, 10) }, [best, prods])
+  const bestList = useMemo(() => best.map(id => byId.get(String(id))).filter(Boolean).slice(0, 10), [best, byId])
   const catList = useMemo(() => s === 'category' ? prods.filter(p => p.category_id === cur.c.id) : null, [s, prods, cur])
   const tags = useMemo(() => catList ? ['All', ...new Set(catList.map(p => p.tag).filter(Boolean))] : [], [catList])
   const shown = useMemo(() => {
@@ -1752,17 +1795,24 @@ export default function App() {
     return applyF(catList.filter(p => (chip === 'All' || p.tag === chip) && (!k || norm(p.name + ' ' + (p.brand || '')).includes(norm(k)))), cf).sort(SORTS[sort][1])
   }, [catList, chip, dq, sort, cf])
   const closeCsheet = useCallback(() => setCsheet(false), [])
+  const wishList = useMemo(() => (s === 'wishlist' ? prods.filter(p => wishSet.has(p.id)) : NONE), [s, prods, wishSet])
+  // My Orders: status and counts in one pass instead of three filters per render
+  const ordView = useMemo(() => {
+    if (s !== 'orders') return null
+    const stOf = o => liveSt[o.order_no] ?? (o.status || 0), rows = orders.map(o => [o, stOf(o)]), act = rows.filter(r => r[1] < 3).length
+    return { rows, n: { all: rows.length, active: act, done: rows.length - act } }
+  }, [s, orders, liveSt])
 
   // never put more in the cart than is in stock (the server checks again when the order is placed)
-  const room = id => { const live = prodsR.current.find(x => x.id === id), st = stockOf(live); return st == null ? Infinity : st - cartR.current.reduce((a, i) => a + (i.id === id ? i.qty : 0), 0) }
+  const room = id => { const live = byIdR.current.get(String(id)), st = stockOf(live); return st == null ? Infinity : st - cartR.current.reduce((a, i) => a + (i.id === id ? i.qty : 0), 0) }
   const addToCart = useCallback((p, v, n = 1) => {
     const left = room(p.id)
-    if (left <= 0) return say(stockOf(prodsR.current.find(x => x.id === p.id)) === 0 ? 'Sorry, this item is sold out' : 'You already have all the stock in your cart', 2400)
+    if (left <= 0) return say(stockOf(byIdR.current.get(String(p.id))) === 0 ? 'Sorry, this item is sold out' : 'You already have all the stock in your cart', 2400)
     const k = Math.min(n, left), variant = v || p.variants?.[0], price = p.price * (variant?.mult || 1), key = p.id + (variant?.label || '')
     setCart(c => c.some(i => i.key === key) ? c.map(i => i.key === key ? { ...i, qty: i.qty + k } : i) : [...c, { key, id: p.id, name: p.name, emoji: p.emoji, image_url: p.image_url, variant: variant?.label, price, qty: k }])
     say(k < n ? `Only ${k} more in stock. Added ${k}.` : 'Added to cart', k < n ? 2600 : 1800)
   }, [say]) // eslint-disable-line react-hooks/exhaustive-deps
-  const gp = { add: addToCart, open, wish: wishSet, like }
+  const gp = useMemo(() => ({ add: addToCart, open, wish: wishSet, like }), [addToCart, open, wishSet, like])
   const qty = useCallback((key, d) => {
     if (d > 0) { const it = cartR.current.find(i => i.key === key); if (it && room(it.id) < d) return say('No more in stock', 2000) }
     setCart(c => c.map(i => i.key === key ? { ...i, qty: i.qty + d } : i).filter(i => i.qty > 0))
@@ -1919,7 +1969,7 @@ export default function App() {
   if (s === 'notifications') body = <Notifications list={notifs} back={back} onOpen={openNote} onReadAll={readAll} />
   if (s === 'shop') body = <ShopScreen shop={shops[cur.shop?.id] || cur.shop} prods={prods} loading={loading} back={back} gp={gp} follow={{ on: following, toggle: toggleFollow }} />
 
-  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: prods.find(x => x.id === cur.p.id) || cur.p, back, addToCart, count, go, like, open, user, say, login: needLogin }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
+  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: byId.get(String(cur.p.id)) || cur.p, back, addToCart, count, go, like, open, user, say, login: needLogin }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
 
   if (s === 'cart') body = <><Hdr title={`My Cart (${count})`} back={back} right={cart.length > 0 && <button className="ib" aria-label="Clear cart" onClick={() => { setCart([]); setPromoOn(false) }}>🗑️</button>} /><div className="scr narrow">
     {!cart.length ? <div className="emp"><div className="emp-i"><CartArt /></div><h3>Your cart is empty</h3><p>Browse our categories and add something you like.</p><button className="btn" onClick={() => tab('categories')}>Start shopping</button></div> : <><Steps n={0} />
@@ -1953,11 +2003,11 @@ export default function App() {
     <p style={{ color: '#8b8197', marginBottom: 30 }}>Thank you for choosing Pinkish.<br />{cur.order.payment_status === 'verifying' ? 'We are verifying your bKash payment. We will confirm your order shortly.' : 'Your order will be delivered soon.'}</p>
     <button className="btn" onClick={() => go('tracking', { order: cur.order })}>Track Order</button><button className="btn o" style={{ marginTop: 12 }} onClick={() => tab('home')}>Continue Shopping</button></div>
 
-  if (s === 'orders') { const stOf = o => liveSt[o.order_no] ?? (o.status || 0), list = orders.filter(o => oflt === 'all' || (oflt === 'active') === (stOf(o) < 3))
+  if (s === 'orders') { const { rows, n: on } = ordView, list = oflt === 'all' ? rows : rows.filter(r => (oflt === 'active') === (r[1] < 3))
     body = <div className="scr narrow"><h2 className="ptl">My Orders</h2>
-      {orders.length > 0 && <div className="chips ochips">{[['all', 'All', orders.length], ['active', 'Active', orders.filter(o => stOf(o) < 3).length], ['done', 'Delivered', orders.filter(o => stOf(o) >= 3).length]].map(([k, l, c]) => <button key={k} className={oflt === k ? 'on' : ''} onClick={() => setOflt(k)}>{l}<span className="cnt">{c}</span></button>)}</div>}
+      {orders.length > 0 && <div className="chips ochips">{[['all', 'All', on.all], ['active', 'Active', on.active], ['done', 'Delivered', on.done]].map(([k, l, c]) => <button key={k} className={oflt === k ? 'on' : ''} onClick={() => setOflt(k)}>{l}<span className="cnt">{c}</span></button>)}</div>}
       {!orders.length ? <div className="emp"><div className="emp-i"><OrdersArt /></div><h3>No orders yet</h3><p>Your orders and their live status will show up here.</p><button className="btn" onClick={() => tab('home')}>Start shopping</button></div>
-        : !list.length ? <p className="empty">No {oflt === 'active' ? 'active' : 'delivered'} orders.</p> : list.map(o => <OrderCard key={o.id} o={o} st={stOf(o)} ret={retBy.get(String(o.id))} open={x => go('tracking', { order: x })} />)}</div> }
+        : !list.length ? <p className="empty">No {oflt === 'active' ? 'active' : 'delivered'} orders.</p> : list.map(([o, st]) => <OrderCard key={o.id} o={o} st={st} ret={retBy.get(String(o.id))} open={openTrack} />)}</div> }
 
   if (s === 'tracking') { const o = orders.find(x => x.id === cur.order.id) || cur.order, st = liveSt[o.order_no] ?? (o.status || 0), t = new Date(o.created_at), its = o.items || [], ad = o.address || {}, sub = its.reduce((x, i) => x + i.price * i.qty, 0), df = o.delivery_fee == null ? null : +o.delivery_fee, dc = Math.max(0, sub + (df || 0) - o.total), qn = its.reduce((x, i) => x + (i.qty || 1), 0)
     const pst = o.payment === 'bKash' ? (o.payment_status === 'paid' ? ['Paid ✓', 'ok'] : o.payment_status === 'verifying' ? ['Verifying…', 'wait'] : ['Not paid yet', 'no']) : null
@@ -1982,7 +2032,7 @@ export default function App() {
 
   if (s === 'address') body = <AddressScreen key="addr" loc={loc} back={back} onSave={saveLoc} />
 
-  if (s === 'wishlist') body = <><Hdr title="Wishlist" back={back} /><div className="scr"><Grid list={prods.filter(p => wishSet.has(p.id))} loading={loading} {...gp} /></div></>
+  if (s === 'wishlist') body = <><Hdr title="Wishlist" back={back} /><div className="scr"><Grid list={wishList} loading={loading} {...gp} /></div></>
 
   if (s === 'manage') body = !admin ? <><Hdr title="Store" back={back} /><div className="scr narrow"><div className="note">🔒 Only store admins can manage categories and products.</div></div></> : <><Hdr title="Manage Store" back={back} /><div className="scr narrow">
     <div className="sec">Add Category</div>
@@ -1996,7 +2046,7 @@ export default function App() {
     <select className="inp" value={np.category_id} onChange={e => setNp(p => ({ ...p, category_id: e.target.value }))}><option value="">Select category</option>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
     <button className="btn" onClick={() => { if (!np.name || !np.price || !np.category_id) return say('Fill all fields'); adminDo(async () => { await api.addProduct({ ...np, price: +np.price, image_url: np.image_url || null }); setNp({ name: '', price: '', category_id: '', image_url: '' }) }, 'Product added') }}>Add Product</button></div></>
 
-  return <div className="app">{!['ob', 'auth'].includes(s) && <Nav {...{ s, count, tab }} />}<main className="main"><div key={s + stack.length} className={'pg ' + dir}>{body}</div></main>{toast && <div className="toast" role="status">{toast}</div>}{gate && <LoginSheet why={gate} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onGoogle={googleGate} onClose={() => setGate(null)} />}</div>
+  return <div className="app">{!['ob', 'auth'].includes(s) && <Nav {...{ s, count, tab }} />}<main className="main"><div key={s + stack.length} className={'pg ' + dir}>{body}</div></main><Toast api={toastR} />{gate && <LoginSheet why={gate} onLogin={() => openAuth('login')} onSignup={() => openAuth('signup')} onGoogle={googleGate} onClose={() => setGate(null)} />}</div>
 }
 
 const FEAT_CSS = `
@@ -2222,7 +2272,10 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
       <small className="pk">{[p.brand, p.tag].filter(Boolean).join(' · ') || 'Pinkish'}</small>
       <div className="row"><h3>{p.name}</h3><div className="pacts"><button className="ib shr" aria-label="Share this product" onClick={() => shareProduct(p, say)}><Icon n="share" /></button><Heart on={liked} toggle={() => like(p.id)} inl /></div></div>
       {deal && <div className="dealbar"><b className="rt"><i className="rt-i bolt sm"><BoltIc /></i>Flash deal -{api.dealPct(p)}%</b><span>Ends in <Countdown end={p.deal_ends_at} /></span></div>}
-      <small style={{ color: '#8b8197' }}>★ {p.rating ?? '–'} ({(p.reviews || 0) > 999 ? (p.reviews / 1000).toFixed(1) + 'k' : p.reviews || 0} reviews)</small>
+      {/* only real reviews get stars; a product without reviews says "New" instead of a made-up rating */}
+      {(p.reviews || 0) > 0 && p.rating != null
+        ? <small style={{ color: '#8b8197' }}>★ {Number(p.rating).toFixed(1)} ({p.reviews > 999 ? (p.reviews / 1000).toFixed(1) + 'k' : p.reviews} review{p.reviews === 1 ? '' : 's'})</small>
+        : <small style={{ color: '#8b8197' }}>New on Pinkish · no reviews yet</small>}
       {out ? <div className="stl so" role="status"><i />Sold out · check back soon</div> : st != null && st <= LOW ? <div className="stl" role="status"><i />Only {st} left in stock · order soon</div> : null}
       {shop ? (() => { const sh = shop.id ? shop : { id: p.shop_id, name: 'Marketplace seller' }; const openShop = () => go('shop', { shop: sh }); return <div className="store link" role="button" tabIndex={0} aria-label={'View shop ' + (sh.name || '')} onClick={openShop} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShop() } }}><span className="sl shop">{sh.logo_url ? <img src={sh.logo_url} alt="" decoding="async" draggable="false" /> : <em>{(sh.name || 'S').trim().charAt(0).toUpperCase()}</em>}</span><div><b>{sh.name || 'Marketplace seller'}<i className="vf">✓</i></b><small>{sh.city ? 'Seller · ' + sh.city : 'Verified seller on Pinkish'}</small></div><span className="fl">View shop</span></div> })()
         : <div className="store"><span className="sl"><Glyph v="🛡️" /></span><div><b><span className="bp">Pink</span><span className="bi">ish</span> Store<i className="vf">✓</i></b><small>Official store</small></div><span className="fl">Verified</span></div>}
