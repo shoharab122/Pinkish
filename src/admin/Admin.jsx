@@ -1070,21 +1070,121 @@ function Notify({ d, say }) {
     {last && <p style={{ margin: '12px 0 0', color: '#1a7f4b' }}>✓ “{last.title}” sent to {last.n} {last.n === 1 ? 'person' : 'people'}.</p>}</div></div>
 }
 
+// ---------------- Hero (home banner) editor ----------------
+// One list of slides. Each slide folds open to edit; only one is open at a time so the page stays short.
+// The storefront reads exactly the same data shape as before (site_settings.key = 'hero').
 const HERO_BG = { purple: ['#2d0b4a', '#8e2a8c', '#c2377f'], pink: ['#7a1648', '#e0457b', '#ff8fb8'], ocean: ['#0b2a5b', '#1f6fd1', '#38c6e0'], sunset: ['#7a1f2b', '#e8542f', '#ffb347'], forest: ['#0d3b2e', '#1f8a5b', '#7bd88f'], night: ['#0c0713', '#2a1a3a', '#4a1668'] }
 const BG_NAMES = { purple: 'Purple', pink: 'Pink', ocean: 'Ocean', sunset: 'Sunset', forest: 'Forest', night: 'Night', custom: 'Custom' }
+const HEX = /^#[0-9a-f]{6}$/i
 const heroBg = x => {
-  if (x.bg === 'custom' && /^#[0-9a-f]{6}$/i.test(x.c1 || '') && /^#[0-9a-f]{6}$/i.test(x.c2 || '')) return `linear-gradient(120deg,${x.c1},${x.c2})`
+  if (x.bg === 'custom' && HEX.test(x.c1 || '') && HEX.test(x.c2 || '')) return `linear-gradient(120deg,${x.c1},${x.c2})`
   const c = HERO_BG[x.bg] || HERO_BG.purple
   return `linear-gradient(120deg,${c[0]},${c[1]} 70%,${c[2]})`
 }
 const SPEEDS = [3, 4, 5, 6, 8, 10]
+const LAYOUTS = [['side', 'Beside text'], ['cover', 'Behind text'], ['full', 'Picture only']]
 const SLIDE0 = { chip: '', lines: '', sub: '', emoji: '', image: '', on: true, cta: 'Shop Now', link: '', bg: 'purple', c1: '#2d0b4a', c2: '#c2377f', layout: 'side', tone: 'light' }
 const DEF = [{ ...SLIDE0, chip: 'Limited Offer', lines: 'Privacy. Confidence.\nComfort. Wellness.', emoji: '🛡️' }, { ...SLIDE0, chip: 'Delivery from ৳40', lines: 'Discreet delivery\nacross Chattogram', emoji: '🚚' }, { ...SLIDE0, chip: 'Use code SHIELD10', lines: 'Get 10% off\nyour first order', emoji: '🎁' }]
 const isLogo = v => v === '🛡️' || v === '🛡'
+let hk = 0
+const NONE = []
+const withKey = x => ({ ...SLIDE0, ...x, _k: ++hk }) // _k: stable React key (never saved)
+const linkType = lk => (lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : '')
+const layoutOf = x => (x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side')
+// what the store will really show (a wide picture beside text becomes a whole-picture slide)
+const shape = (x, ar) => {
+  const cov = layoutOf(x) === 'cover' && !!x.image
+  const full = !!x.image && layoutOf(x) !== 'cover' && (layoutOf(x) === 'full' || ar >= 1.25)
+  return { cov, full, autoWide: full && layoutOf(x) === 'side' }
+}
+const issueOf = x => {
+  if (x.on === false) return ''
+  if (!(x.lines || '').trim() && !(layoutOf(x) === 'full' && x.image)) return layoutOf(x) === 'full' ? 'Needs a picture' : 'Needs a headline'
+  if ((x.link || '').startsWith('url:') && !/^https?:\/\/\S+\.\S+/i.test(x.link.slice(4).trim())) return 'Check the web link'
+  return ''
+}
+const clean = x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), sub: (x.sub || '').trim().slice(0, 90), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false, cta: (x.cta || '').trim().slice(0, 24), link: (x.link || '').startsWith('url:') ? 'url:' + x.link.slice(4).trim() : x.link || '', bg: x.bg || 'purple', c1: x.c1 || '#2d0b4a', c2: x.c2 || '#c2377f', layout: layoutOf(x), tone: x.tone === 'dark' ? 'dark' : 'light' })
+const snap = (s, cfg) => JSON.stringify([s.map(clean), cfg.auto, cfg.speed])
+
+const HI = {
+  up: <path d="M6 15l6-6 6 6" />, down: <path d="M6 9l6 6 6-6" />, chev: <path d="M9 6l6 6-6 6" />,
+  img: <><rect x="3" y="4" width="18" height="16" rx="3.5" /><circle cx="9" cy="9.8" r="1.7" /><path d="M21 16l-4.8-4.8L7 20" /></>,
+  text: <path d="M5 6h14M12 6v13M9 19h6" />, link: <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>,
+  paint: <><circle cx="12" cy="12" r="9" /><circle cx="8.5" cy="10" r="1.2" /><circle cx="12" cy="7.5" r="1.2" /><circle cx="15.5" cy="10" r="1.2" /><path d="M12 21a3 3 0 0 1 0-6h1.5" /></>,
+}
+const Hi = ({ n, s = 18 }) => <svg viewBox="0 0 24 24" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{HI[n]}</svg>
+
+// Slide preview: the same look as the storefront banner. Memoised, so typing in one slide never redraws the others.
+const HeroPv = memo(function HeroPv({ x, ar, mini }) {
+  const { cov, full } = shape(x, ar)
+  const st = { background: heroBg(x), color: x.tone === 'dark' ? '#2a1a3a' : '#fff' }
+  if (cov) st.background = `linear-gradient(90deg,${x.tone === 'dark' ? '#fffd' : '#000b'},#0000), url(${JSON.stringify(x.image)}) center/cover`
+  if (full) st.background = `url(${JSON.stringify(x.image)}) center/contain no-repeat, ${heroBg(x)}`
+  const rows = (x.lines || '').split('\n').filter(Boolean)
+  return <div className={'hpv' + (mini ? ' mini' : '') + (full ? ' full' : '')} style={st} aria-hidden={mini || undefined}>
+    {!full && <div className="hpv-t">{!mini && x.chip && <small>{x.chip}</small>}{rows.length ? rows.map((l, k) => <span key={k}>{l}</span>) : <span className="hpv-ph">{mini ? 'No text' : 'Your headline'}</span>}{!mini && x.sub && <em>{x.sub}</em>}{!mini && x.cta && <b>{x.cta} ↗</b>}</div>}
+    {!cov && !full && <i>{x.image ? <img src={x.image} alt="" loading="lazy" decoding="async" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji || '✨'}</i>}
+  </div>
+})
+
+// Two-way choice shown as pills (quicker than a dropdown on a phone)
+const Pick = ({ value, opts, onChange, label }) => <div className="hseg" role="radiogroup" aria-label={label}>{opts.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={value === k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>{l}</button>)}</div>
+
+const SlideEditor = memo(function SlideEditor({ x, i, n, ar, open, cats, prods, say, onToggle, onSet, onMove, onCopy, onDel }) {
+  const set = (k, v) => onSet(x._k, k, v)
+  const lk = x.link || '', lt = linkType(lk), lay = layoutOf(x), { autoWide } = shape(x, ar), issue = issueOf(x)
+  const title = (x.lines || '').split('\n').find(Boolean) || (x.image ? 'Picture slide' : 'Empty slide')
+  const target = lt === 'cat' ? 'Opens ' + (cats.find(c => String(c.id) === lk.slice(4))?.name || 'a category') : lt === 'prod' ? 'Opens ' + (prods.find(p => String(p.id) === lk.slice(5))?.name || 'a product') : lt === 'url' ? 'Opens a web link' : 'Opens all categories'
+  const showText = lay !== 'full'
+  return <section className={'hsl' + (open ? ' open' : '') + (x.on === false ? ' off' : '')}>
+    <div className="hsl-h">
+      <button type="button" className="hsl-tap" aria-expanded={open} onClick={() => onToggle(x._k)}>
+        <span className="hsl-n">{i + 1}</span>
+        <HeroPv x={x} ar={ar} mini />
+        <span className="hsl-tt"><b>{title}</b><small>{issue ? <em className="er">{issue}</em> : x.on === false ? 'Hidden from the store' : target}</small></span>
+        <span className="hsl-ch"><Hi n="chev" /></span>
+      </button>
+      <div className="hsl-a">
+        <button type="button" role="switch" aria-checked={x.on !== false} aria-label={(x.on !== false ? 'Hide' : 'Show') + ' slide ' + (i + 1)} title={x.on !== false ? 'Shown in the store' : 'Hidden'} className={'tg' + (x.on !== false ? ' on' : '')} onClick={() => set('on', x.on === false)}><i /></button>
+        <button type="button" className="ib3" aria-label={'Move slide ' + (i + 1) + ' up'} disabled={!i} onClick={() => onMove(i, -1)}><Hi n="up" /></button>
+        <button type="button" className="ib3" aria-label={'Move slide ' + (i + 1) + ' down'} disabled={i === n - 1} onClick={() => onMove(i, 1)}><Hi n="down" /></button>
+      </div>
+    </div>
+    {open && <div className="hsl-b">
+      <div className="hsl-pv"><HeroPv x={x} ar={ar} /><small className="mut">Live preview · how customers see it</small></div>
+      <div className="hsl-f">
+        <fieldset className="hfs"><legend><Hi n="img" s={16} />Picture</legend>
+          <Img wide value={x.image} folder="hero" say={say} onChange={v => set('image', v)} />
+          {x.image ? <><Pick label="Picture style" value={lay} opts={LAYOUTS} onChange={v => set('layout', v)} />
+            <p className={autoWide ? 'hnote' : 'mut hhint'}>{autoWide ? 'This picture is wide, so the store shows it whole and hides the text. Choose “Behind text” to keep the headline.' : lay === 'full' ? 'The whole picture is shown, nothing is cut. Put any text inside the picture.' : lay === 'cover' ? 'The picture fills the banner behind the text. Keep the subject on the right.' : 'Square or tall pictures sit beside the text.'}</p></>
+            : <><p className="mut hhint">Best size: 2400 × 1000 px. No picture? An emoji is shown instead.</p><F l="Emoji"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set('emoji', e.target.value)} /></F></>}
+        </fieldset>
+        {showText && <fieldset className="hfs"><legend><Hi n="text" s={16} />Text</legend>
+          <F l="Headline · one line per row" err={!x.lines?.trim() && x.on !== false ? 'Add a headline or hide this slide' : ''}><textarea className="in" rows="2" value={x.lines} onChange={e => set('lines', e.target.value)} placeholder={'Discreet delivery\nacross Chattogram'} /></F>
+          <div className="fg"><F l="Small text (optional)"><input className="in" maxLength={90} value={x.sub} onChange={e => set('sub', e.target.value)} /></F><F l="Badge above headline (optional)"><input className="in" maxLength={30} value={x.chip} onChange={e => set('chip', e.target.value)} /></F></div>
+        </fieldset>}
+        <fieldset className="hfs"><legend><Hi n="link" s={16} />Button &amp; link</legend>
+          <div className="fg">{showText && <F l="Button text (empty = no button)"><input className="in" maxLength={24} value={x.cta} onChange={e => set('cta', e.target.value)} /></F>}
+            <F l="Tapping the slide opens"><select className="in" value={lt} onChange={e => { const v = e.target.value; set('link', v === 'cat' ? 'cat:' + (cats[0]?.id ?? '') : v === 'prod' ? 'prod:' + (prods[0]?.id ?? '') : v === 'url' ? 'url:https://' : '') }}><option value="">All categories</option>{cats.length > 0 && <option value="cat">One category</option>}{prods.length > 0 && <option value="prod">One product</option>}<option value="url">A web link</option></select></F></div>
+          {lt === 'cat' && <F l="Category"><select className="in" value={lk.slice(4)} onChange={e => set('link', 'cat:' + e.target.value)}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></F>}
+          {lt === 'prod' && <F l="Product"><select className="in" value={lk.slice(5)} onChange={e => set('link', 'prod:' + e.target.value)}>{prods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F>}
+          {lt === 'url' && <F l="Web link (opens in a new tab)" err={issue === 'Check the web link' ? 'Must start with https://' : ''}><input className="in" inputMode="url" placeholder="https://" value={lk.slice(4)} onChange={e => set('link', 'url:' + e.target.value)} /></F>}
+        </fieldset>
+        <fieldset className="hfs"><legend><Hi n="paint" s={16} />Colours</legend>
+          <div className="sw" role="radiogroup" aria-label="Background colour">{Object.keys(BG_NAMES).map(k => <button key={k} type="button" role="radio" title={BG_NAMES[k]} aria-label={BG_NAMES[k]} aria-checked={(x.bg || 'purple') === k} className={(x.bg || 'purple') === k ? 'on' : ''} style={{ background: k === 'custom' ? 'conic-gradient(#e0457b,#f5c542,#3fbf7f,#2f80ed,#8e2a8c,#e0457b)' : heroBg({ bg: k }) }} onClick={() => set('bg', k)} />)}</div>
+          {x.bg === 'custom' && <div className="fg"><F l="Colour 1"><input className="in col" type="color" value={x.c1 || '#2d0b4a'} onChange={e => set('c1', e.target.value)} /></F><F l="Colour 2"><input className="in col" type="color" value={x.c2 || '#c2377f'} onChange={e => set('c2', e.target.value)} /></F></div>}
+          {showText && <div className="f"><span>Text colour</span><Pick label="Text colour" value={x.tone === 'dark' ? 'dark' : 'light'} opts={[['light', 'White text'], ['dark', 'Dark text']]} onChange={v => set('tone', v)} /></div>}
+        </fieldset>
+        <div className="acts hsl-x"><button type="button" className="bt g sm" onClick={() => onCopy(i)}><Ic n="copy" s={16} />Duplicate</button><button type="button" className="bt d sm" onClick={() => onDel(i)}><Ic n="trash" s={16} />Delete slide</button></div>
+      </div>
+    </div>}
+  </section>
+})
+
 function Hero({ say, d }) {
-  const [s, setS] = useState(null), [cfg, setCfg] = useState({ auto: true, speed: 4 }), [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false)
-  const cats = d?.cats || [], prods = d?.products || []
-  // picture shapes: the store shows a wide picture as a whole-picture slide, so the preview does the same
+  const [s, setS] = useState(null), [cfg, setCfg] = useState({ auto: true, speed: 4 }), [busy, setBusy] = useState(false), [saved, setSaved] = useState(''), [open, setOpen] = useState(null)
+  const cats = d?.cats || NONE, prods = d?.products || NONE
+  // picture shapes (the store shows a wide picture as a whole-picture slide, so the preview does the same)
   const [ars, setArs] = useState({}), asked = useRef(new Set())
   useEffect(() => {
     let on = true
@@ -1098,67 +1198,70 @@ function Hero({ say, d }) {
     })
     return () => { on = false }
   }, [s])
+  const reset = useCallback((list, c) => { const k = list.map(withKey); setS(k); setCfg(c); setSaved(snap(k, c)) }, [])
   useEffect(() => {
     let live = true
     sb.from('site_settings').select('value').eq('key', 'hero').maybeSingle().then(({ data, error }) => {
       if (!live) return
       if (error) say(error.message)
-      const v = data?.value?.slides
-      setCfg({ auto: data?.value?.auto !== false, speed: SPEEDS.includes(+data?.value?.speed) ? +data.value.speed : 4 })
-      setS(Array.isArray(v) && v.length ? v.map(x => ({ ...SLIDE0, ...x })) : DEF)
+      const v = data?.value || {}
+      reset(Array.isArray(v.slides) && v.slides.length ? v.slides : DEF, { auto: v.auto !== false, speed: SPEEDS.includes(+v.speed) ? +v.speed : 4 })
     })
     return () => { live = false }
-  }, [say])
+  }, [say, reset])
+  const dirty = useMemo(() => !!s && snap(s, cfg) !== saved, [s, cfg, saved])
   useEffect(() => {
     if (!dirty) return
     const h = e => { e.preventDefault(); e.returnValue = '' }
     addEventListener('beforeunload', h); return () => removeEventListener('beforeunload', h)
   }, [dirty])
-  if (!s) return <div className="ctr"><i className="spin" /></div>
-  const upd = fn => { setS(fn); setDirty(true) }
-  const set = (i, k, v) => upd(a => a.map((x, j) => j === i ? { ...x, [k]: v } : x))
-  const mv = (i, d) => upd(a => { const b = [...a], j = i + d; if (j < 0 || j >= b.length) return a;[b[i], b[j]] = [b[j], b[i]]; return b })
-  const setC = p => { setCfg(c => ({ ...c, ...p })); setDirty(true) }
-  const save = async () => {
-    const bad = s.findIndex(x => x.on !== false && !(x.lines || '').trim() && !(x.layout === 'full' && x.image))
-    if (bad >= 0) return say(`Slide ${bad + 1} is shown but has no text. Add text, hide it or delete it.`)
-    if (!s.some(x => x.on !== false)) return say('Show at least one slide, or the store uses its default banner.')
-    const badUrl = s.findIndex(x => (x.link || '').startsWith('url:') && !/^https?:\/\/\S+\.\S+/i.test(x.link.slice(4).trim()))
-    if (badUrl >= 0) return say(`Slide ${badUrl + 1}: the web link must start with https://`)
-    const slides = s.map(x => ({ chip: (x.chip || '').trim(), lines: (x.lines || '').split('\n').map(l => l.trim()).filter(Boolean).join('\n'), sub: (x.sub || '').trim().slice(0, 90), emoji: (x.emoji || '').trim(), image: x.image || '', on: x.on !== false, cta: (x.cta || '').trim().slice(0, 24), link: (x.link || '').startsWith('url:') ? 'url:' + x.link.slice(4).trim() : x.link || '', bg: x.bg || 'purple', c1: x.c1 || '#2d0b4a', c2: x.c2 || '#c2377f', layout: x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side', tone: x.tone === 'dark' ? 'dark' : 'light' }))
+
+  // stable handlers: an edit re-renders only the slide being edited
+  const onSet = useCallback((k, f, v) => setS(a => a.map(x => (x._k === k ? { ...x, [f]: v } : x))), [])
+  const onMove = useCallback((i, dlt) => setS(a => { const b = [...a], j = i + dlt; if (j < 0 || j >= b.length) return a;[b[i], b[j]] = [b[j], b[i]]; return b }), [])
+  const onToggle = useCallback(k => setOpen(o => (o === k ? null : k)), [])
+  const sRef = useRef(s); sRef.current = s
+  const onCopy = useCallback(i => { const c = withKey(sRef.current[i]); setS(a => [...a.slice(0, i + 1), c, ...a.slice(i + 1)]); setOpen(c._k) }, [])
+  const onDel = useCallback(i => { if (window.confirm(`Delete slide ${i + 1}? You can still press Discard before saving.`)) setS(a => a.filter((_, j) => j !== i)) }, [])
+  const add = () => { const x = withKey({ emoji: '✨' }); setS(a => [...a, x]); setOpen(x._k) }
+
+  const save = useCallback(async () => {
+    if (!s || busy) return
+    const bad = s.findIndex(issueOf)
+    if (bad >= 0) { setOpen(s[bad]._k); return say(`Slide ${bad + 1}: ${issueOf(s[bad]).toLowerCase()}.`) }
+    if (s.length && !s.some(x => x.on !== false)) return say('Show at least one slide, or delete them all to use the default banner.')
+    const slides = s.map(clean)
     setBusy(true)
     const { error } = await sb.from('site_settings').upsert({ key: 'hero', value: { slides, auto: cfg.auto, speed: cfg.speed }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
     setBusy(false)
     if (error) return say(error.message)
-    setS(slides); setDirty(false); say('Hero saved. It is live on the storefront.')
-  }
-  return <div className="pg"><p className="mut">The slides on the storefront home banner. Customers see slides marked Show, in this order. {dirty && <b className="wn">Unsaved changes</b>}</p>
-    <div className="cd"><div className="fg"><label className="ck"><input type="checkbox" checked={cfg.auto} onChange={e => setC({ auto: e.target.checked })} /> Slide automatically</label><F l="Time on each slide"><select className="in" disabled={!cfg.auto} value={cfg.speed} onChange={e => setC({ speed: +e.target.value })}>{SPEEDS.map(v => <option key={v} value={v}>{v} seconds</option>)}</select></F></div></div>
-    {s.map((x, i) => {
-      const cov = x.layout === 'cover' && !!x.image, full = !!x.image && x.layout !== 'cover' && (x.layout === 'full' || ars[x.image] >= 1.25), autoWide = full && x.layout !== 'full', lk = x.link || '', lt = lk.startsWith('cat:') ? 'cat' : lk.startsWith('prod:') ? 'prod' : lk.startsWith('url:') ? 'url' : ''
-      const pv = { background: heroBg(x), color: x.tone === 'dark' ? '#2a1a3a' : '#fff' }
-      if (cov) pv.background = `linear-gradient(90deg,${x.tone === 'dark' ? '#fffd' : '#000b'},#0000), url(${JSON.stringify(x.image)}) center/cover`
-      if (full) { pv.background = `url(${JSON.stringify(x.image)}) center/contain no-repeat, ${heroBg(x)}`; pv.aspectRatio = '2.4/1'; pv.minHeight = 0 }
-      return <div className="cd hs" key={i}><div className="pv" style={pv}>{!full && <div>{x.chip && <span style={{ fontSize: '.7rem', opacity: .85, letterSpacing: '.08em', textTransform: 'uppercase' }}>{x.chip}</span>}{(x.lines || '').split('\n').filter(Boolean).map((l, k) => <span key={k}>{l}</span>)}{x.sub && <span className="pvs">{x.sub}</span>}{x.cta && <span className="pvb">{x.cta} ↗</span>}</div>}{!cov && !full && <i>{x.image ? <img src={x.image} alt="" /> : isLogo(x.emoji) ? <img src="/logo-mark.webp?v=2" alt="" /> : x.emoji}</i>}</div>
-        <div><F l="Headline (one line per row)"><textarea className="in" rows="3" value={x.lines} onChange={e => set(i, 'lines', e.target.value)} /></F>
-          <div className="fg"><F l="Small text under the headline (optional)"><input className="in" maxLength={90} value={x.sub} onChange={e => set(i, 'sub', e.target.value)} /></F><F l="Badge (small label above the headline)"><input className="in" maxLength={30} value={x.chip} onChange={e => set(i, 'chip', e.target.value)} /></F></div>
-          <div className="fg"><F l="Button text (empty = no button)"><input className="in" maxLength={24} value={x.cta} onChange={e => set(i, 'cta', e.target.value)} /></F>
-            <F l="Tapping the slide opens"><select className="in" value={lt} onChange={e => set(i, 'link', e.target.value === 'cat' ? 'cat:' + (cats[0]?.id ?? '') : e.target.value === 'prod' ? 'prod:' + (prods[0]?.id ?? '') : e.target.value === 'url' ? 'url:https://' : '')}><option value="">All categories</option>{cats.length > 0 && <option value="cat">One category</option>}{prods.length > 0 && <option value="prod">One product</option>}<option value="url">A web link</option></select></F></div>
-          {lt === 'cat' && <F l="Category"><select className="in" value={lk.slice(4)} onChange={e => set(i, 'link', 'cat:' + e.target.value)}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></F>}
-          {lt === 'prod' && <F l="Product"><select className="in" value={lk.slice(5)} onChange={e => set(i, 'link', 'prod:' + e.target.value)}>{prods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F>}
-          {lt === 'url' && <F l="Web link (opens in a new tab)"><input className="in" inputMode="url" placeholder="https://" value={lk.slice(4)} onChange={e => set(i, 'link', 'url:' + e.target.value)} /></F>}
-          <F l="Background colour"><div className="sw">{Object.keys(BG_NAMES).map(k => <button key={k} type="button" title={BG_NAMES[k]} aria-label={BG_NAMES[k]} aria-pressed={(x.bg || 'purple') === k} className={(x.bg || 'purple') === k ? 'on' : ''} style={{ background: k === 'custom' ? 'conic-gradient(#e0457b,#f5c542,#3fbf7f,#2f80ed,#8e2a8c,#e0457b)' : heroBg({ bg: k }) }} onClick={() => set(i, 'bg', k)} />)}</div></F>
-          {x.bg === 'custom' && <div className="fg"><F l="Colour 1"><input className="in col" type="color" value={x.c1 || '#2d0b4a'} onChange={e => set(i, 'c1', e.target.value)} /></F><F l="Colour 2"><input className="in col" type="color" value={x.c2 || '#c2377f'} onChange={e => set(i, 'c2', e.target.value)} /></F></div>}
-          <div className="fg"><F l="Picture style"><select className="in" value={x.layout === 'cover' || x.layout === 'full' ? x.layout : 'side'} onChange={e => set(i, 'layout', e.target.value)}><option value="side">Picture on the right</option><option value="cover">Picture behind the text</option><option value="full">Picture only (whole picture, no text)</option></select></F>
-            <F l="Text colour"><select className="in" value={x.tone === 'dark' ? 'dark' : 'light'} onChange={e => set(i, 'tone', e.target.value)}><option value="light">White (for dark backgrounds)</option><option value="dark">Dark (for light backgrounds)</option></select></F></div>
-          <F l="Emoji (used when there is no picture)"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set(i, 'emoji', e.target.value)} /></F>
-          <Img wide value={x.image} folder="hero" say={say} onChange={v => set(i, 'image', v)} />
-          <p className="mut">Best picture: wide, 2400 × 1000 px (2.4:1). It is shown whole across the banner. Square or tall pictures sit beside the text.</p>
-          {autoWide && <p className="hnote">This picture is wide, so the store shows it as a whole-picture slide and hides the headline and button. To keep the text, choose "Picture behind the text".</p>}
-          {x.layout === 'cover' && !x.image && <p className="mut">Upload a picture to use this style. Wide photos (3:2) with the subject on the right work best.</p>}
-          {x.layout === 'full' && <p className="mut">{x.image ? 'The whole picture is shown on the banner, nothing is cut. Tapping it opens the link above.' : 'Upload a wide picture, best 2400 × 1000 px (about 2.4:1). Put any text inside the picture itself.'}</p>}
-          <div className="acts"><label className="ck"><input type="checkbox" checked={x.on !== false} onChange={e => set(i, 'on', e.target.checked)} /> Show</label><button className="bt g sm" disabled={!i} onClick={() => mv(i, -1)}>Move up</button><button className="bt g sm" disabled={i === s.length - 1} onClick={() => mv(i, 1)}>Move down</button><button className="bt d sm" onClick={() => { if (window.confirm(`Delete slide ${i + 1}?`)) upd(a => a.filter((_, j) => j !== i)) }}>Delete</button></div></div></div>
-    })}
-    {!s.length && <p className="mut cd">No slides. Add one, or save to let the store use its default banner.</p>}
-    <div className="acts"><button className="bt g" onClick={() => upd(a => [...a, { ...SLIDE0, emoji: '✨' }])}>Add slide</button><button className="bt g" onClick={() => { if (window.confirm('Reset to the default slides? Nothing is saved until you press Save hero.')) upd(() => DEF) }}>Reset to defaults</button><button className="bt" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save hero'}</button></div></div>
+    setSaved(snap(s, cfg)); say('Banner saved. It is live on the storefront.')
+  }, [s, cfg, busy, say])
+  // Ctrl / Cmd + S saves
+  useEffect(() => {
+    const h = e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (dirty) save() } }
+    addEventListener('keydown', h); return () => removeEventListener('keydown', h)
+  }, [dirty, save])
+
+  if (!s) return <div className="ctr"><i className="spin" /></div>
+  const shown = s.filter(x => x.on !== false).length, issues = s.filter(issueOf).length
+  const discard = () => { const v = JSON.parse(saved); reset(v[0], { auto: v[1], speed: v[2] }); setOpen(null) }
+
+  return <div className="pg hx">
+    <div className="cd hx-top">
+      <div className="hx-sum"><b>Home banner</b><small className="mut">{s.length} slide{s.length === 1 ? '' : 's'} · {shown} shown{issues ? <> · <span className="er">{issues} to fix</span></> : ''}</small></div>
+      <div className="hx-auto">
+        <span className="ck"><button type="button" role="switch" aria-checked={cfg.auto} aria-label="Slide automatically" className={'tg' + (cfg.auto ? ' on' : '')} onClick={() => setCfg(c => ({ ...c, auto: !c.auto }))}><i /></button>Auto-slide</span>
+        {cfg.auto && <div className="seg" role="radiogroup" aria-label="Seconds per slide">{SPEEDS.map(v => <button key={v} type="button" role="radio" aria-checked={cfg.speed === v} className={cfg.speed === v ? 'on' : ''} onClick={() => setCfg(c => ({ ...c, speed: v }))}>{v}s</button>)}</div>}
+      </div>
+      <button type="button" className="bt sm" onClick={add}><Ic n="plus" s={16} />Add slide</button>
+    </div>
+
+    {s.length ? <div className="hx-list">{s.map((x, i) => <SlideEditor key={x._k} x={x} i={i} n={s.length} ar={x.image ? ars[x.image] : undefined} open={open === x._k} cats={cats} prods={prods} say={say} onToggle={onToggle} onSet={onSet} onMove={onMove} onCopy={onCopy} onDel={onDel} />)}</div>
+      : <div className="cd hx-empty"><b>No slides</b><p className="mut">Save now to show the default Pinkish banner, or add your own slide.</p><button type="button" className="bt g sm" onClick={add}>Add slide</button></div>}
+
+    <p className="hx-foot"><span className="mut">Tip: tap a slide to edit it. Hidden slides stay saved but customers do not see them.</span><button type="button" className="hx-rst" onClick={() => { if (window.confirm('Replace all slides with the 3 default Pinkish slides? Nothing changes in the store until you save.')) { setS(DEF.map(withKey)); setOpen(null) } }}>Use default slides</button></p>
+
+    {dirty && <div className="hx-bar" role="region" aria-label="Unsaved changes"><span><i />Unsaved changes</span><button type="button" className="bt g sm" disabled={busy} onClick={discard}>Discard</button><button type="button" className="bt sm" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save & publish'}</button></div>}
+  </div>
 }
