@@ -5,8 +5,9 @@ const need = () => { if (!supabase) throw new Error('The store is not configured
 const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(3)), b => b.toString(16).padStart(2, '0')).join('')
 const ext = f => ((f.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5)) || 'jpg'
 const slugify = n => (s(n, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'shop') + '-' + rand()
-export const validNid = n => /^(\d{10}|\d{13}|\d{17})$/.test(String(n || '').replace(/[\s-]/g, ''))
-const nidOf = f => s(f?.nid, 20).replace(/[\s-]/g, '')
+import { validNid, cleanNid } from '../lib/nid.js'
+export { validNid }
+const nidOf = f => cleanNid(f?.nid)
 export const validPhone = p => /^(\+?88)?01[3-9]\d{8}$/.test(String(p || '').replace(/[\s-]/g, ''))
 // tel: links only ever get digits and a leading + (used for "Call rider")
 export const telHref = p => { const n = String(p || '').replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '').slice(0, 16); return n.length >= 6 ? 'tel:' + n : '' }
@@ -294,4 +295,58 @@ export async function setShopLocation(shop, lat, lng) {
 export async function riderLocation(orderId) {
   if (!supabase) return null
   try { const { data, error } = await supabase.rpc('seller_rider_location', { p_order: String(orderId) }); return error ? null : data || null } catch { return null }
+}
+// ---------------- v5: shop coupons + Pathao direct pickup (supabase-marketplace-v5.sql) ----------------
+// Coupon discount on this shop's items and Pathao pickups booked by Pinkish. null = update not installed yet.
+export async function sellerExtras() {
+  if (!supabase) return null
+  try { const { data, error } = await supabase.rpc('seller_extras'); return error ? (notSetUp(error) ? null : []) : (data || []) } catch { return null }
+}
+export async function courierHanded(orderId) {
+  need()
+  const { data, error } = await supabase.rpc('seller_courier_handed', { p_order: String(orderId) })
+  if (error) throw fail(error, 'Could not update the order. Try again.')
+  if (data === 'none') throw new Error('This pickup is already marked, or Pinkish changed it. Refresh the page.')
+}
+const CCOLS = 'id,code,title,kind,value,max_discount,min_order,starts_at,ends_at,max_uses,per_user,is_public,active,used_count,created_at'
+export async function myCoupons(shopId) {
+  need()
+  const { data, error } = await supabase.from('coupons').select(CCOLS).eq('shop_id', shopId).order('created_at', { ascending: false })
+  if (error) { if (notSetUp(error)) return null; throw fail(error, 'Could not load your coupons.') }
+  return data || []
+}
+// Shop coupons: percent or fixed taka off this shop's items. The shop pays the discount.
+export async function saveCoupon(shop, f, existing) {
+  need()
+  const code = s(f.code, 20).toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (!/^[A-Z0-9]{3,20}$/.test(code)) throw new Error('Code: 3 to 20 letters or numbers, like EID50.')
+  const kind = f.kind === 'amount' ? 'amount' : 'percent', value = Number(f.value), min = f.min_order === '' ? 0 : Number(f.min_order)
+  if (!Number.isFinite(value) || value <= 0) throw new Error('Enter how much off.')
+  if (kind === 'percent' && value > 90) throw new Error('Percent off can be at most 90%.')
+  if (!Number.isFinite(min) || min < 0) throw new Error('Enter a valid minimum order.')
+  if (kind === 'amount' && min > 0 && value >= min) throw new Error('The discount must be smaller than the minimum order.')
+  const maxD = kind === 'percent' && f.max_discount !== '' ? Number(f.max_discount) : null
+  if (maxD != null && (!Number.isFinite(maxD) || maxD <= 0)) throw new Error('Enter a valid maximum discount, or leave it empty.')
+  const uses = f.max_uses === '' ? null : parseInt(f.max_uses, 10)
+  if (uses != null && (!Number.isInteger(uses) || uses < 1)) throw new Error('Enter how many times it can be used, or leave it empty.')
+  const ends = f.ends_at ? new Date(f.ends_at) : null
+  if (ends && (isNaN(ends) || ends.getTime() < Date.now() + 60000)) throw new Error('Choose an end time in the future, or leave it empty.')
+  noContact('Coupon title', f.title || '')
+  const row = { code, title: s(f.title, 60) || null, kind, value, min_order: min, max_discount: maxD, max_uses: uses, per_user: 1, ends_at: ends ? ends.toISOString() : null, is_public: f.is_public !== false, active: f.active !== false }
+  const q = existing ? supabase.from('coupons').update(row).eq('id', existing.id) : supabase.from('coupons').insert({ ...row, shop_id: shop.id })
+  const { data, error } = await q.select(CCOLS).single()
+  if (error) throw new Error(/duplicate|unique/i.test(error.message) ? 'That code is already used on Pinkish. Choose another one.' : notSetUp(error) ? 'Coupons are not set up yet. Ask Pinkish to run the v5 update.' : fail(error, 'Could not save the coupon.').message)
+  return data
+}
+export async function setCouponActive(c, active) {
+  need()
+  const { data, error } = await supabase.from('coupons').update({ active }).eq('id', c.id).select(CCOLS).single()
+  if (error) throw fail(error, 'Could not update the coupon.')
+  return data
+}
+export async function deleteCoupon(c) {
+  need()
+  const { error, count } = await supabase.from('coupons').delete({ count: 'exact' }).eq('id', c.id)
+  if (error) throw fail(error, 'Could not delete the coupon.')
+  if (!count) throw new Error('A coupon that customers already used cannot be deleted. Turn it off instead.')
 }

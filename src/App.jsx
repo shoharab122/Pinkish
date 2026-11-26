@@ -1,7 +1,8 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as api from './api'
-import { HUB, RIDER_KM, MAX_KM, deliveryFor, kmTxt, okLL, havKm, modeOf, safeUrl, etaMin, seenAgo, fresh } from './lib/zone.js'
+import { HUB, RIDER_KM, deliveryFor, kmTxt, okLL, havKm, modeOf, orderZone, ZONE, setDeliveryCfg, safeUrl, etaMin, seenAgo, fresh } from './lib/zone.js'
+import { makeIndex, searchIn as fuzzySearch, norm as fnorm, words as fwords, dist as fdist } from './lib/search.js'
 import { LiveMap, loadLeaflet, usePoll } from './lib/LiveMap.jsx'
 
 const taka = n => '৳' + Math.round(n).toLocaleString()
@@ -11,13 +12,14 @@ const DEEP = (() => { try { const u = new URL(location.href), p = u.searchParams
 
 // ===== Delivery zone (Bahaddarhat hub, Chattogram): shared with admin, rider and seller apps =====
 // ≤ 4 km: a Pinkish rider delivers · 4–30 km: Pathao or a partner courier delivers (see src/lib/zone.js)
-const OUT_MSG = `Sorry, we only deliver inside Chattogram (within ${MAX_KM} km of Bahaddarhat).`
-const feeTxt = d => d.fee == null ? 'Outside area' : '৳' + d.fee
+const OUT_MSG = 'Sorry, we deliver inside Bangladesh only. Pin your delivery location on the map.'
+const PIN_MSG = 'Pin your delivery location on the map so we can price your delivery.'
+const feeTxt = d => d.fee == null ? 'Not available' : d.free ? 'Free' : '৳' + d.fee
 const NAV = [['home', 'home', 'Home'], ['categories', 'grid', 'Categories'], ['cart', 'bag', 'Cart'], ['orders', 'receipt', 'Orders'], ['profile', 'user', 'Profile']]
 const TABS = NAV.map(n => n[0])
 const STEPS = ['Order Placed', 'Processing', 'Out for Delivery', 'Delivered']
 const PAYS = [['Cash on Delivery', 'Pay when you receive', '💵'], ['bKash', 'Send money, then enter your TrxID', '🌸'], ['Nagad', 'Pay with Nagad', '🟠'], ['Debit/Credit Card', 'Visa, Mastercard', '💳']]
-const OFFERS = [['Limited Offer', 'Privacy. Confidence.|Comfort. Wellness.', '🛡️'], ['Delivery from ৳40', 'Discreet delivery|across Chattogram', '🚚'], ['Use code SHIELD10', 'Get 10% off|your first order', '🎁']]
+const OFFERS = [['Limited Offer', 'Privacy. Confidence.|Comfort. Wellness.', '🛡️'], ['Delivery from ৳40', 'Discreet delivery|across Bangladesh', '🚚'], ['Use code SHIELD10', 'Get 10% off|your first order', '🎁']]
 const SORTS = { pop: ['Popular', (a, b) => (b.reviews || 0) - (a.reviews || 0)], new: ['Newest', (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)], lo: ['Price: Low → High', (a, b) => a.price - b.price], hi: ['Price: High → Low', (a, b) => b.price - a.price], rate: ['Top rated', (a, b) => b.rating - a.rating] }
 const RIPPLE = '.nav button,.oc,.nt-i,.store.link,.wl-skip,.wl-bars button,.bshop,.cc,.btn,.fab,.add,.cat,.card,.pay,.menu,.ib,.tabs button,.chips button,.var button,.heart,.qty button,.promo button,.social'
 const NOMOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1266,13 +1268,13 @@ const fullAddr = l => l ? [l.line, l.area, l.city].filter(Boolean).join(', ') : 
 const AREAS = ['GEC Circle', 'Agrabad', 'Nasirabad', 'Khulshi', 'Halishahar', 'Pahartali', 'Chawkbazar', 'Kotwali', 'Panchlaish', 'Bayezid', 'Patenga', 'Muradpur', 'Oxygen', '2 No Gate', 'Bahaddarhat']
 
 // Delivery charge + who delivers (Pinkish rider inside 4 km, partner courier beyond)
-const DeliveryCard = ({ d, far }) => <div className={'dl-card' + (d.fee == null ? ' bad' : '') + (d.mode === 'courier' ? ' cour' : '')}>
-  <span className="dl-ic">{d.mode === 'courier' ? '📦' : '🛵'}</span>
-  <div><small>Delivery charge{d.km != null ? ` · ${kmTxt(d.km)} from ${HUB.name}` : ''}</small>
-    <b>{d.fee == null ? (far ? 'Outside Chattogram — we cannot deliver here' : 'Outside our delivery area') : d.km == null ? 'Pin your location for the exact charge' : d.mode === 'courier' ? 'Delivered by Pathao or a partner courier' : 'Delivered by a Pinkish rider'}</b>
-    {d.mode === 'courier' && <span className="dl-sub">Outside our {RIDER_KM} km rider zone. You get a courier tracking ID once it ships.</span>}
-    {d.mode === 'pinkish' && d.km != null && <span className="dl-sub">Track your rider live on the map when it is on the way.</span>}</div>
-  <em>{feeTxt(d)}</em></div>
+const DeliveryCard = ({ d }) => <div className={'dl-card' + (d.fee == null ? ' bad' : '') + (d.mode === 'courier' ? ' cour' : '') + (d.free ? ' free' : '')}>
+  <span className="dl-ic">{d.fee == null ? '🚫' : d.mode === 'courier' ? '📦' : '🛵'}</span>
+  <div><small>{d.pinned ? ZONE[d.zone]?.name : 'Delivery charge'}{d.zone === 'inner' && d.km != null ? ` · ${kmTxt(d.km)} from ${HUB.name}` : ''}</small>
+    <b>{d.fee == null ? 'We deliver inside Bangladesh only' : !d.pinned ? 'Pin your location for the exact charge' : d.mode === 'courier' ? 'Delivered by Pathao or a partner courier' : 'Delivered by a Pinkish rider'}</b>
+    {d.fee != null && d.pinned && <span className="dl-sub">{d.eta}{d.mode === 'courier' ? ' · you get a tracking ID once it ships' : ' · track your rider live on the map'}</span>}
+    {d.freeLeft > 0 && <span className="dl-sub dl-fl">Add ৳{d.freeLeft} more for free delivery</span>}</div>
+  <em>{d.free && d.base > 0 && <s>৳{d.base}</s>}{feeTxt(d)}</em></div>
 
 function AddressScreen({ loc, back, onSave }) {
   const [f, setF] = useState(loc)
@@ -1328,7 +1330,7 @@ function AddressScreen({ loc, back, onSave }) {
     const c = new AbortController()
     const t = setTimeout(async () => {
       setSb(true)
-      try { const d = await nom(`search?q=${encodeURIComponent(sq + ', Chattogram, Bangladesh')}&limit=5&countrycodes=bd`, c.signal); setRes(d) } catch { /* ignore */ }
+      try { const d = await nom(`search?q=${encodeURIComponent(sq)}&limit=6&countrycodes=bd&viewbox=91.68,22.48,91.98,22.18`, c.signal); setRes(d) } catch { /* ignore */ }
       setSb(false)
     }, 500)
     return () => { clearTimeout(t); c.abort() }
@@ -1344,21 +1346,22 @@ function AddressScreen({ loc, back, onSave }) {
   return <><Hdr title="Delivery Location" back={back} />
     <div className="scr narrow addr mp">
       <div className="mp-sr">
-        <div className="search"><Icon n="search" /><input placeholder="Search area, road or landmark" value={sq} onChange={e => setSq(e.target.value)} aria-label="Search location" />{sb && <i className="spin" />}</div>
+        <div className="search"><Icon n="search" /><input placeholder="Search area, road, landmark or district" value={sq} onChange={e => setSq(e.target.value)} aria-label="Search location" />{sb && <i className="spin" />}</div>
         {res.length > 0 && <div className="mp-res" role="listbox">{res.map(r => <button key={r.place_id} type="button" onClick={() => pick(r)}><span>📍</span><div>{r.display_name}</div></button>)}</div>}
       </div>
       <div className={'mp-box' + (moving ? ' mv' : '')}>
         <div ref={el} className="mp-map" />
         {mapOk === null && <div className="mp-ph"><i className="spin" /></div>}
         {mapOk === false && <div className="mp-ph">Map could not load.<br />You can still type your address below.</div>}
-        {mapOk && <><span className="mp-dot" /><span className="mp-pin"><PinSvg /></span><div className="mp-hint">{moving ? 'Release to set pin' : 'Drag the map · dashed circle = Pinkish rider zone'}</div></>}
+        {mapOk && <><span className="mp-dot" /><span className="mp-pin"><PinSvg /></span><div className="mp-hint">{moving ? 'Release to set pin' : 'Drag the map · inside the dashed circle a Pinkish rider delivers'}</div></>}
         <button type="button" className={'mp-gps' + (gps ? ' ld' : '')} aria-label="Use my current location" onClick={locate}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
         </button>
       </div>
       {err && <p className="mp-err" role="alert">{err}</p>}
       <div className="mp-card"><span><Icon n="pin" /></span><div><small>Delivering to</small><b>{fullAddr(clean) || 'Move the pin or search to set location'}</b></div></div>
-      <DeliveryCard d={deliveryFor(clean)} far />
+      <DeliveryCard d={deliveryFor(clean)} />
+      {!pt && <p className="mp-err" role="status">Move the map or tap the location button to pin your exact delivery point.</p>}
       <div className="mp-man">
         <h5>✏️ Adjust manually</h5>
         <label className="lbl">City<input className="inp" value={f.city} onChange={set('city')} autoComplete="address-level2" /></label>
@@ -1403,24 +1406,22 @@ const shareProduct = async (p, say) => {
 const Fulfil = memo(({ shop }) => <div className="ffb" role="note"><span className="ffb-i"><Icon n="truck" /></span><div><b>{shop ? 'Sold by ' + (shop.name || 'a verified seller') + ' · ' : ''}Delivered by Pinkish</b><small>Order only on Pinkish. We collect from the seller, pack discreetly and deliver to you, with returns protected.</small></div></div>)
 
 // --- search: one normalised index, all words must match (name, brand, tag, category and shop) ---
-const norm = s => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
-const toks = q => norm(q).trim().split(/\s+/).filter(Boolean)
-const searchIn = (idx, q) => {
-  const ts = toks(q); if (!ts.length) return []
-  const out = []
-  for (const e of idx) if (ts.every(t => e.t.includes(t))) out.push([e.n.startsWith(ts[0]) ? 3 : ts.every(t => e.n.includes(t)) ? 2 : 1, e.p])
-  return out.sort((a, b) => b[0] - a[0]).map(x => x[1]) // stable: equal scores keep catalogue order
-}
+// typo tolerant engine in src/lib/search.js: "lipstik", "parfume", "t shirt" all find the right products
+const norm = fnorm
+const toks = q => fwords(q)
+const searchIn = (idx, q) => fuzzySearch(idx, q)
+// loose match for short labels (category, brand, shop names) in the suggestion box
+const nearHas = (s, ts) => { const ws = fwords(s); return ts.every(t => ws.some(w => w.startsWith(t) || (t.length > 3 && fdist(t, w.slice(0, t.length + 1), 1) <= 1))) }
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const Hi = ({ s, ts }) => { if (!ts.length) return s; const parts = String(s).split(new RegExp('(' + ts.map(esc).join('|') + ')', 'ig')); return parts.map((x, i) => i % 2 ? <mark key={i}>{x}</mark> : x) }
 
 // --- filters: work on any product list in the browser ---
-const F0 = { min: '', max: '', stock: false, deal: false, brands: [], shops: [] }
-const fCount = f => (f.min !== '' || f.max !== '' ? 1 : 0) + (f.stock ? 1 : 0) + (f.deal ? 1 : 0) + f.brands.length + f.shops.length
+const F0 = { min: '', max: '', stock: false, deal: false, rating: 0, brands: [], shops: [] }
+const fCount = f => (f.min !== '' || f.max !== '' ? 1 : 0) + (f.stock ? 1 : 0) + (f.deal ? 1 : 0) + (f.rating ? 1 : 0) + f.brands.length + f.shops.length
 const applyF = (list, f) => {
   if (!fCount(f)) return list
   const mn = f.min === '' ? null : +f.min, mx = f.max === '' ? null : +f.max, bs = new Set(f.brands), ss = new Set(f.shops)
-  return list.filter(p => (mn == null || p.price >= mn) && (mx == null || p.price <= mx) && (!f.stock || stockOf(p) !== 0) && (!f.deal || api.dealLive(p)) && (!bs.size || bs.has(p.brand || '')) && (!ss.size || ss.has(p.shop_id || 'own')))
+  return list.filter(p => (mn == null || p.price >= mn) && (mx == null || p.price <= mx) && (!f.stock || stockOf(p) !== 0) && (!f.deal || api.dealLive(p)) && (!f.rating || ((+p.reviews || 0) > 0 && +p.rating >= f.rating)) && (!bs.size || bs.has(p.brand || '')) && (!ss.size || ss.has(p.shop_id || 'own')))
 }
 const NICE = [100, 200, 300, 500, 1000, 2000, 3000, 5000, 10000, 20000, 50000]
 const priceRanges = max => {
@@ -1452,6 +1453,7 @@ function FilterSheet({ base, shops, f, onApply, onClose }) {
     <section><h5>Price (৳)</h5><div className="fs-pr"><input inputMode="decimal" placeholder="Min" aria-label="Minimum price" value={d.min} onChange={num('min')} /><span>to</span><input inputMode="decimal" placeholder="Max" aria-label="Maximum price" value={d.max} onChange={num('max')} /></div>
       {ranges.length > 0 && <div className="chips wrap">{ranges.map(([l, a, b]) => { const on = d.min === String(a) && d.max === (b == null ? '' : String(b)); return <button type="button" key={l} className={on ? 'on' : ''} onClick={() => setD(x => on ? { ...x, min: '', max: '' } : { ...x, min: String(a), max: b == null ? '' : String(b) })}>{l}</button> })}</div>}</section>
     <section className="fs-tg"><Switch on={d.stock} set={v => setD(x => ({ ...x, stock: v }))} label="In stock only" sub="Hide sold-out items" /><Switch on={d.deal} set={v => setD(x => ({ ...x, deal: v }))} label="On sale" sub="Flash deals right now" /></section>
+    <section><h5>Customer rating</h5><div className="chips wrap">{[[4, '★ 4 & up'], [3, '★ 3 & up']].map(([r, l]) => <button type="button" key={r} className={d.rating === r ? 'on' : ''} aria-pressed={d.rating === r} onClick={() => setD(x => ({ ...x, rating: x.rating === r ? 0 : r }))}>{l}</button>)}</div></section>
     {brands.length > 1 && <section><h5>Brand</h5><div className="chips wrap">{brands.map(b => <button type="button" key={b} className={d.brands.includes(b) ? 'on' : ''} aria-pressed={d.brands.includes(b)} onClick={() => tog('brands', b)}>{b}</button>)}</div></section>}
     {shopOpts.length > 1 && <section><h5>Shop</h5><div className="chips wrap">{shopOpts.map(([k, l]) => <button type="button" key={k} className={d.shops.includes(k) ? 'on' : ''} aria-pressed={d.shops.includes(k)} onClick={() => tog('shops', k)}>{l}</button>)}</div></section>}
     <div className="fs-ft"><button type="button" className="btn o" disabled={!fCount(d)} onClick={() => setD(F0)}>Reset</button><button type="button" className="btn" onClick={() => onApply(d)}>Show {n} result{n === 1 ? '' : 's'}</button></div>
@@ -1465,6 +1467,7 @@ const FChips = ({ f, set, shops }) => {
     {(f.min !== '' || f.max !== '') && <button type="button" onClick={() => rm({ min: '', max: '' })}>{f.min !== '' && f.max !== '' ? `৳${f.min}–${f.max}` : f.min !== '' ? `From ৳${f.min}` : `Up to ৳${f.max}`}<i>✕</i></button>}
     {f.stock && <button type="button" onClick={() => rm({ stock: false })}>In stock<i>✕</i></button>}
     {f.deal && <button type="button" onClick={() => rm({ deal: false })}>On sale<i>✕</i></button>}
+    {f.rating > 0 && <button type="button" onClick={() => rm({ rating: 0 })}>★ {f.rating}+<i>✕</i></button>}
     {f.brands.map(b => <button type="button" key={'b' + b} onClick={() => rm({ brands: f.brands.filter(x => x !== b) })}>{b}<i>✕</i></button>)}
     {f.shops.map(s => <button type="button" key={'s' + s} onClick={() => rm({ shops: f.shops.filter(x => x !== s) })}>{shopName(s === 'own' ? null : s, shops)}<i>✕</i></button>)}
     <button type="button" className="clr" onClick={() => set(F0)}>Clear all</button></div>
@@ -1475,16 +1478,16 @@ const FBtn = ({ n, onClick }) => <button type="button" className={'fbtn' + (n ? 
 const Suggest = memo(({ q, idx, cats, shops, recent, onPick, onClearRecent }) => {
   const dq = useDeferredValue(q)
   const res = useMemo(() => {
-    const ts = toks(dq); if (!ts.length) return null
-    const has = s => { const v = norm(s); return ts.every(t => v.includes(t)) }
-    const all = searchIn(idx, dq)
-    return { ts, total: all.length, prods: all.slice(0, 5), cs: cats.filter(c => has(c.name)).slice(0, 3), brands: [...new Set(idx.map(e => e.p.brand).filter(b => b && has(b)))].slice(0, 3), sh: Object.values(shops).filter(s => s?.name && has(s.name)).slice(0, 3) }
+    const qt = toks(dq); if (!qt.length) return null
+    const all = searchIn(idx, dq), ts = all.hl.length ? all.hl : qt, has = s => nearHas(s, qt)
+    return { ts, fixed: all.fixed, total: all.length, prods: all.slice(0, 5), cs: cats.filter(c => has(c.name)).slice(0, 3), brands: (idx?.brands || []).filter(has).slice(0, 3), sh: Object.values(shops).filter(s => s?.name && has(s.name)).slice(0, 3) }
   }, [dq, idx, cats, shops])
   const stop = e => e.preventDefault() // keep the input focused while tapping a suggestion
   if (!res) return recent.length ? <div className="sg" onMouseDown={stop} role="listbox" aria-label="Recent searches"><div className="sg-h"><span>Recent searches</span><button type="button" onClick={onClearRecent}>Clear</button></div><div className="sg-rc">{recent.map(t => <button type="button" key={t} onClick={() => onPick({ k: 'q', v: t })}><Icon n="clock" />{t}</button>)}</div></div> : null
   const empty = !res.prods.length && !res.cs.length && !res.brands.length && !res.sh.length
   return <div className="sg" onMouseDown={stop} role="listbox" aria-label="Suggestions">
     {empty && <p className="sg-no">No matches for “{q.trim()}”. Try another word.</p>}
+    {res.fixed && <button type="button" className="sg-fix" onClick={() => onPick({ k: 'q', v: res.fixed })}>Did you mean <b>{res.fixed}</b>?</button>}
     {res.prods.map(p => <button type="button" key={p.id} className="sg-p" onClick={() => onPick({ k: 'p', v: p })}><Pic p={p} /><span><b><Hi s={p.name} ts={res.ts} /></b><small>{[p.brand, shopName(p.shop_id, shops)].filter(Boolean).join(' · ')}</small></span><em>{taka(p.price)}</em></button>)}
     {(res.cs.length > 0 || res.brands.length > 0 || res.sh.length > 0) && <div className="sg-t">
       {res.cs.map(c => <button type="button" key={'c' + c.id} onClick={() => onPick({ k: 'c', v: c })}><i>Category</i><Hi s={c.name} ts={res.ts} /></button>)}
@@ -1494,7 +1497,7 @@ const Suggest = memo(({ q, idx, cats, shops, recent, onPick, onClearRecent }) =>
   </div>
 })
 
-function SearchScreen({ q0 = '', f0 = F0, idx, prods, cats, shops, loading, back, gp, go, recent, addRecent, clearRecent }) {
+function SearchScreen({ q0 = '', f0 = F0, idx, prods, cats, shops, loading, back, gp, go, recent, addRecent, clearRecent, seen = NONE }) {
   const [q, setQ] = useState(q0), [f, setF] = useState(f0), [sort, setSort] = useState('rel'), [sheet, setSheet] = useState(false), [foc, setFoc] = useState(false), inp = useRef(null)
   const dq = useDeferredValue(q)
   useEffect(() => { if (!q0 && !fCount(f0)) inp.current?.focus() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1515,6 +1518,9 @@ function SearchScreen({ q0 = '', f0 = F0, idx, prods, cats, shops, loading, back
     <div className="tools ftools"><FBtn n={fCount(f)} onClick={() => setSheet(true)} /><select className="inp sort" aria-label="Sort" value={sort} onChange={e => setSort(e.target.value)}><option value="rel">{dq.trim() ? 'Best match' : 'Popular'}</option>{Object.entries(SORTS).filter(([k]) => k !== 'pop').map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select></div>
     <FChips f={f} set={setF} shops={shops} />
     <p className="rcount">{loading ? 'Loading…' : <><b>{list.length}</b> result{list.length === 1 ? '' : 's'}{dq.trim() && <> for “{dq.trim()}”</>}</>}</p>
+    {dq.trim() && base.fixed && <p className="sfix">Showing results for <b>{base.fixed}</b>. <button type="button" onClick={() => setQ(base.fixed)}>Search that instead</button></p>}
+    {dq.trim() && base.loose && <p className="sfix">No product matches every word, so these match most of them.</p>}
+    {!dq.trim() && !fCount(f) && seen.length > 0 && <Rail title="Recently viewed" list={seen} {...gp} />}
     {!loading && !list.length ? <div className="emp"><div className="emp-i"><Icon n="search" /></div><h3>Nothing found</h3><p>{fCount(f) ? 'Try removing a filter or two.' : 'Check the spelling or try a shorter word.'}</p>{fCount(f) > 0 && <button className="btn" onClick={() => setF(F0)}>Clear filters</button>}</div> : <Grid list={list} loading={loading} {...gp} />}
     {sheet && <FilterSheet base={base} shops={shops} f={f} onApply={v => { setF(v); setSheet(false) }} onClose={closeSheet} />}
   </div></>
@@ -1530,7 +1536,7 @@ const LiveTrack = ({ o, st }) => {
     return <section className="tk-card tk-cr"><header><h5>Courier delivery</h5><span className="tk-pill">{o.courier_name || 'Partner courier'}</span></header>
       <div className="tk-row"><span className="tk-ic">📦</span><div>{o.courier_tracking
         ? <><small>Tracking ID</small><b className="tk-tid">{o.courier_tracking}</b><p>Your parcel is with {o.courier_name || 'our courier partner'}. They will call you before delivery.</p></>
-        : <><small>Outside our {RIDER_KM} km rider zone</small><b>Pathao or a partner courier delivers this order</b><p>Pinkish packs it and hands it to the courier. Your tracking ID appears here, and you get a notification.</p></>}</div></div>
+        : <><small>{ZONE[orderZone(o)]?.name || 'Courier delivery'} · {ZONE[orderZone(o)]?.eta || '1–4 days'}</small><b>Pathao or a partner courier delivers this order</b><p>Pinkish packs it and hands it to the courier. Your tracking ID appears here, and you get a notification.</p></>}</div></div>
       {url && <a className="btn tk-go" href={url} target="_blank" rel="noopener noreferrer">Track with {o.courier_name || 'courier'} →</a>}</section>
   }
   if (st !== 2) return null
@@ -1688,7 +1694,8 @@ export default function App() {
     const l = readLS('ms_loc', null)
     return { name: '', phone: '', address: fullAddr(l), note: '', lat: l?.lat, lng: l?.lng }
   })
-  const [pay, setPay] = useState(0), [promo, setPromo] = useState(''), [promoOn, setPromoOn] = useState(false)
+  const [pay, setPay] = useState(0), [promo, setPromo] = useState(() => readLS('pk_promo', '')), [coupon, setCoupon] = useState(null), [cbusy, setCbusy] = useState(false), [pubC, setPubC] = useState(NONE)
+  const [dcfg, setDcfg] = useState(() => setDeliveryCfg(api.cachedDeliveryCfg()))
   const [q, setQ] = useState(''), [nc, setNc] = useState({ name: '', icon: '🛍️' })
   const [np, setNp] = useState({ name: '', price: '', category_id: '', image_url: '' })
   const [wish, setWish] = useState(() => readLS('ms_wish', []))
@@ -1781,6 +1788,12 @@ export default function App() {
   }, [say])
 
   useEffect(() => { load() }, [load])
+  // delivery prices + rider rules (Admin → Promotions). Refreshed when the app comes back to the front.
+  useEffect(() => {
+    const run = () => { if (!document.hidden) api.getDeliveryCfg().then(v => { if (v) setDcfg(setDeliveryCfg(v)) }) }
+    run(); document.addEventListener('visibilitychange', run)
+    return () => document.removeEventListener('visibilitychange', run)
+  }, [])
   // while the person looks at the first products, quietly fetch the next pictures so scrolling shows them instantly
   useEffect(() => {
     if (!prods.length) return
@@ -1913,12 +1926,14 @@ export default function App() {
   /* ---------- derived data (memoised) ---------- */
   const wishSet = useMemo(() => new Set(wish), [wish])
   const { subtotal, count } = useMemo(() => ({ subtotal: cart.reduce((a, i) => a + i.price * i.qty, 0), count: cart.reduce((a, i) => a + i.qty, 0) }), [cart])
-  const disc = promoOn ? Math.round(subtotal * 0.1) : 0
-  const delivery = useMemo(() => deliveryFor(loc), [loc])
+  // Coupons and free delivery apply to Cash on Delivery orders (bKash / Nagad totals are unchanged)
+  const cod = pay === 0
+  const disc = coupon && cod ? Math.min(subtotal, +coupon.discount || 0) : 0
+  const delivery = useMemo(() => deliveryFor(loc, { subtotal: subtotal - disc, cod, freeCoupon: !!coupon?.free_delivery }), [loc, subtotal, disc, cod, coupon, dcfg]) // eslint-disable-line react-hooks/exhaustive-deps
   const total = Math.max(0, subtotal - disc + (delivery.fee || 0))
   const catCount = useMemo(() => { const m = new Map(); for (const p of prods) m.set(p.category_id, (m.get(p.category_id) || 0) + 1); return m }, [prods])
   const idxOn = useRef(false); if (dq || sgOn || s === 'search') idxOn.current = true
-  const idx = useMemo(() => { if (!idxOn.current) return NONE; const cn = new Map(cats.map(c => [c.id, c.name])); return prods.map(p => ({ p, n: norm(p.name), t: norm([p.name, p.brand, p.tag, cn.get(p.category_id), p.shop_id ? shops[p.shop_id]?.name : 'pinkish'].filter(Boolean).join(' ')) })) }, [prods, cats, shops, idxOn.current]) // eslint-disable-line react-hooks/exhaustive-deps
+  const idx = useMemo(() => (idxOn.current ? makeIndex(prods, cats, shops) : null), [prods, cats, shops, idxOn.current]) // eslint-disable-line react-hooks/exhaustive-deps
   const hits = useMemo(() => (dq.trim() ? searchIn(idx, dq) : prods), [idx, prods, dq])
   const rvList = useMemo(() => (rv.length ? rv.map(id => byId.get(String(id))).filter(Boolean).slice(0, 12) : []), [rv, byId])
   const pop = useMemo(() => dq ? hits : hits.slice(0, 6), [dq, hits])
@@ -1985,11 +2000,39 @@ export default function App() {
     catch (err) { bad(err?.message || 'Could not continue. Please try again.') }
     finally { setBusy(false) }
   }
-  const applyPromo = () => promo.trim().toUpperCase() === 'SHIELD10' ? (setPromoOn(true), say('10% off applied')) : say('Invalid promo code')
+  // ---- coupons: checked by the server against this cart, applied to the next Cash on Delivery order ----
+  const applyCode = useCallback(async (code, quiet) => {
+    const c = String(code || '').trim().toUpperCase()
+    if (!c) return say('Enter a coupon code')
+    if (!authed || !realUid(user)) { setPromo(c); writeLS('pk_promo', c); return quiet ? null : needLogin('checkout') }
+    setCbusy(true)
+    try { const r = await api.applyCoupon(c, cartR.current); setCoupon(r); setPromo(r.code); writeLS('pk_promo', r.code); if (!quiet) say(r.free_delivery ? `${r.code} applied · free delivery` : `${r.code} applied · −৳${Math.round(r.discount)}`, 2400) }
+    catch (e) { setCoupon(null); if (!quiet) say(e?.message || 'Could not apply the coupon', 3200) }
+    finally { setCbusy(false) }
+  }, [authed, user, say, needLogin])
+  const dropCoupon = useCallback(() => { setCoupon(null); setPromo(''); writeLS('pk_promo', ''); api.clearCoupon() }, [])
+  // "use this voucher" from a product / shop page: kept until the cart
+  const keepCode = useCallback(c => { setPromo(c); writeLS('pk_promo', c); say(`${c} saved · it is applied in your cart`, 2400) }, [say])
+  // the cart changed: re-check the coupon quietly (it may no longer reach the minimum)
+  const cartSig = cart.map(i => i.id + 'x' + i.qty + (i.variant || '')).join(',')
+  useEffect(() => {
+    if (!coupon || !cart.length) { if (coupon && !cart.length) dropCoupon(); return }
+    const t = setTimeout(async () => { try { setCoupon(await api.applyCoupon(coupon.code, cartR.current)) } catch (e) { setCoupon(null); say(e?.message || 'Your coupon no longer applies', 3200) } }, 700)
+    return () => clearTimeout(t)
+  }, [cartSig]) // eslint-disable-line react-hooks/exhaustive-deps
+  // entering the cart: try a saved code once, and show the coupons this cart can use
+  const shopKey = [...new Set(cart.map(i => byIdR.current.get(String(i.id))?.shop_id).filter(Boolean))].sort().join(',')
+  useEffect(() => {
+    if (s !== 'cart' || !cart.length) return
+    if (promo && !coupon && authed) applyCode(promo, true)
+    let on = true; api.getPublicCoupons(shopKey ? shopKey.split(',') : []).then(r => on && setPubC(r || NONE))
+    return () => { on = false }
+  }, [s, shopKey, authed]) // eslint-disable-line react-hooks/exhaustive-deps
   const place = async () => {
     if (busy) return
     if (!authed) return needLogin('checkout')
     if (delivery.fee == null) return say(OUT_MSG, 3500)
+    if (!delivery.pinned) { say(PIN_MSG, 3500); return go('address') }
     if (pay === 1) { // manual bKash: no order yet. It is created only when the customer submits the TrxID, so leaving keeps the cart
       if (!realUid(user) || !api.supabase) return say('Please sign in with your email to pay with bKash')
       return go('bkash')
@@ -1997,20 +2040,20 @@ export default function App() {
     if (pay === 2) { // Nagad: order is created + priced on the server, then we hand off to the gateway
       if (!realUid(user) || !api.supabase) return say('Please sign in with your email to pay with ' + PAYS[pay][0])
       setBusy(true)
-      try { location.assign(await api.startOnlinePayment({ provider: 'nagad', items: cart, promo: promoOn ? 'SHIELD10' : '', address: addr })) }
+      try { location.assign(await api.startOnlinePayment({ provider: 'nagad', items: cart, promo: '', address: { ...addr, lat: loc.lat, lng: loc.lng } })) }
       catch (e) { say(e?.message || 'Could not start payment. Please try again.'); setBusy(false) }
       return
     }
     setBusy(true)
     try {
-      const o = await api.placeOrder({ user_id: user?.id, items: cart, total, delivery_fee: delivery.fee, address: addr, payment: PAYS[pay][0] })
+      const o = await api.placeOrder({ user_id: user?.id, items: cart, total, delivery_fee: delivery.fee, address: { ...addr, lat: loc.lat, lng: loc.lng }, payment: PAYS[pay][0] })
       // placeOrder falls back to this device only (guests / signed-out). Also send it to the store so the admin sees every order.
       if (api.supabase && typeof o.id === 'string' && /^o\d{6,}$/.test(o.id)) {
         try { const { id: _local, ...row } = o; await api.supabase.from('orders').insert({ ...row, user_id: realUid(user) }) } catch { /* kept locally */ }
       }
-      setCart([]); setPromoOn(false)
+      setCart([]); setCoupon(null); setPromo(''); writeLS('pk_promo', '')
       collapse(() => { depth.current = 1; try { history.pushState({ ms: 1 }, '') } catch { /* history blocked */ } setDir('fwd'); setStack([{ s: 'home' }, { s: 'done', order: o }]) })
-    } catch (e) { say(e?.message || 'Could not place order. Please try again.', 3500) }
+    } catch (e) { const m = e?.message || 'Could not place order. Please try again.'; if (/coupon/i.test(m)) setCoupon(null); say(m, 4000) }
     finally { setBusy(false) }
   }
   // Coming back from bKash / Nagad: trust only the database (the order must really be marked paid by the server)
@@ -2023,7 +2066,7 @@ export default function App() {
       if (no) (async () => {
         const o = await api.getOrderByNo(no)
         if (o?.payment_status === 'paid') {
-          setCart([]); setPromoOn(false); depth.current = 1
+          setCart([]); depth.current = 1
           try { history.pushState({ ms: 1 }, '') } catch { /* history blocked */ }
           setDir('fwd'); setStack([{ s: 'home' }, { s: 'done', order: o }])
         } else say(res === 'cancel' ? 'Payment cancelled. Your cart is still saved.' : 'Payment was not completed. You have not been charged. Please try again.')
@@ -2044,7 +2087,7 @@ export default function App() {
     <header className="abar"><span className="am"><img src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" draggable="false" /></span><div className="an"><h1><span className="bn"><span className="bp">Pink</span><span className="bi">ish</span></span></h1><small>Privacy. Confidence. Comfort. Wellness.</small></div><span className="ap"><Icon n="lock" />Private</span><button type="button" className="a-x" aria-label="Close" onClick={closeAuth}>✕</button></header>
     <div className="auth-in">
       <form className={'auth-card glass' + (shake ? ' shake' : '')} onSubmit={login} noValidate>
-        {(mode === 'login' || mode === 'signup') && <div className="ah"><h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2><p>{mode === 'login' ? 'Log in to continue shopping privately.' : 'Join Pinkish for discreet delivery across Chattogram.'}</p></div>}
+        {(mode === 'login' || mode === 'signup') && <div className="ah"><h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2><p>{mode === 'login' ? 'Log in to continue shopping privately.' : 'Join Pinkish for discreet delivery across Bangladesh.'}</p></div>}
         {(mode === 'login' || mode === 'signup') && <div className="tabs" data-i={mode === 'login' ? 0 : 1}>{['login', 'signup'].map(m => <button type="button" key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'login' ? 'Login' : 'Sign Up'}</button>)}</div>}
         {mode === 'forgot' && <p className="msg"><b>Reset your password</b><br />Enter your account email and we will send you a reset link.</p>}
         {mode === 'reset' && <p className="msg"><b>Set a new password</b><br />Choose a new password for your account.</p>}
@@ -2098,38 +2141,43 @@ export default function App() {
     {!loading && catList.length > 0 && !shown.length ? <div className="emp"><h3>No matches</h3><p>Try removing a filter.</p><button className="btn" onClick={() => { setCf(F0); setChip('All'); setQ('') }}>Clear filters</button></div> : <Grid list={shown} loading={loading} {...gp} />}
     {csheet && <FilterSheet base={catList} shops={shops} f={cf} onApply={v => { setCf(v); setCsheet(false) }} onClose={closeCsheet} />}</div></>
 
-  if (s === 'search') body = <SearchScreen key={'srch' + stack.length} q0={cur.q || ''} f0={cur.f || F0} {...{ idx, prods, cats, shops, loading, back, gp, go, recent, addRecent, clearRecent }} />
+  if (s === 'search') body = <SearchScreen key={'srch' + stack.length} q0={cur.q || ''} f0={cur.f || F0} {...{ idx, prods, cats, shops, loading, back, gp, go, recent, addRecent, clearRecent }} seen={rvList} />
 
   if (s === 'notifications') body = <Notifications list={notifs} back={back} onOpen={openNote} onReadAll={readAll} />
-  if (s === 'shop') body = <ShopScreen shop={shops[cur.shop?.id] || cur.shop} prods={prods} loading={loading} back={back} gp={gp} follow={{ on: following, toggle: toggleFollow }} />
+  if (s === 'shop') body = <ShopScreen shop={shops[cur.shop?.id] || cur.shop} prods={prods} loading={loading} back={back} gp={gp} follow={{ on: following, toggle: toggleFollow }} keepCode={keepCode} />
 
-  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: byId.get(String(cur.p.id)) || cur.p, back, addToCart, count, go, like, open, user, say, login: needLogin }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} />
+  if (s === 'product') body = <ProductScreen key={cur.p.id} {...{ p: byId.get(String(cur.p.id)) || cur.p, back, addToCart, count, go, like, open, user, say, login: needLogin }} shop={cur.p.shop_id ? (shops[cur.p.shop_id] || { missing: true }) : null} prods={prods} wish={wishSet} liked={wishSet.has(cur.p.id)} seen={rvList} keepCode={keepCode} />
 
-  if (s === 'cart') body = <><Hdr title={`My Cart (${count})`} back={back} right={cart.length > 0 && <button className="ib" aria-label="Clear cart" onClick={() => { setCart([]); setPromoOn(false) }}>🗑️</button>} /><div className="scr narrow">
+  if (s === 'cart') body = <><Hdr title={`My Cart (${count})`} back={back} right={cart.length > 0 && <button className="ib" aria-label="Clear cart" onClick={() => { setCart([]); dropCoupon() }}>🗑️</button>} /><div className="scr narrow">
     {!cart.length ? <div className="emp"><div className="emp-i"><CartArt /></div><h3>Your cart is empty</h3><p>Browse our categories and add something you like.</p><button className="btn" onClick={() => tab('categories')}>Start shopping</button></div> : <><Steps n={0} />
-      <div className="frb"><span>🚚</span><div><b>Discreet delivery across Chattogram</b><small>৳40 within 4 km · ৳60 up to 30 km of Bahaddarhat</small></div></div>
+      <div className="frb"><span>🚚</span><div><b>Discreet delivery across Bangladesh</b><small>৳{+dcfg.inner_fee} near {HUB.name} · ৳{+dcfg.city_fee} Chattogram city · ৳{+dcfg.outside_fee} rest of Bangladesh{+dcfg.free_over > 0 ? ` · free over ৳${+dcfg.free_over}` : ''}</small></div></div>
+      {delivery.pinned && +dcfg.free_over > 0 && (dcfg.free_zones || []).includes(delivery.zone) && <div className={'fdb' + (delivery.free ? ' on' : '')} role="status"><div><b>{delivery.free ? '🎉 Free delivery unlocked' : `Add ৳${delivery.freeLeft} more for free delivery`}</b><small>Cash on Delivery orders over ৳{+dcfg.free_over}</small></div><i><em style={{ width: Math.min(100, (subtotal - disc) / dcfg.free_over * 100) + '%' }} /></i></div>}
       {cart.map(i => <CartItem key={i.key} i={i} qty={qty} />)}
-      <div className="promo"><input placeholder="Have a promo code? (try SHIELD10)" value={promo} onChange={e => setPromo(e.target.value)} /><button onClick={applyPromo}>Apply</button></div>
-      <div className="sum"><div><span>Subtotal ({count} item{count === 1 ? '' : 's'})</span><span><Money v={subtotal} /></span></div>{disc > 0 && <div><span>Discount</span><span style={{ color: '#3ab36b' }}>−<Money v={disc} /></span></div>}<div><span>Delivery{delivery.km != null && <small className="dl-km"> · {delivery.km.toFixed(1)} km</small>}</span><span className={delivery.fee == null ? 'dl-bad' : 'dl-ok'}>{feeTxt(delivery)}</span></div><div className="t"><span>Total</span><span><Money v={total} /></span></div></div>
+      {coupon ? <div className="cpn on"><span>🎟️</span><div><b>{coupon.code} applied</b><small>{coupon.free_delivery ? 'Free delivery' : `−৳${Math.round(coupon.discount)}`}{coupon.shop_id ? ' · on ' + shopName(coupon.shop_id, shops) + ' items' : ''} · Cash on Delivery</small></div><button type="button" onClick={dropCoupon}>Remove</button></div>
+        : <form className="promo" onSubmit={e => { e.preventDefault(); applyCode(promo) }}><input placeholder="Coupon code" aria-label="Coupon code" autoCapitalize="characters" autoComplete="off" maxLength={20} value={promo} onChange={e => setPromo(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} /><button type="submit" disabled={cbusy}>{cbusy ? '…' : 'Apply'}</button></form>}
+      {!coupon && pubC.length > 0 && <div className="vch" role="list" aria-label="Coupons you can use">{pubC.slice(0, 6).map(c => <button type="button" role="listitem" key={c.code} className="vc" disabled={cbusy} onClick={() => applyCode(c.code)}><b>{vText(c)}</b><small>{c.shop_id ? shopName(c.shop_id, shops) : 'All of Pinkish'}{c.min_order > 0 ? ` · ৳${+c.min_order}+` : ''}{c.first_order_only ? ' · first order' : ''}</small><em>{c.code}</em></button>)}</div>}
+      <div className="sum"><div><span>Subtotal ({count} item{count === 1 ? '' : 's'})</span><span><Money v={subtotal} /></span></div>{disc > 0 && <div><span>Coupon {coupon?.code}</span><span style={{ color: '#3ab36b' }}>−<Money v={disc} /></span></div>}<div><span>Delivery{delivery.pinned && <small className="dl-km"> · {ZONE[delivery.zone]?.name}</small>}</span><span className={delivery.fee == null ? 'dl-bad' : 'dl-ok'}>{delivery.free && delivery.base > 0 && <s className="dl-was">৳{delivery.base}</s>}{feeTxt(delivery)}</span></div><div className="t"><span>Total</span><span><Money v={total} /></span></div></div>
       <Rail title="Add more to your order" list={cartSugg} {...gp} /></>}</div>
-    {cart.length > 0 && <div className="buybar"><div><small>Total · {count} item{count === 1 ? '' : 's'}</small><b><Money v={total} /></b></div><button className="btn buy" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : !authed ? needLogin('checkout') : go('checkout')}>Checkout →</button></div>}</>
+    {cart.length > 0 && <div className="buybar"><div><small>Total · {count} item{count === 1 ? '' : 's'}</small><b><Money v={total} /></b></div><button className="btn buy" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : !authed ? needLogin('checkout') : !delivery.pinned ? (say(PIN_MSG, 3000), go('address')) : go('checkout')}>Checkout →</button></div>}</>
 
   if (s === 'checkout') body = <><Hdr title="Delivery Details" back={back} /><div className="scr narrow"><Steps n={1} />
-    {[['name', 'Full Name', 'name'], ['phone', 'Phone Number (+8801XXXXXXXXX)', 'tel'], ['address', 'House, Road, Area, Chattogram', 'street-address'], ['note', 'Delivery Instructions (Optional)', 'off']].map(([k, l, ac]) => <input key={k} className="inp" placeholder={l} autoComplete={ac} inputMode={k === 'phone' ? 'tel' : undefined} value={addr[k]} onChange={e => setAddr(a => ({ ...a, [k]: e.target.value }))} />)}
+    {[['name', 'Full Name', 'name'], ['phone', 'Phone Number (+8801XXXXXXXXX)', 'tel'], ['address', 'House, Road, Area, City / District', 'street-address'], ['note', 'Delivery Instructions (Optional)', 'off']].map(([k, l, ac]) => <input key={k} className="inp" placeholder={l} autoComplete={ac} inputMode={k === 'phone' ? 'tel' : undefined} value={addr[k]} onChange={e => setAddr(a => ({ ...a, [k]: e.target.value }))} />)}
     <DeliveryCard d={delivery} />
+    {!delivery.pinned ? <button type="button" className="btn o" onClick={() => go('address')}>📍 Pin your delivery location</button> : <button type="button" className="lk-chg" onClick={() => go('address')}>Change delivery location</button>}
     <div className="note">🔒 Your order will be delivered in discreet packaging.</div>
-    <button className="btn" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : !addr.name.trim() ? say('Enter your full name') : addr.phone.replace(/\D/g, '').length < 10 ? say('Enter a valid phone number (at least 10 digits)') : !addr.address.trim() ? say('Enter your delivery address') : go('payment')}>Continue to Payment</button></div></>
+    <button className="btn" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : !delivery.pinned ? (say(PIN_MSG, 3000), go('address')) : !addr.name.trim() ? say('Enter your full name') : addr.phone.replace(/\D/g, '').length < 10 ? say('Enter a valid phone number (at least 10 digits)') : !addr.address.trim() ? say('Enter your delivery address') : go('payment')}>Continue to Payment</button></div></>
 
-  if (s === 'payment') body = <><Hdr title="Payment Method" back={back} /><div className="scr narrow"><Steps n={2} /><div className="mini"><span>{count} item{count === 1 ? '' : 's'} · {delivery.fee != null ? `Delivery ৳${delivery.fee}${delivery.km != null ? ` (${delivery.km.toFixed(1)} km)` : ''}` : 'Outside delivery area'}</span><b><Money v={total} /></b></div>
+  if (s === 'payment') body = <><Hdr title="Payment Method" back={back} /><div className="scr narrow"><Steps n={2} /><div className="mini"><span>{count} item{count === 1 ? '' : 's'} · {delivery.fee != null ? `Delivery ${delivery.free ? 'free' : '৳' + delivery.fee} · ${ZONE[delivery.zone]?.name || ''}` : 'Outside delivery area'}</span><b><Money v={total} /></b></div>
     {PAYS.map(([n, d], k) => <button key={n} className={'pay' + (pay === k ? ' on' : '')} onClick={() => setPay(k)}><PayLogo k={k} /><div><b>{n}</b><small>{d}</small></div><i /></button>)}
     {delivery.fee == null
       ? <div className="note" style={{ background: '#fff0f3cc', color: '#c62d4a' }}>⚠️ {OUT_MSG} Please choose a closer address.</div>
       : <div className="note" style={{ background: '#eaf8efcc', color: '#2a8a52' }}>{delivery.mode === 'courier' ? '📦' : '🛵'} {delivery.label}</div>}
+    {!cod && (coupon || deliveryFor(loc, { subtotal: subtotal - (+coupon?.discount || 0), cod: true, freeCoupon: !!coupon?.free_delivery }).free) && <div className="note" style={{ background: '#fff4e5cc', color: '#9a5a00' }}>🎟️ Coupons and free delivery apply to Cash on Delivery orders. Choose Cash on Delivery to keep them.</div>}
     <div className="note" style={{ background: '#eaf8efcc', color: '#2a8a52' }}>🛡️ SSL Secured Payment — your information is always protected.</div>
     <button className="btn" disabled={busy || delivery.fee == null} onClick={place}>{delivery.fee == null ? '📦 Outside delivery area' : busy ? <i className="spin" /> : <>{pay === 1 ? 'Continue to bKash' : pay === 2 ? 'Pay Now' : 'Place Order'} · <Money v={total} /></>}</button></div></>
 
-  if (s === 'bkash') body = <BkashPay total={total} cart={cart} promo={promoOn ? 'SHIELD10' : ''} addr={addr} back={back} say={say} onDone={o => {
-    setCart([]); setPromoOn(false); say('Payment submitted. We are verifying it.', 3000)
+  if (s === 'bkash') body = <BkashPay total={total} cart={cart} promo="" addr={{ ...addr, lat: loc.lat, lng: loc.lng }} back={back} say={say} onDone={o => {
+    setCart([]); say('Payment submitted. We are verifying it.', 3000)
     collapse(() => { depth.current = 1; try { history.pushState({ ms: 1 }, '') } catch { /* history blocked */ } setDir('fwd'); setStack([{ s: 'home' }, { s: 'done', order: o }]) })
   }} />
 
@@ -2149,7 +2197,7 @@ export default function App() {
       <div className="tk-meta"><div><small>Order</small><b>#{o.order_no}</b></div><div><small>Placed</small><b>{t.toLocaleDateString([], { dateStyle: 'medium' })}</b><em>{t.toLocaleTimeString([], { timeStyle: 'short' })}</em></div><div><small>Total</small><b className="g">{taka(o.total)}</b></div></div>
       <div className={'trk' + (st >= 3 ? ' fin' : '')}><div className="trk-top"><span className="trk-art"><StatusArt st={st} /></span><div className="trk-tx"><b>{['Order received!', 'We are preparing your order', 'Your order is on the way!', 'Delivered. Thank you!'][st]}</b><br />{modeOf(o) === 'courier' ? ['We will confirm it shortly.', 'We are packing it for our courier partner.', `${o.courier_name || 'Our courier partner'} is bringing it to you.`, 'Hope you love it.'][st] : ['We will confirm it shortly.', 'A Pinkish rider will pick it up soon.', 'Your Pinkish rider is on the way. Watch them on the map.', 'Hope you love it.'][st]}</div></div><div className="trk-rail"><div className="trk-line"><i className="trk-fill" style={{ width: (Math.min(st, 3) / 3 * 100) + '%' }} /></div>{STEPS.map((l, i) => <span key={l} className={'trk-n' + (i <= st ? ' on' : '') + (i === st && st < 3 ? ' cur' : '')} style={{ left: (i / 3 * 100) + '%' }} />)}</div><div className="trk-lb">{STEPS.map((l, i) => <small key={l} className={i <= st ? 'on' : ''}>{l}</small>)}</div></div>
       <LiveTrack o={o} st={st} />
-      {modeOf(o) !== 'courier' && <DeliveryCode o={o} st={st} />}
+      {modeOf(o) !== 'courier' && dcfg.require_code && <DeliveryCode o={o} st={st} />}
       {its.length > 0 && <section className="tk-card"><header><h5>Items</h5><span className="tk-pill">{qn} item{qn === 1 ? '' : 's'}</span></header>{its.map((i, k) => <div className="ti" key={i.key || k}><Pic p={i} /><div><b>{i.name}</b><small>{i.variant && i.variant !== 'Standard' ? i.variant + ' · ' : ''}{taka(i.price)} × {i.qty}</small></div><b>{taka(i.price * i.qty)}</b></div>)}</section>}
       {((ad.address || ad.name) || o.payment) && <section className="tk-card"><header><h5>Delivery &amp; payment</h5></header>
         {(ad.address || ad.name) && <div className="tk-row"><span className="tk-ic"><Icon n="pin" /></span><div><small>Delivering to</small><b>{ad.name}{ad.phone && ' · ' + ad.phone}</b>{ad.address && <p>{ad.address}</p>}{ad.note && <em>Note: {ad.note}</em>}</div></div>}
@@ -2166,7 +2214,7 @@ export default function App() {
 
   if (s === 'address') body = <AddressScreen key="addr" loc={loc} back={back} onSave={saveLoc} />
 
-  if (s === 'wishlist') body = <><Hdr title="Wishlist" back={back} /><div className="scr"><Grid list={wishList} loading={loading} {...gp} /></div></>
+  if (s === 'wishlist') body = <><Hdr title="Wishlist" back={back} /><div className="scr">{wishList.length > 0 && <div className="wl-al"><span>🔔</span><p>{realUid(user) ? 'We will notify you when a saved item is back in stock or its price drops.' : 'Log in and we will notify you when a saved item is back in stock or its price drops.'}</p></div>}<Grid list={wishList} loading={loading} {...gp} /></div></>
 
   if (s === 'manage') body = !admin ? <><Hdr title="Store" back={back} /><div className="scr narrow"><div className="note">🔒 Only store admins can manage categories and products.</div></div></> : <><Hdr title="Manage Store" back={back} /><div className="scr narrow">
     <div className="sec">Add Category</div>
@@ -2372,7 +2420,17 @@ function LoginSheet({ why, onLogin, onSignup, onGoogle, onClose }) {
 
 function safeAdmin(u) { try { return api.isAdmin(u) } catch { return false } }
 
-function ShopScreen({ shop, prods, loading, back, gp, follow }) {
+// Shop-only coupons shown on the product and shop pages. Tapping one keeps it for the cart.
+const VCACHE = new Map()
+const vText = c => c.kind === 'percent' ? `${+c.value}% off${c.max_discount ? ' (up to ৳' + (+c.max_discount) + ')' : ''}` : c.kind === 'amount' ? `৳${+c.value} off` : 'Free delivery'
+function ShopVouchers({ shopId, keepCode }) {
+  const [list, setList] = useState(() => VCACHE.get(shopId) || NONE)
+  useEffect(() => { if (!shopId) return; let on = true; api.getPublicCoupons([shopId]).then(r => { const v = (r || []).filter(c => c.shop_id === shopId); VCACHE.set(shopId, v); on && setList(v) }); return () => { on = false } }, [shopId])
+  if (!list.length) return null
+  return <div className="vch" role="list" aria-label="Shop vouchers">{list.map(c => <button type="button" role="listitem" key={c.code} className="vc" onClick={() => keepCode?.(c.code)}><b>{vText(c)}</b><small>{c.min_order > 0 ? `On ৳${+c.min_order}+ from this shop` : 'On this shop'}{c.ends_at ? ' · ends ' + new Date(c.ends_at).toLocaleDateString([], { day: 'numeric', month: 'short' }) : ''}</small><em>{c.code}</em></button>)}</div>
+}
+
+function ShopScreen({ shop, prods, loading, back, gp, follow, keepCode = null }) {
   const [q, setQ] = useState(''), [fc, setFc] = useState(null), followed = !!shop.id && !!follow?.on.has(shop.id)
   useEffect(() => { let on = true; if (shop.id) api.getFollowerCount(shop.id).then(n => on && setFc(n)); return () => { on = false } }, [shop.id])
   const list = useMemo(() => prods.filter(x => x.shop_id === shop.id), [prods, shop.id])
@@ -2383,13 +2441,14 @@ function ShopScreen({ shop, prods, loading, back, gp, follow }) {
     <div className={'shp' + (shop.cover_url ? ' has-cv' : '')}><span className="shp-lg">{shop.logo_url ? <img src={shop.logo_url} alt="" decoding="async" draggable="false" /> : <em>{name.trim().charAt(0).toUpperCase()}</em>}</span>
       <div className="shp-t"><b>{name}<i className="vf">✓</i></b><small>{shop.city ? 'Seller · ' + shop.city : 'Verified seller on Pinkish'}</small><span className="shp-n">{loading ? 'Loading…' : list.length + (list.length === 1 ? ' product' : ' products')}{fc != null && ' · ' + fc + (fc === 1 ? ' follower' : ' followers')}</span></div>
       {shop.id && follow && <button className={'fol' + (followed ? ' on' : '')} aria-pressed={followed} onClick={() => { follow.toggle(shop.id); setFc(c => c == null ? c : Math.max(0, c + (followed ? -1 : 1))) }}>{followed ? 'Following ✓' : '+ Follow'}</button>}</div>
+    <ShopVouchers shopId={shop.id} keepCode={keepCode} />
     <Fulfil />
     {list.length > 6 && <div className="tools"><div className="search">🔍<input placeholder={`Search ${name}...`} value={q} onChange={e => setQ(e.target.value)} /></div></div>}
     <Grid list={shown} loading={loading} {...gp} />
   </div></>
 }
 
-function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish, shop = null, user = null, say = () => {}, login = null }) {
+function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [], open, wish, shop = null, user = null, say = () => {}, login = null, seen = NONE, keepCode = null }) {
   const [v, setV] = useState(p.variants?.[0]), [added, setAdded] = useState(false), [n, setN] = useState(1)
   const t = useRef(0)
   useEffect(() => () => clearTimeout(t.current), [])
@@ -2401,6 +2460,10 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
   const deal = api.dealLive(p), [alsoIds, setAlsoIds] = useState([])
   useEffect(() => { let on = true; api.getAlsoBought(p.id, 8).then(r => on && setAlsoIds(r)); return () => { on = false } }, [p.id])
   const also = useMemo(() => { const m = new Map(prods.map(x => [String(x.id), x])); return alsoIds.map(id => m.get(id)).filter(Boolean) }, [alsoIds, prods])
+  // More from this shop: in stock first, then best rated / most reviewed, never the product itself or "also bought" repeats
+  const moreShop = useMemo(() => { if (!p.shop_id) return NONE; const skip = new Set([p.id, ...also.map(x => x.id)]); return prods.filter(x => x.shop_id === p.shop_id && !skip.has(x.id) && x.is_active !== false).sort((a, b) => (stockOf(a) === 0) - (stockOf(b) === 0) || (+b.rating || 0) - (+a.rating || 0) || (+b.reviews || 0) - (+a.reviews || 0)).slice(0, 10) }, [prods, p.id, p.shop_id, also])
+  const seenHere = useMemo(() => seen.filter(x => x.id !== p.id).slice(0, 10), [seen, p.id])
+  const shopObj = shop?.id ? shop : p.shop_id ? { id: p.shop_id, name: 'this shop' } : null
   return <><Hdr title="Details" back={back} right={<button className="ib" aria-label="Open cart" onClick={() => go('cart')}><Icon n="bag" />{count > 0 && <em className="cb" key={count}>{count}</em>}</button>} />
     <div className="scr pd"><div className="pdp"><Gallery p={p} /><div className="fadeUp pdp-info">
       <small className="pk">{[p.brand, p.tag].filter(Boolean).join(' · ') || 'Pinkish'}</small>
@@ -2413,13 +2476,16 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
       {out ? <div className="stl so" role="status"><i />Sold out · check back soon</div> : st != null && st <= LOW ? <div className="stl" role="status"><i />Only {st} left in stock · order soon</div> : null}
       {shop ? (() => { const sh = shop.id ? shop : { id: p.shop_id, name: 'Marketplace seller' }; const openShop = () => go('shop', { shop: sh }); return <div className="store link" role="button" tabIndex={0} aria-label={'View shop ' + (sh.name || '')} onClick={openShop} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShop() } }}><span className="sl shop">{sh.logo_url ? <img src={sh.logo_url} alt="" decoding="async" draggable="false" /> : <em>{(sh.name || 'S').trim().charAt(0).toUpperCase()}</em>}</span><div><b>{sh.name || 'Marketplace seller'}<i className="vf">✓</i></b><small>{sh.city ? 'Seller · ' + sh.city : 'Verified seller on Pinkish'}</small></div><span className="fl">View shop</span></div> })()
         : <div className="store"><span className="sl"><Glyph v="🛡️" /></span><div><b><span className="bp">Pink</span><span className="bi">ish</span> Store<i className="vf">✓</i></b><small>Official store</small></div><span className="fl">Verified</span></div>}
+      {p.shop_id && <ShopVouchers shopId={p.shop_id} keepCode={keepCode} />}
       {p.shop_id && <Fulfil shop={shop?.id ? shop : null} />}
       <div className="opt"><div className="opt-l">{multi && <><span>Select option</span><div className="var">{p.variants.map(x => <button key={x.label} className={v?.label === x.label ? 'on' : ''} onClick={() => setV(x)}>{x.label}</button>)}</div></>}</div>
         <div className="opt-r"><span>QTY</span><div className="qty"><button aria-label="Decrease" onClick={() => setN(x => Math.max(1, x - 1))}>−</button><span className="qn">{n}</span><button aria-label="Increase" onClick={more}>+</button></div></div></div>
       <div className="dsc"><h5>Description</h5><ul className="ck">{(p.features || []).map(f => <li key={f}>{f}</li>)}</ul></div></div></div>
       {also.length > 0 && <Rail title="Customers also bought" list={also} add={addToCart} open={open} wish={wish} like={like} />}
       {p.shop_id && <QA p={p} user={user} say={say} login={login} />}
-      {sugg.length > 0 && <Rail title="You may also like" list={sugg} add={addToCart} open={open} wish={wish} like={like} />}</div>
+      {moreShop.length > 0 && <Rail title={'More from ' + (shopObj?.name || 'this shop')} action={shopObj?.id && <a onClick={() => go('shop', { shop: shopObj })}>View shop</a>} list={moreShop} add={addToCart} open={open} wish={wish} like={like} />}
+      {sugg.length > 0 && <Rail title="You may also like" list={sugg} add={addToCart} open={open} wish={wish} like={like} />}
+      {seenHere.length > 0 && <Rail title="Recently viewed" list={seenHere} add={addToCart} open={open} wish={wish} like={like} />}</div>
     <div className="buybar"><div><small>Total price</small><b><Money v={price * n} />{deal && <s className="old">{taka(p.old_price * (v?.mult || 1) * n)}</s>}</b></div><button className={'btn buy' + (added ? ' done' : '')} disabled={out} onClick={add}><Icon n="bag" />{out ? 'Sold out' : added ? 'Added ✓' : 'Add to Cart'}</button></div></>
 }
 /* ===== Motion system: every effect animates transform / opacity only, so the GPU does the work ===== */

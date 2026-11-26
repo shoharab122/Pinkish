@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase as sb } from '../api'
 import './admin.css'
 import { LiveMap } from '../lib/LiveMap.jsx'
-import { HUB, RIDER_KM, COURIERS, modeOf, orderKm, okLL, kmTxt, trackUrl, safeUrl, fresh, seenAgo } from '../lib/zone.js'
+import { HUB, RIDER_KM, COURIERS, COURIER_RATES, DELIVERY0, ZONE, modeOf, orderKm, orderZone, okLL, kmTxt, trackUrl, safeUrl, fresh, seenAgo } from '../lib/zone.js'
 
 const ago = d => { const m = Math.max(0, Math.round((Date.now() - new Date(d)) / 6e4)); return m < 1 ? 'Just now' : m < 60 ? m + 'm ago' : m < 1440 ? Math.floor(m / 60) + 'h ago' : Math.floor(m / 1440) + 'd ago' }
 const ini = n => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
@@ -19,7 +19,7 @@ const HO = { new: ['Seller packing', 's0'], packed: ['Ready for pickup', 's1'], 
 const OPS0 = { mode: 'pickup', hub_address: '', hours: 'Sat–Thu, 10am–6pm', pack_hours: 24, commission: 10, notice: '' }
 const hoOpen = (o, hs) => (o.status || 0) < 2 && o.status !== 4 && (hs || []).some(h => h.status === 'new' || h.status === 'packed')
 const readRiders = () => { try { const a = JSON.parse(localStorage.getItem('adm-riders') || '[]'); return Array.isArray(a) ? a.slice(0, 12) : [] } catch { return [] } }
-const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['returns', 'Returns'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['riders', 'Riders'], ['cats', 'Categories'], ['notify', 'Notify'], ['hero', 'Hero']]
+const NAV = [['dash', 'Overview'], ['orders', 'Orders'], ['returns', 'Returns'], ['wish', 'Wishlist'], ['products', 'Products'], ['shops', 'Merchants'], ['riders', 'Riders'], ['cats', 'Categories'], ['promo', 'Promotions'], ['notify', 'Notify'], ['hero', 'Hero']]
 
 const ICN = {
   dash: <><rect x="3" y="3" width="7.5" height="9" rx="2.2" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="2.2" /><rect x="13.5" y="12" width="7.5" height="9" rx="2.2" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="2.2" /></>,
@@ -61,6 +61,7 @@ const ICN = {
   returns: <><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></>,
   key: <><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" /></>,
   pkg: <><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M7.5 5.5l9 5" /></>,
+  promo: <><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z" /><circle cx="8" cy="8" r="1.6" /></>,
   gear: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>
 }
 const Ic = ({ n, s = 22 }) => <svg viewBox="0 0 24 24" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{ICN[n]}</svg>
@@ -251,9 +252,9 @@ function Shell({ user }) {
   useEffect(() => { try { localStorage.setItem('adm-notes', JSON.stringify(notes)) } catch { /* storage unavailable */ } }, [notes])
   const go = t => { setTab(t); history.replaceState(null, '', '#' + t); document.querySelector('.scr')?.scrollTo?.(0, 0) }
   const load = useCallback(async () => {
-    const [o, p, c, w, sp, rr, hv, so, rd, dv, ro] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false }), sb.from('return_requests').select('*').order('created_at', { ascending: false }).limit(500), sb.from('seller_handovers').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'seller_ops').maybeSingle(), sb.from('riders').select('*').order('created_at', { ascending: false }), sb.from('deliveries').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'rider_ops').maybeSingle()])
+    const [o, p, c, w, sp, rr, hv, so, rd, dv, ro, chq] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false }), sb.from('return_requests').select('*').order('created_at', { ascending: false }).limit(500), sb.from('seller_handovers').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'seller_ops').maybeSingle(), sb.from('riders').select('*').order('created_at', { ascending: false }), sb.from('deliveries').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'rider_ops').maybeSingle(), sb.from('courier_handoffs').select('*').order('booked_at', { ascending: false }).limit(1000)])
     const er = o.error || p.error || c.error; if (er) say(er.message)
-    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error, returns: rr.data || [], retErr: !!rr.error, ho: hv.data || [], hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) }, riders: rd.data || [], ridersErr: !!rd.error, dl: dv.data || [], rops: { ...RO0, ...(ro.data?.value || {}) } }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); dlSeen.current = new Map((dv.data || []).map(x => [x.id, x.status])); setLd(false)
+    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error, returns: rr.data || [], retErr: !!rr.error, ho: hv.data || [], hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) }, riders: rd.data || [], ridersErr: !!rd.error, dl: dv.data || [], rops: { ...RO0, ...(ro.data?.value || {}) }, ch: chq.data || [], chErr: !!chq.error }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); dlSeen.current = new Map((dv.data || []).map(x => [x.id, x.status])); setLd(false)
   }, [say])
   useEffect(() => {
     const later = () => { clearTimeout(lt.current); lt.current = setTimeout(load, 400) } // coalesce bursts of realtime events
@@ -268,6 +269,7 @@ function Shell({ user }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'seller_handovers' }, p => { const r = p.new || {}, was = hoSeen.current.get(r.id); hoSeen.current.set(r.id, r.status); if (was !== r.status) { if (r.status === 'packed') { say('📦 A seller packed an order'); push({ k: 'shop', title: 'Seller packed an order', sub: r.rider_name ? 'Rider ' + r.rider_name + ' can collect it' : 'Assign a rider to collect it', oid: r.order_id }) } else if (r.status === 'picked') push({ k: 'order', title: 'Parcel handed to rider', sub: 'Seller confirmed with the pickup code', oid: r.order_id }) } later() })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'return_requests' }, p => { const r = p.new || {}; say('↩ Return requested #' + r.order_no); push({ k: 'ret', title: 'Return requested #' + r.order_no, sub: (r.reason || 'Return') + ' · ' + taka(r.amount), rid: r.id }); later() })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'return_requests' }, p => { const r = p.new || {}; if (r.seller_response && r.seller_response !== p.old?.seller_response) push({ k: 'ret', title: (r.seller_response === 'dispute' ? 'Seller disputed return #' : 'Seller agreed to return #') + r.order_no, sub: r.seller_note || r.reason || '', rid: r.id }); later() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'courier_handoffs' }, p => { const r = p.new || {}; if (r.status === 'handed' && p.old?.status !== 'handed') { say('📦 Seller handed a parcel to ' + (r.courier || 'Pathao')); push({ k: 'order', title: 'Handed to ' + (r.courier || 'Pathao'), sub: 'Consignment ' + (r.consignment_id || ''), oid: r.order_id }) } later() })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'riders' }, p => { const r = p.new || {}; say('🛵 New rider: ' + (r.name || 'rider')); push({ k: 'shop', title: 'New rider to verify', sub: (r.name || 'Rider') + (r.area ? ' · ' + r.area : '') }); later() })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'riders' }, p => { const r = p.new; const old = r?.user_id && ridersRef.current.find(y => y.user_id === r.user_id); if (!old || old.status !== r.status) return later(); setD(x => ({ ...x, riders: x.riders.map(y => y.user_id === r.user_id ? { ...y, ...r } : y) })) })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, p => { const r = p.new || {}, was = dlSeen.current.get(r.id); if (r.id) dlSeen.current.set(r.id, r.status); if (r.status && was && was !== r.status) { if (r.status === 'failed') { say('⚠️ A rider could not deliver'); push({ k: 'order', title: 'Delivery failed', sub: r.fail_reason || 'Rider could not deliver', oid: r.order_id }) } else if (r.status === 'delivered') push({ k: 'order', title: 'Delivered by rider', sub: 'Customer code confirmed', oid: r.order_id }) } if (r.status === 'assigned' && !r.rider_id && r.fail_reason) push({ k: 'order', title: 'Rider declined a job', sub: r.fail_reason, oid: r.order_id }); later() })
@@ -289,7 +291,7 @@ function Shell({ user }) {
     <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
     <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => sb.auth.signOut()}><Ic n="out" s={20} /></button></div></header>
       <div className="scr">
-      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'riders' ? <Riders {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
+      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'promo' ? <Promos {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'riders' ? <Riders {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
     {nOpen && <Notifs orders={d.orders} shops={d.shops || []} rets={d.returns || []} ho={d.ho || []} onReturn={openReturn} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
     {toast && <div className="toast" role="status">{toast}</div>}</div>
 }
@@ -383,7 +385,7 @@ const OrderCard = memo(function OrderCard({ o, hs, dv, onOpen, onNext }) {
   </article>
 })
 
-function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [], riders = [], dl = [], ridersErr }, reload, say, focus, clearFocus, openReturn, pre, clearPre }) {
+function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [], riders = [], dl = [], ridersErr, ch = [], chErr }, reload, say, focus, clearFocus, openReturn, pre, clearPre }) {
   const [f, setF] = useState('all'), [q, setQ] = useState(''), [rg, setRg] = useState('all'), [sel, setSel] = useState(null), [busy, setBusy] = useState(false), [vo, setVo] = useState(false), [lim, setLim] = useState(PAGE), [inv, setInv] = useState(false), bz = useRef(false)
   const [po, setPo] = useState(false), [nr, setNr] = useState(false), [cb, setCb] = useState(false)
   const dby = useMemo(() => { const rn = new Map(riders.map(r => [r.user_id, (r.name || '').split(' ')[0]])); return new Map(dl.map(x => [String(x.order_id), { ...x, rname: rn.get(x.rider_id) || '' }])) }, [dl, riders])
@@ -456,7 +458,7 @@ function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [],
       <div className="steps">{STEPS.map((s, i) => <button key={s} disabled={busy} className={st === i ? 'on' : st > i ? 'dn' : ''} onClick={() => setStatus(cur, i)}>{st > i ? '✓ ' : ''}{s}</button>)}</div>
       {curRet && <button className={'mq rq2 rlink ' + curRet.status} onClick={() => { closeSel(); openReturn(curRet.id) }}><span className="mq-i"><Ic n="returns" s={20} /></span><span className="g1"><b>Return {RLBL[curRet.status].toLowerCase()}</b><small>{curRet.kind === 'replace' ? 'Replacement' : 'Refund'} · {curRet.reason} · {taka(curRet.amount)}</small></span><Ic n="chev" s={18} /></button>}
       <div className="cu"><span className="av lg">{ini(cur.address?.name)}</span><span className="g1"><b>{cur.address?.name}</b><small>{ph}</small></span><span className={'pl s' + st}>{STEPS[st]}</span></div>
-      <ZoneCard o={cur} dv={dby.get(String(cur.id))} riders={riders} reload={reload} say={say} />
+      <ZoneCard o={cur} dv={dby.get(String(cur.id))} riders={riders} reload={reload} say={say} shops={shops} products={products} ch={ch} chErr={chErr} />
       {modeOf(cur) !== 'courier' && <Delivery o={cur} dv={dby.get(String(cur.id))} riders={riders} dl={dl} err={ridersErr} reload={reload} say={say} />}
       {(hby.get(String(cur.id)) || []).length > 0 && <Pickups o={cur} hs={hby.get(String(cur.id))} shops={shops} products={products} reload={reload} say={say} />}
       <div className="qa">{ph && <a className="bt g sm" href={'tel:' + ph}><Ic n="phone" s={16} />Call</a>}{ph && <a className="bt sm wa" href={wa(ph, WA[defTpl(cur)][2](cur))} target="_blank" rel="noopener noreferrer"><Ic n="chat" s={16} />WhatsApp</a>}</div>
@@ -473,14 +475,14 @@ function Orders({ d: { orders, returns = [], ho = [], shops = [], products = [],
       <div className="cd ad"><p>{cur.address?.address || '—'}</p>{cur.address?.note && <p className="mut">Note: {cur.address.note}</p>}<button className="bt g sm" onClick={() => copy(cur.address?.address, 'Address')}><Ic n="copy" s={15} />Copy address</button></div>
       <h3>Items</h3>
       {(cur.items || []).map((i, ix) => <div className="ln it" key={i.key || ix}><span className="th">{i.image_url ? <img src={i.image_url} alt="" loading="lazy" decoding="async" /> : i.emoji || '🛍️'}</span><span className="g1"><b>{i.name}</b><small>{i.variant ? i.variant + ' · ' : ''}{taka(i.price)} × {i.qty}</small></span><b>{taka(i.price * i.qty)}</b></div>)}
-      <div className="sm2"><div><span>Subtotal</span><span>{taka(sub)}</span></div>{sub + (+cur.delivery_fee || 0) - cur.total > 0.5 && <div><span>Discount</span><span className="ok">−{taka(sub + (+cur.delivery_fee || 0) - cur.total)}</span></div>}{cur.delivery_fee != null && <div><span>Delivery{cur.delivery_km != null && ` · ${(+cur.delivery_km).toFixed(1)} km`}</span><span>{taka(cur.delivery_fee)}</span></div>}<div><span>Payment</span><span>{cur.payment} · {payLabel(cur)}</span></div><div className="tt"><span>Total</span><span>{taka(cur.total)}</span></div></div>
+      <div className="sm2"><div><span>Subtotal</span><span>{taka(sub)}</span></div>{sub + (+cur.delivery_fee || 0) - cur.total > 0.5 && <div><span>Discount{cur.coupon_code ? ' · ' + cur.coupon_code : ''}{cur.shop_discounts && Object.keys(cur.shop_discounts).length ? ' (shop pays)' : ''}</span><span className="ok">−{taka(sub + (+cur.delivery_fee || 0) - cur.total)}</span></div>}{cur.delivery_fee != null && <div><span>Delivery · {ZONE[orderZone(cur)]?.name || 'zone'}{cur.delivery_km != null && ` · ${(+cur.delivery_km).toFixed(1)} km`}</span><span>{cur.free_delivery ? 'Free' : taka(cur.delivery_fee)}</span></div>}<div><span>Payment</span><span>{cur.payment} · {payLabel(cur)}</span></div><div className="tt"><span>Total</span><span>{taka(cur.total)}</span></div></div>
       <p className="mut">Placed {fmt(cur.created_at)} · {ago(cur.created_at)}</p>
     </Modal>}
     {cur && inv && <Invoice o={cur} onClose={closeInv} />}</div>
 }
 
 // Who delivers this order: Pinkish rider (≤ 4 km from the hub) or Pathao / partner courier. Live map + courier booking.
-function ZoneCard({ o, dv, riders, reload, say }) {
+function ZoneCard({ o, dv, riders, reload, say, shops = [], products = [], ch = [], chErr }) {
   const mode = modeOf(o), km = orderKm(o), ad = o.address || {}, st = o.status || 0, home = okLL(ad.lat, ad.lng)
   const r = dv?.rider_id && ['accepted', 'out'].includes(dv.status) ? riders.find(x => x.user_id === dv.rider_id) : null
   const live = r && okLL(r.last_lat, r.last_lng) && fresh(r.last_seen) ? r : null
@@ -510,7 +512,7 @@ function ZoneCard({ o, dv, riders, reload, say }) {
   }
   const brief = `${ad.name || 'Customer'}\n${ad.phone || ''}\n${ad.address || ''}${ad.note ? '\nNote: ' + ad.note : ''}\nOrder #${o.order_no} · ${(o.items || []).reduce((a, i) => a + (+i.qty || 1), 0)} item(s)\nCollect (COD): ${cod ? taka(cod) : '0 (paid online)'}`
   return <><h3>Delivery zone</h3><div className={'cd zn ' + mode}>
-    <div className="zn-h"><span className="mq-i"><Ic n={mode === 'courier' ? 'pkg' : 'riders'} s={20} /></span><span className="g1"><b>{mode === 'courier' ? 'Pathao / partner courier' : 'Pinkish rider'}</b><small>{km == null ? 'Customer did not pin a location · check the address' : `${kmTxt(km)} from ${HUB.name} · ${km <= RIDER_KM ? 'inside' : 'outside'} the ${RIDER_KM} km rider zone`}</small></span>
+    <div className="zn-h"><span className="mq-i"><Ic n={mode === 'courier' ? 'pkg' : 'riders'} s={20} /></span><span className="g1"><b>{mode === 'courier' ? 'Pathao / partner courier' : 'Pinkish rider'}</b><small>{km == null ? 'Customer did not pin a location · check the address' : `${ZONE[orderZone(o)]?.name || ''} · ${kmTxt(km)} from ${HUB.name}`}</small></span>
       {st < 3 && st !== 4 && <button className="bt g sm" disabled={busy} onClick={() => setMode(mode === 'courier' ? 'pinkish' : 'courier')}>{mode === 'courier' ? 'Use a rider' : 'Send by courier'}</button>}</div>
     {(home || live) && <LiveMap markers={markers} zone follow={live ? 'rider' : undefined} height={220} chip={live ? { text: `${live.name.split(' ')[0]} · ${seenAgo(live.last_seen)}`, old: !fresh(live.last_seen, 2) } : null} />}
     {mode === 'courier' && <div className="zn-c">{o.courier_tracking && <p className="ok">✓ Booked with {o.courier_name} · <b>{o.courier_tracking}</b>{o.courier_booked_at ? ' · ' + ago(o.courier_booked_at) : ''}{safeUrl(o.courier_url) && <> · <a href={safeUrl(o.courier_url)} target="_blank" rel="noopener noreferrer">Track</a></>}</p>}
@@ -519,8 +521,117 @@ function ZoneCard({ o, dv, riders, reload, say }) {
         <div className="pk-r">{f.name === 'Other' && <input className="in" placeholder="Courier name" maxLength={30} value={f.other || ''} onChange={e => setF(x => ({ ...x, other: e.target.value }))} />}<input className="in" placeholder="Tracking / consignment ID" maxLength={40} value={f.id || ''} onChange={e => setF(x => ({ ...x, id: e.target.value }))} /><button className="bt sm" disabled={busy} onClick={book}>{o.courier_tracking ? 'Update' : 'Save booking'}</button></div>
         {(f.name === 'Other' || !tpl.url) && <input className="in" type="url" placeholder="Tracking link (https://…, optional)" value={f.url || ''} onChange={e => setF(x => ({ ...x, url: e.target.value }))} />}
         <div className="acts"><button className="bt g sm" onClick={() => navigator.clipboard?.writeText(brief).then(() => say('Parcel details copied'), () => say('Could not copy'))}><Ic n="copy" s={15} />Copy parcel details</button>{tpl.panel && <a className="bt g sm" href={tpl.panel} target="_blank" rel="noopener noreferrer">Open {tpl.k} panel</a>}</div>
-        <p className="mut">Book the parcel in the courier's merchant panel (COD {cod ? taka(cod) : '৳0, paid online'}), then save the tracking ID here. The customer is notified and can track it in the app.</p></>}</div>}
+        <p className="mut">Book the parcel in the courier's merchant panel (COD {cod ? taka(cod) : '৳0, paid online'}), then save the tracking ID here. The customer is notified and can track it in the app.</p></>}
+      <Direct o={o} shops={shops} products={products} ch={ch} chErr={chErr} reload={reload} say={say} cod={cod} />
+    </div>}
   </div></>
+}
+
+// Seller → Pathao direct: Pinkish books Pathao in its own merchant account with the SELLER as pickup point,
+// so the parcel never travels to the hub. The seller only sees the order number and consignment ID.
+function Direct({ o, shops, products, ch, chErr, reload, say, cod }) {
+  const sm = useMemo(() => new Map(shops.map(x => [x.id, x])), [shops]), pm = useMemo(() => new Map(products.map(p => [String(p.id), p.shop_id])), [products])
+  const groups = useMemo(() => { const m = new Map(); (o.items || []).forEach(i => { const k = i.shop_id || pm.get(String(i.id)); if (k) m.set(k, [...(m.get(k) || []), i]) }); return [...m] }, [o.items, pm])
+  const mine = useMemo(() => new Map(ch.filter(x => String(x.order_id) === String(o.id)).map(x => [x.shop_id, x])), [ch, o.id])
+  const [f, setF] = useState({}), [busy, setBusy] = useState(''), st = o.status || 0
+  if (!groups.length) return null
+  const save = async sid => {
+    const v = f[sid] || {}, x = mine.get(sid), id = String(v.id ?? x?.consignment_id ?? '').trim()
+    if (id.length < 3) return say('Enter the consignment ID from Pathao')
+    const name = v.courier || x?.courier || 'Pathao', tpl = COURIERS.find(c => c.k === name)
+    setBusy(sid)
+    const { error } = await sb.rpc('admin_book_direct', { p_order: o.id, p_shop: sid, p_courier: name, p_consignment: id, p_url: trackUrl(tpl?.url, id, o.address?.phone) || null, p_note: (v.note ?? x?.note ?? '').trim() || null })
+    setBusy(''); if (error) return say(/does not exist|schema cache|could not find/i.test(error.message) ? 'Run supabase-marketplace-v5.sql first' : error.message)
+    say('Pickup booked · the seller sees the consignment ID'); reload()
+  }
+  const cancel = async x => { if (!confirm('Cancel this direct pickup? The seller will hand the parcel to a Pinkish rider instead.')) return; const { error } = await sb.from('courier_handoffs').update({ status: 'cancelled' }).eq('id', x.id); if (error) return say(error.message); say('Direct pickup cancelled'); reload() }
+  const brief = (s, its) => `PICKUP (seller): ${s?.name || 'Seller'}\n${s?.address || ''}${s?.city ? ', ' + s.city : ''}\nPhone: ${s?.phone || '—'}\n\nDELIVER TO: ${o.address?.name || 'Customer'}\n${o.address?.phone || ''}\n${o.address?.address || ''}${o.address?.note ? '\nNote: ' + o.address.note : ''}\n\nOrder #${o.order_no} · ${its.map(i => i.name + ' ×' + i.qty).join(', ')}\nCOD: ${groups.length > 1 ? 'split per parcel' : cod ? taka(cod) : '0 (paid online)'}`
+  return <div className="dr"><h4><Ic n="truck" s={16} />Direct from seller (no hub trip)</h4>
+    {chErr && <p className="wn">Direct pickups are not set up yet. Run <b>supabase-marketplace-v5.sql</b>.</p>}
+    {groups.length > 1 && <p className="mut">This order has items from {groups.length} sellers: each sends its own parcel, so book one consignment per seller (Pinkish pays the extra courier charge), or collect through the hub instead.</p>}
+    {groups.map(([sid, its]) => { const s = sm.get(sid), x = mine.get(sid), v = f[sid] || {}, live = x && x.status !== 'cancelled'
+      return <div className={'cd dr-s' + (x?.status === 'handed' ? ' ok' : '')} key={sid}>
+        <div className="pk-h"><span className="sc-av">{s?.logo_url ? <img src={s.logo_url} alt="" loading="lazy" /> : ini(s?.name)}</span><span className="g1"><b>{s?.name || 'Seller'}</b><small>{[s?.address, s?.city].filter(Boolean).join(', ') || 'No address'}{okLL(s?.lat, s?.lng) ? ' · pinned' : ''}</small></span>{live && <span className={'pl ' + (x.status === 'handed' ? 's3' : 's1')}>{x.status === 'handed' ? 'Handed ' + ago(x.handed_at) : 'Waiting for courier'}</span>}</div>
+        <div className="pk-its">{its.map((i, k) => <span key={k}>{i.name}{i.variant && i.variant !== 'Standard' ? ' (' + i.variant + ')' : ''} ×{i.qty}</span>)}</div>
+        {live && <p className="ok">{x.courier} · <b>{x.consignment_id}</b>{safeUrl(x.tracking_url) && <> · <a href={safeUrl(x.tracking_url)} target="_blank" rel="noopener noreferrer">Track</a></>}</p>}
+        {st < 3 && st !== 4 && x?.status !== 'handed' && <>
+          <div className="pk-r"><select className="in" value={v.courier || x?.courier || 'Pathao'} onChange={e => setF(a => ({ ...a, [sid]: { ...v, courier: e.target.value } }))}>{COURIERS.filter(c => c.k !== 'Other').map(c => <option key={c.k}>{c.k}</option>)}</select><input className="in" placeholder="Consignment ID" maxLength={40} value={v.id ?? (live ? x.consignment_id : '') ?? ''} onChange={e => setF(a => ({ ...a, [sid]: { ...v, id: e.target.value } }))} /><button className="bt sm" disabled={busy === sid} onClick={() => save(sid)}>{live ? 'Update' : 'Book pickup'}</button></div>
+          <input className="in" placeholder="Note for the seller (optional, e.g. Pathao comes after 3pm)" maxLength={200} value={v.note ?? x?.note ?? ''} onChange={e => setF(a => ({ ...a, [sid]: { ...v, note: e.target.value } }))} />
+          <div className="acts"><button className="bt g sm" onClick={() => navigator.clipboard?.writeText(brief(s, its)).then(() => say('Pickup + delivery details copied'), () => say('Could not copy'))}><Ic n="copy" s={15} />Copy for Pathao</button><a className="bt g sm" href="https://merchant.pathao.com/" target="_blank" rel="noopener noreferrer">Open Pathao panel</a>{live && <button className="bt g sm" onClick={() => cancel(x)}>Cancel direct pickup</button>}</div></>}
+      </div> })}
+    <p className="mut">In Pathao, add each seller once as a pickup store (Stores → Add store, with their address), then choose it when you create the parcel. Use the consignment ID Pathao gives you here.</p>
+  </div>
+}
+
+// ---------------- Promotions: delivery prices, free delivery, coupons ----------------
+const CP0 = { code: '', title: '', kind: 'percent', value: '', max_discount: '', min_order: '', max_uses: '', per_user: '1', ends_at: '', first_order_only: false, is_public: true, active: true }
+const toLocal = x => { const d = new Date(x); if (isNaN(d)) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
+const cpTxt = c => c.kind === 'free_delivery' ? 'Free delivery' : c.kind === 'percent' ? `${+c.value}% off${c.max_discount ? ' up to ' + taka(c.max_discount) : ''}` : taka(c.value) + ' off'
+function Promos({ d, say }) {
+  const [cfg, setCfg] = useState(null), [f, setF] = useState(null), [busy, setBusy] = useState(false), [list, setList] = useState(null), [cf, setCf] = useState(null), [q, setQ] = useState(''), [err, setErr] = useState('')
+  const sm = useMemo(() => new Map((d.shops || []).map(x => [x.id, x.name])), [d.shops])
+  const loadCfg = useCallback(async () => { const { data } = await sb.from('site_settings').select('value').eq('key', 'delivery').maybeSingle(); const v = { ...DELIVERY0, ...(data?.value || {}) }; setCfg(v); setF({ ...v, free_over: v.free_over ? String(v.free_over) : '' }) }, [])
+  const loadC = useCallback(async () => { const { data, error } = await sb.from('coupons').select('*').order('created_at', { ascending: false }).limit(500); if (error) { setErr(/does not exist|schema cache/i.test(error.message) ? 'Run supabase-marketplace-v5.sql in the Supabase SQL editor to turn on coupons and the new delivery prices.' : error.message); setList([]) } else setList(data || []) }, [])
+  useEffect(() => { loadCfg(); loadC() }, [loadCfg, loadC])
+  const num = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(+v || 0)))
+  const saveCfg = async () => {
+    const v = { inner_fee: num(f.inner_fee, 0, 2000), city_fee: num(f.city_fee, 0, 2000), outside_fee: num(f.outside_fee, 0, 5000), rider_km: Math.min(15, Math.max(1, +f.rider_km || 4)), free_over: f.free_over === '' ? 0 : num(f.free_over, 0, 1e6), free_zones: ['inner', 'city', 'outside'].filter(z => (f.free_zones || []).includes(z)) }
+    setBusy(true); const { error } = await sb.from('site_settings').upsert({ key: 'delivery', value: v, updated_at: new Date().toISOString() }, { onConflict: 'key' }); setBusy(false)
+    if (error) return say(error.message); say('Delivery prices saved. The store uses them now.'); loadCfg()
+  }
+  const saveC = async e => {
+    e.preventDefault()
+    const code = String(cf.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+    if (!/^[A-Z0-9]{3,20}$/.test(code)) return say('Code: 3 to 20 letters or numbers')
+    const value = cf.kind === 'free_delivery' ? 0 : +cf.value
+    if (cf.kind !== 'free_delivery' && (!(value > 0) || (cf.kind === 'percent' && value > 90))) return say(cf.kind === 'percent' ? 'Percent off must be 1 to 90' : 'Enter the taka off')
+    const ends = cf.ends_at ? new Date(cf.ends_at) : null
+    const row = { code, title: String(cf.title || '').trim().slice(0, 60) || null, kind: cf.kind, value, max_discount: cf.kind === 'percent' && cf.max_discount !== '' ? +cf.max_discount : null, min_order: +cf.min_order || 0, max_uses: cf.max_uses === '' || cf.max_uses == null ? null : Math.max(1, parseInt(cf.max_uses, 10) || 1), per_user: Math.min(100, Math.max(1, parseInt(cf.per_user, 10) || 1)), ends_at: ends && !isNaN(ends) ? ends.toISOString() : null, first_order_only: !!cf.first_order_only, is_public: cf.is_public !== false, active: cf.active !== false }
+    setBusy(true)
+    const { error } = cf.id ? await sb.from('coupons').update(row).eq('id', cf.id) : await sb.from('coupons').insert(row)
+    setBusy(false); if (error) return say(/duplicate|unique/i.test(error.message) ? 'That code already exists' : error.message)
+    say(cf.id ? 'Coupon saved' : `Coupon ${code} created`); setCf(null); loadC()
+  }
+  const upd = async (c, patch, m) => { const { error } = await sb.from('coupons').update(patch).eq('id', c.id); if (error) return say(error.message); say(m); loadC() }
+  const del = async c => { if (!confirm(`Delete coupon ${c.code}? Orders that used it keep their discount.`)) return; const { error } = await sb.from('coupons').delete().eq('id', c.id); if (error) return say(error.message); say('Coupon deleted'); loadC() }
+  const shown = useMemo(() => { const k = q.trim().toUpperCase(); return (list || []).filter(c => !k || c.code.includes(k) || (sm.get(c.shop_id) || '').toUpperCase().includes(k)) }, [list, q, sm])
+  const now = Date.now(), state = c => !c.active ? ['Off', ''] : c.ends_at && new Date(c.ends_at) < now ? ['Ended', 'bad'] : c.max_uses && c.used_count >= c.max_uses ? ['Used up', 'bad'] : ['Live', 's3']
+  // money check: what each zone earns or loses against Pathao for a small parcel (+1% COD on a ৳1,000 order)
+  const margin = f && [['inner', 'Pinkish rider zone', +f.inner_fee, null], ['city', 'Chattogram city', +f.city_fee, 60], ['outside', 'Rest of Bangladesh', +f.outside_fee, 120]]
+  return <div className="pg">
+    {err && <p className="wn cd">{err}</p>}
+    {f && <section className="cd pr-d"><h2>Delivery prices</h2>
+      <p className="mut">The store, cart and checkout use these at once, and the database checks every Cash on Delivery order with the same numbers.</p>
+      <div className="pr-z">{margin.map(([k, l, fee, pathao]) => <F key={k} l={`${l}${k === 'inner' ? ` (≤ ${f.rider_km} km of ${HUB.name})` : ''}`}><span className="pf"><i>৳</i><input className="in" type="number" inputMode="numeric" min="0" value={f[k + '_fee']} onChange={e => setF(x => ({ ...x, [k + '_fee']: e.target.value }))} /></span>
+        <small className={'pr-m' + (pathao != null && fee < pathao + 10 ? ' lo' : '')}>{pathao == null ? 'Your own rider · rider fee is in Rider rules' : `Pathao ৳${pathao} + ~৳10 COD fee → ${fee - pathao - 10 >= 0 ? 'you keep ৳' + (fee - pathao - 10) : 'you pay ৳' + (pathao + 10 - fee)} per ≤500 g parcel`}</small></F>)}</div>
+      <div className="fg"><F l="Pinkish rider radius (km)"><input className="in" type="number" inputMode="decimal" min="1" max="15" step="0.5" value={f.rider_km} onChange={e => setF(x => ({ ...x, rider_km: e.target.value }))} /></F>
+        <F l="Free delivery on Cash on Delivery orders over (৳, empty = off)"><span className="pf"><i>৳</i><input className="in" type="number" inputMode="numeric" min="0" placeholder="Off" value={f.free_over} onChange={e => setF(x => ({ ...x, free_over: e.target.value }))} /></span></F></div>
+      <div className="pr-fz"><span>Free delivery applies in:</span>{[['inner', 'Rider zone'], ['city', 'Chattogram city'], ['outside', 'Rest of Bangladesh']].map(([k, l]) => <label key={k}><input type="checkbox" checked={(f.free_zones || []).includes(k)} onChange={e => setF(x => ({ ...x, free_zones: e.target.checked ? [...new Set([...(x.free_zones || []), k])] : (x.free_zones || []).filter(z => z !== k) }))} />{l}</label>)}</div>
+      <details className="pr-rates"><summary>Courier rates for a Chattogram merchant (checked Nov 2026)</summary><table><thead><tr><th>Courier</th><th>Inside Chattogram</th><th>Other cities</th><th>Details</th></tr></thead><tbody>{COURIER_RATES.map(r => <tr key={r.k}><td>{r.k}</td><td>{taka(r.city)}</td><td>{taka(r.outside)}</td><td>{r.note}</td></tr>)}</tbody></table><p className="mut">Heavier parcels cost more (Pathao +৳15/kg in the same city, +৳25/kg between cities above 2 kg). Returned parcels outside the city cost about 50% of the charge. Recheck the rates in each courier's merchant panel before changing prices.</p></details>
+      <div className="acts"><button className="bt" disabled={busy || JSON.stringify(f) === JSON.stringify({ ...cfg, free_over: cfg.free_over ? String(cfg.free_over) : '' })} onClick={saveCfg}>{busy ? 'Saving…' : 'Save delivery prices'}</button></div>
+    </section>}
+    <section className="cd"><div className="pr-h"><h2>Coupons</h2>{!cf && <button className="bt sm" onClick={() => setCf({ ...CP0 })}><Ic n="plus" s={16} />New coupon</button>}</div>
+      <p className="mut">Store-wide coupons are paid by Pinkish. Shop coupons are created by sellers in Seller Centre and paid by the shop. Coupons work on Cash on Delivery orders; each order can use one.</p>
+      {cf && <form className="cd pr-f" onSubmit={saveC}>
+        <div className="fg"><F l="Code"><input className="in" value={cf.code} disabled={!!cf.id} onChange={e => setCf(x => ({ ...x, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20) }))} placeholder="EID100" /></F><F l="Title (shown to customers)"><input className="in" maxLength={60} value={cf.title || ''} onChange={e => setCf(x => ({ ...x, title: e.target.value }))} placeholder="Eid gift: ৳100 off" /></F></div>
+        <div className="fg"><F l="Type"><select className="in" value={cf.kind} disabled={!!cf.shop_id} onChange={e => setCf(x => ({ ...x, kind: e.target.value }))}><option value="percent">% off</option><option value="amount">৳ off</option>{!cf.shop_id && <option value="free_delivery">Free delivery</option>}</select></F>
+          {cf.kind !== 'free_delivery' && <F l={cf.kind === 'percent' ? 'Percent off (1–90)' : 'Taka off'}><input className="in" type="number" inputMode="decimal" min="1" value={cf.value} onChange={e => setCf(x => ({ ...x, value: e.target.value }))} /></F>}</div>
+        <div className="fg"><F l="Minimum order (৳)"><input className="in" type="number" inputMode="numeric" min="0" value={cf.min_order} onChange={e => setCf(x => ({ ...x, min_order: e.target.value }))} placeholder="0" /></F>{cf.kind === 'percent' && <F l="Maximum discount (৳, optional)"><input className="in" type="number" inputMode="numeric" min="1" value={cf.max_discount} onChange={e => setCf(x => ({ ...x, max_discount: e.target.value }))} placeholder="No limit" /></F>}</div>
+        <div className="fg"><F l="Total uses (optional)"><input className="in" type="number" inputMode="numeric" min="1" value={cf.max_uses} onChange={e => setCf(x => ({ ...x, max_uses: e.target.value }))} placeholder="No limit" /></F><F l="Uses per customer"><input className="in" type="number" inputMode="numeric" min="1" max="100" value={cf.per_user} onChange={e => setCf(x => ({ ...x, per_user: e.target.value }))} /></F></div>
+        <div className="fg"><F l="Ends (optional)"><input className="in" type="datetime-local" value={cf.ends_at} onChange={e => setCf(x => ({ ...x, ends_at: e.target.value }))} /></F></div>
+        <div className="pr-fz"><label><input type="checkbox" checked={!!cf.first_order_only} onChange={e => setCf(x => ({ ...x, first_order_only: e.target.checked }))} />First order only</label><label><input type="checkbox" checked={cf.is_public !== false} onChange={e => setCf(x => ({ ...x, is_public: e.target.checked }))} />Show in the cart</label></div>
+        <div className="acts"><button className="bt" disabled={busy}>{busy ? 'Saving…' : cf.id ? 'Save coupon' : 'Create coupon'}</button><button type="button" className="bt g" onClick={() => setCf(null)}>Cancel</button></div>
+      </form>}
+      {list === null ? <div className="ctr"><i className="spin" /></div> : <>
+        {list.length > 6 && <label className="sr"><Ic n="search" s={18} /><input className="in" type="search" placeholder="Search code or shop" value={q} onChange={e => setQ(e.target.value)} /></label>}
+        <div className="pr-l">{shown.map(c => { const [lb, cls] = state(c); return <div className="pr-c" key={c.id}>
+          <span className="pr-code">{c.code}</span>
+          <span className="g1"><b>{c.title || cpTxt(c)}</b><small>{[c.title ? cpTxt(c) : '', +c.min_order > 0 ? 'min ' + taka(c.min_order) : '', c.shop_id ? 'Shop: ' + (sm.get(c.shop_id) || 'seller') : 'Store-wide', c.first_order_only ? 'first order' : '', `${c.used_count} used${c.max_uses ? ' / ' + c.max_uses : ''}`, c.ends_at ? 'ends ' + fmt(c.ends_at) : '', c.is_public ? '' : 'private'].filter(Boolean).join(' · ')}</small></span>
+          <span className={'pl ' + cls}>{lb}</span>
+          <span className="acts"><button className="bt g sm" onClick={() => upd(c, { active: !c.active }, c.active ? 'Coupon turned off' : 'Coupon is live')}>{c.active ? 'Turn off' : 'Turn on'}</button><button className="bt g sm" onClick={() => setCf({ ...CP0, ...c, value: String(c.value), max_discount: c.max_discount ? String(c.max_discount) : '', min_order: c.min_order ? String(c.min_order) : '', max_uses: c.max_uses ? String(c.max_uses) : '', per_user: String(c.per_user || 1), ends_at: c.ends_at ? toLocal(c.ends_at) : '' })}>Edit</button><button className="bt d sm" aria-label={'Delete ' + c.code} onClick={() => del(c)}><Ic n="trash" s={15} /></button></span></div> })}
+          {!shown.length && <p className="mut pad">No coupons yet.</p>}</div></>}
+    </section>
+  </div>
 }
 
 // Live map of every online rider and every active Pinkish delivery (updates as riders move)
@@ -792,7 +903,7 @@ function Shops({ d: { shops = [], products, orders, shopsErr, ho = [], hoErr, op
 }
 
 // ---------------- Riders: the Pinkish Rider app (/rider). Run supabase-riders.sql first. ----------------
-const RO0 = { fee: 60, require_code: true, pool: true, max_active: 5, support_phone: '', notice: '' }
+const RO0 = { fee: 60, require_code: false, pool: true, max_active: 5, support_phone: '', notice: '' }
 const RIDER_LBL = { pending: 'Pending review', approved: 'Active', rejected: 'Rejected', suspended: 'Paused' }
 const RIDER_PL = { pending: 's1', approved: 's3', rejected: '', suspended: 'bad' }
 const RIDER_TABS = [['pending', 'Pending', 'clock', 1], ['approved', 'Active', 'shield', 3], ['rejected', 'Rejected', 'alert', 0], ['suspended', 'Paused', 'ban', 2]]
@@ -849,7 +960,7 @@ function RiderOps({ rops, say, reload }) {
     {open && <div className="sop-b">
       <div className="fg"><F l="Rider pay per delivery (৳)"><span className="pf"><i>৳</i><input className="in" type="number" min="0" max="5000" inputMode="numeric" value={f.fee} onChange={set('fee')} /></span></F>
         <F l="Max jobs at once per rider"><input className="in" type="number" min="1" max="20" inputMode="numeric" value={f.max_active} onChange={set('max_active')} /></F></div>
-      <div className="fg"><F l="Proof of delivery"><select className="in" value={String(f.require_code)} onChange={set('require_code')}><option value="true">Customer's 4-digit code (recommended)</option><option value="false">No code (rider just confirms)</option></select></F>
+      <div className="fg"><F l="Proof of delivery"><select className="in" value={String(f.require_code)} onChange={set('require_code')}><option value="false">No code: the rider confirms delivery (default)</option><option value="true">Customer's 4-digit code (extra check)</option></select></F>
         <F l="How riders get jobs"><select className="in" value={String(f.pool)} onChange={set('pool')}><option value="true">Riders can also take open jobs</option><option value="false">Only admin assigns jobs</option></select></F></div>
       <F l="Support phone (riders can call it from the app)"><input className="in" type="tel" inputMode="tel" maxLength={16} value={f.support_phone} onChange={set('support_phone')} placeholder="01XXXXXXXXX" /></F>
       <F l={`Notice to all riders (optional) · ${String(f.notice || '').length}/400`}><textarea className="in" rows="2" maxLength={400} value={f.notice} onChange={set('notice')} placeholder="e.g. Rain today: keep parcels in plastic bags." /></F>

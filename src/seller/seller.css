@@ -528,3 +528,24 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px #fff inset;-webkit-text-fil
 .sl-zone{display:flex;gap:8px;align-items:flex-start;margin:0;padding:10px 12px;border-radius:14px;background:#fff4e5;color:#9a5a00;font-size:.84rem;font-weight:600;line-height:1.4}
 .sl-zone.in{background:#e4f6ec;color:var(--ok)}.sl-zone .ico{flex:none;margin-top:2px}
 .sl-live{display:grid;gap:6px}.sl-live .sl-mut{margin:0;font-size:.8rem}
+
+/* ---------- offline bar (shown when the phone loses internet) ---------- */
+.sl-offline{flex:none;position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 14px;background:linear-gradient(120deg,#2d0b4a,#5a1a7c);color:#fff;font-size:.84rem;font-weight:600;text-align:center;line-height:1.35}
+.sl-offline::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;background:#ffb04a;box-shadow:0 0 0 3px #ffb04a44}
+@media(max-width:899px){.sl-offline{padding:calc(8px + env(safe-area-inset-top)) 14px 8px}}
+/* ---------- v5: Pathao direct pickup + shop coupons ---------- */
+.sl-ptao{display:grid;gap:10px;padding:12px;border-radius:18px;background:#fff8ec;border:1px solid #f6dcb3}
+.sl-ptao.dn{background:#e9f8ef;border-color:#bfe5cf}
+.sl-ptao-h{display:flex;align-items:center;gap:10px}
+.sl-ptao-h .ic{flex:none;width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:#fff;color:#b86e00}
+.sl-ptao-h>span:nth-child(2){flex:1;min-width:0;display:grid}.sl-ptao-h small{font-size:.72rem;color:var(--mut);font-weight:600}
+.sl-ptao-h b{font:700 1rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sl-ptao .sl-how{margin:0}.sl-ptao .sl-mut{margin:0}
+.sl-cpl{display:flex;align-items:center;gap:6px;margin:0 0 8px!important;font-size:.82rem;font-weight:700;color:var(--p3)}
+.sl-cps{display:grid;gap:12px}.sl-cps .sl-head{margin:0}.sl-cps .sl-err,.sl-cps .sl-ok{margin:0}
+.sl-cpf{padding:14px;border-radius:18px;background:#faf5fd;border:1px solid var(--edge)}
+.sl-cpl-l{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.sl-cpl-l li{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:16px;background:#fff;border:1px solid var(--edge)}
+.sl-cpl-l .t{flex:1 1 160px;min-width:0;display:grid}.sl-cpl-l .t b{font-size:.92rem}.sl-cpl-l .t small{font-size:.76rem;color:var(--mut)}
+.sl-cpc{font:700 .85rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;padding:6px 10px;border-radius:10px;background:#fde7f0;color:var(--p3);border:1.5px dashed #f0b4cf}
+.sl-cpl-l .sl-acts{gap:6px}

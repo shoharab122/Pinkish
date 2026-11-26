@@ -1,4 +1,3 @@
-
 // =====================================================================
 // Bangladeshi NID helpers, shared by the Seller Centre and the Rider app.
 // A Bangladeshi NID number has 10 digits (smart card), 13 digits (old card)

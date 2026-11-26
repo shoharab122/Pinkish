@@ -183,7 +183,7 @@ export async function placeOrder(o) {
 const friendlyOrder = e => {
   const m = String(e?.message || '')
   // messages raised on purpose by place_order() are safe and useful to show
-  if (/cart|stock|available|option|quantity|delivery details|deliver inside|Too many|sign in|total|choose/i.test(m)) return m
+  if (/cart|stock|available|option|quantity|delivery details|deliver inside|Too many|sign in|total|choose|coupon|Bangladesh|pin your/i.test(m)) return m
   return 'Could not place your order. Please try again.'
 }
 export async function getOrders(uid) {
@@ -380,4 +380,46 @@ export async function requestReturn({ order, items, kind, reason, details, refun
 export async function myRiderLocation(orderId) {
   if (!supabase || !isUuid(String(orderId))) return null
   try { const { data, error } = await supabase.rpc('my_rider_location', { p_order: String(orderId) }); return error ? null : data || null } catch { return null }
+}
+// ---------------- Delivery pricing + coupons (supabase-marketplace-v5.sql) ----------------
+// Delivery prices (Admin → Promotions) and whether riders still ask for the customer's code.
+// Cached on the device so the cart shows the right prices instantly, then refreshed.
+export async function getDeliveryCfg() {
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase.from('site_settings').select('key,value').in('key', ['delivery', 'rider_ops'])
+    if (error || !data) return null
+    const m = Object.fromEntries(data.map(r => [r.key, r.value || {}]))
+    const v = { ...(m.delivery || {}), require_code: m.rider_ops ? m.rider_ops.require_code !== false : false }
+    sv('pk_dcfg', v); return v
+  } catch { return null }
+}
+export const cachedDeliveryCfg = () => ls('pk_dcfg', null)
+
+const couponErr = e => {
+  const m = String(e?.message || '')
+  if (/does not exist|schema cache|could not find the function/i.test(m)) return 'Coupons are not set up yet.'
+  if (/failed to fetch|network|load failed/i.test(m)) return 'No internet connection. Try again.'
+  return m && m.length < 160 && !/violates|row-level|syntax|pgrst|relation|column/i.test(m) ? m : 'Could not apply the coupon. Try again.'
+}
+// Checks the code against the cart on the server and remembers it for the next Cash on Delivery order.
+// → { code, discount, free_delivery, shop_id, title }
+export async function applyCoupon(code, items) {
+  if (!supabase) throw new Error('Coupons are unavailable right now.')
+  const c = str(code, 20).toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (c.length < 3) throw new Error('Enter a coupon code.')
+  const list = (Array.isArray(items) ? items : []).map(i => ({ id: String(i.id), variant: i.variant || null, qty: i.qty }))
+  const { data, error } = await supabase.rpc('apply_coupon', { p_code: c, p_items: list })
+  if (error) throw new Error(couponErr(error))
+  return data
+}
+export async function clearCoupon() {
+  if (!supabase) return
+  try { await supabase.rpc('clear_cart_coupon') } catch { /* nothing to clear */ }
+}
+// Public coupons: store-wide ones plus those of the given shops
+export async function getPublicCoupons(shopIds = []) {
+  if (!supabase) return []
+  const ids = [...new Set(shopIds.filter(isUuid))]
+  try { const { data, error } = await supabase.rpc('public_coupons', { p_shops: ids.length ? ids : null }); return error ? [] : (data || []) } catch { return [] }
 }

@@ -702,9 +702,9 @@ function Me({ data, user, logout }) {
       <div className="rx-card"><h3>How a job works</h3><ol className="rx-how">
         <li><b>Accept</b> the job (or take one from Open jobs). Pinkish riders cover {RIDER_KM} km around {HUB.name}; orders further away go by courier.</li>
         <li>At the shop, <b>tell the seller the pickup code</b>. Take the parcel only after their app accepts it.</li>
-        <li>Tap <b>Start delivery</b>. The customer gets your name and their delivery code.</li>
-        <li>Hand over the parcel, collect cash if it is COD, and enter the <b>customer's code</b> to finish.</li>
-      </ol><p className="rx-rule"><Ico n="shield" s={15} />Never hand a parcel to anyone without the right code, and never share customer details.</p></div>
+        <li>Tap <b>Start delivery</b>. The customer gets your name{ops.require_code !== false ? ' and their delivery code' : ''}.</li>
+        <li>{ops.require_code !== false ? <>Hand over the parcel, collect cash if it is COD, and enter the <b>customer's code</b> to finish.</> : <>Hand the parcel to the customer named on the job (call them if unsure), collect cash if it is COD, and tap <b>Complete delivery</b>.</>}</li>
+      </ol><p className="rx-rule"><Ico n="shield" s={15} />{ops.require_code !== false ? 'Never hand a parcel to anyone without the right code, and never share customer details.' : 'Hand the parcel only to the customer at the pinned address, and never share customer details.'}</p></div>
       {telHref(ops.support_phone) && <a className="rx-btn wide ghost" href={telHref(ops.support_phone)}><Ico n="phone" s={18} />Call Pinkish support</a>}
       <button className="rx-btn wide dark" onClick={logout}><Ico n="out" s={18} />Sign out</button>
     </div>

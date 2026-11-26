@@ -2,8 +2,8 @@ import React, { memo, useEffect, useState, useCallback, useMemo, useRef, useDefe
 import './seller.css'
 import { signIn, signUp, signOut, onAuthChange, resetPassword, signInWithGoogle, supabase, dealLive, getFollowerCount, productUrl } from '../api.js'
 import { LiveMap, PinPicker, usePoll } from '../lib/LiveMap.jsx'
-import { HUB, RIDER_KM, okLL, kmFromHub, havKm, kmTxt, etaMin, seenAgo, fresh } from '../lib/zone.js'
-import { getMyShop, createShop, resubmitShop, updateShop, removeCover, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion, preparePhoto, sellerReturns, respondReturn, hasContact, setStock, sellerHandovers, markPacked, confirmPickup, getSellerOps, productStats, OPS0, telHref, setShopLocation, riderLocation } from './sellerApi.js'
+import { HUB, RIDER_KM, okLL, kmFromHub, havKm, kmTxt, etaMin, seenAgo, fresh, safeUrl } from '../lib/zone.js'
+import { getMyShop, createShop, resubmitShop, updateShop, removeCover, getCategoriesList, myProducts, saveProduct, deleteProduct, sellerOrders, validPhone, validNid, PHOTOS, existingImages, sellerQuestions, answerQuestion, preparePhoto, sellerReturns, respondReturn, hasContact, setStock, sellerHandovers, markPacked, confirmPickup, getSellerOps, productStats, OPS0, telHref, setShopLocation, riderLocation, sellerExtras, courierHanded, myCoupons, saveCoupon, setCouponActive, deleteCoupon } from './sellerApi.js'
 
 const taka = n => '৳' + Number(n || 0).toLocaleString('en-BD')
 const when = d => { try { return new Date(d).toLocaleString('en-BD', { dateStyle: 'medium', timeStyle: 'short' }) } catch { return '' } }
@@ -59,6 +59,7 @@ const IC = {
   dl: <><path d="M12 4v11M7 10l5 5 5-5" /><path d="M4 19h16" /></>,
   chev: <path d="M9 6l6 6-6 6" />,
   phone: <path d="M5 4h3.5l1.7 4.3-2.2 1.4a11 11 0 0 0 6.3 6.3l1.4-2.2L20 15.5V19a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z" />,
+  tag: <><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z" /><circle cx="8" cy="8" r="1.5" /></>,
 }
 const Ico = ({ n, s = 20 }) => <svg className="ico" width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{IC[n]}</svg>
 const STEP = ['Create account', 'Shop details', 'Verification', 'Start selling']
@@ -485,8 +486,8 @@ function Returns({ onCount }) {
 // Sellers never see the customer (no name, phone or address). They only see where to send the parcel.
 const STG = { pack: ['To pack', 'st0'], ready: ['Ready for pickup', 'st1'], handed: ['With Pinkish', 'st2'], done: ['Delivered', 'approved'], cancel: ['Cancelled', 'rejected'] }
 const OTABS = ['pack', 'ready', 'handed', 'done', 'cancel']
-const stageOf = (o, h) => o.status === 4 || h?.status === 'cancelled' ? 'cancel' : o.status === 3 ? 'done' : (o.status || 0) >= 2 || h?.status === 'picked' ? 'handed' : h?.status === 'packed' ? 'ready' : 'pack'
-const earn = (o, ops) => Number(o.subtotal || 0) * (1 - (Number(ops.commission) || 0) / 100)
+const stageOf = (o, h) => o.status === 4 || h?.status === 'cancelled' ? 'cancel' : o.status === 3 ? 'done' : (o.status || 0) >= 2 || h?.status === 'picked' || o.ship?.ship_status === 'handed' ? 'handed' : h?.status === 'packed' ? 'ready' : 'pack'
+const earn = (o, ops) => Math.max(0, Number(o.subtotal || 0) - Number(o.shop_discount || 0)) * (1 - (Number(ops.commission) || 0) / 100)
 
 // Where the seller sends the parcel: set by Pinkish in the admin (Merchants → Seller rules)
 function SendTo({ ops, shop, compact, open }) {
@@ -498,6 +499,7 @@ function SendTo({ ops, shop, compact, open }) {
       <b>{drop ? 'Drop off at the Pinkish hub' : 'A Pinkish rider collects from you'}</b>
       <p>{drop ? (ops.hub_address || 'Pinkish will tell you the hub address.') : 'Pickup address: ' + (shop.address || 'your shop address')}{ops.hours ? ' · ' + ops.hours : ''}</p>
       {!compact && <details className="sl-hw" open={open}><summary>How handover works</summary><ol className="sl-how"><li>Pack the items and tap <b>Mark packed</b>.</li><li>{drop ? 'Bring the parcel to the hub.' : 'Wait for the Pinkish rider.'} Ask for the <b>4-digit pickup code</b>.</li><li>Enter the code. Only hand the parcel over if the code is accepted.</li></ol>
+        <p className="sl-rule"><Ico n="truck" s={14} />Orders outside Chattogram: Pinkish may book <b>Pathao</b> to collect from you directly. The order then shows a consignment ID. Hand that parcel only to the Pathao rider and tap <b>Handed to Pathao</b>.</p>
         <p className="sl-rule"><Ico n="lock" s={14} />Never give a parcel to the customer or anyone else, and never sell outside Pinkish. Pinkish delivers every order.</p></details>}
     </div>
   </div>
@@ -531,7 +533,27 @@ function RiderComing({ o, shop, on }) {
     {!me && <p className="sl-mut">Set your pickup pin in Shop settings so riders find you faster.</p>}</div>
 }
 
-const SOrder = memo(function SOrder({ o, h, stage, ops, hoOn, img, shop, onPack, onConfirm, say }) {
+// Pinkish booked Pathao to collect this parcel straight from the shop. The seller never sees the customer.
+function PathaoPickup({ o, x, stage, say, onHanded }) {
+  const [busy, setBusy] = useState(false), [err, setErr] = useState('')
+  const done = x.ship_status === 'handed', url = safeUrl(x.tracking_url)
+  const go = async () => {
+    if (!confirm(`Did you hand order #${o.order_no} to the ${x.courier || 'Pathao'} rider? Only confirm after the parcel has left your shop.`)) return
+    setBusy(true); setErr('')
+    try { await courierHanded(o.id); say(`#${o.order_no} handed to ${x.courier || 'Pathao'} ✓`); onHanded() } catch (e) { setErr(msg(e)) }
+    setBusy(false)
+  }
+  return <div className={'sl-ptao' + (done ? ' dn' : '')}>
+    <div className="sl-ptao-h"><span className="ic"><Ico n="truck" s={18} /></span><span><small>{done ? 'Handed to courier' : `${x.courier || 'Pathao'} collects from your shop`}</small><b>{x.courier || 'Pathao'} · {x.consignment_id || 'booking…'}</b></span>{url && <a className="sl-btn ghost sm" href={url} target="_blank" rel="noopener noreferrer">Track</a>}</div>
+    {!done && <ol className="sl-how"><li>Pack the parcel{stage === 'pack' ? ' and tap Mark packed' : ''}. Write <b>#{o.order_no}</b> and <b>{x.consignment_id}</b> on it.</li><li>Give it only to the {x.courier || 'Pathao'} rider who asks for this consignment ID.</li><li>Tap <b>Handed to {x.courier || 'Pathao'}</b>.</li></ol>}
+    {x.note && <p className="sl-mut">Note from Pinkish: {x.note}</p>}
+    {err && <div className="sl-err" role="alert">{err}</div>}
+    {done ? <p className="sl-okline"><Ico n="check" s={16} />Handed {x.handed_at ? when(x.handed_at) : ''}. Pinkish tracks the delivery.</p>
+      : <button type="button" className="sl-btn" disabled={busy || stage === 'pack'} onClick={go}><Ico n="truck" s={17} />{busy ? 'Saving…' : stage === 'pack' ? 'Mark packed first' : `Handed to ${x.courier || 'Pathao'}`}</button>}
+  </div>
+}
+
+const SOrder = memo(function SOrder({ o, h, stage, ops, hoOn, img, shop, onPack, onConfirm, say, reload }) {
   const [tick, setTick] = useState(() => new Set()), [code, setCode] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('')
   const lines = o.lines || [], n = lines.reduce((t, l) => t + Number(l.qty || 0), 0)
   const due = new Date(o.created_at).getTime() + (Number(ops.pack_hours) || 24) * 36e5, left = due - Date.now()
@@ -548,13 +570,15 @@ const SOrder = memo(function SOrder({ o, h, stage, ops, hoOn, img, shop, onPack,
         <span className="sl-lth">{src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <Ico n="bag" s={18} />}</span>
         <span className="sl-lt"><b>{l.name}</b>{l.variant && l.variant !== 'Standard' ? <small>{l.variant}</small> : null}</span><em>× {l.qty}</em></li>
     })}</ul>
+    {+o.shop_discount > 0 && <p className="sl-cpl"><Ico n="tag" s={14} />Your shop coupon: −{taka(o.shop_discount)} on this order</p>}
     {err && <div className="sl-err" role="alert">{err}</div>}
+    {o.ship?.consignment_id && (stage === 'pack' || stage === 'ready') && <PathaoPickup o={o} x={o.ship} stage={stage} say={say} onHanded={reload} />}
     {stage === 'pack' && <div className="sl-oact">
       {hoOn ? <button className="sl-btn" disabled={busy} onClick={() => { if (!all && !confirm('Not every item is ticked. Mark the parcel packed anyway?')) return; run(async () => { await onPack(o, true); say(`#${o.order_no} is packed. ${ops.mode === 'dropoff' ? 'Bring it to the hub.' : 'A rider will collect it.'}`) }) }}><Ico n="pkg" s={18} />{busy ? 'Saving…' : 'Mark packed & ready'}</button>
         : <p className="sl-mut">Pack it now. Pinkish will collect it and update the status.</p>}
       <button className="sl-btn ghost sm" onClick={() => { if (!printSlip(o, shop)) say('Printing is not available on this device.') }}><Ico n="print" s={15} />Packing slip</button>
     </div>}
-    {stage === 'ready' && <div className="sl-hand">
+    {stage === 'ready' && !o.ship?.consignment_id && <div className="sl-hand">
       <RiderComing o={o} shop={shop} on={hoOn && ops.mode !== 'dropoff'} />
       {h?.rider_name ? <div className="sl-rider"><span className="ic"><Ico n="truck" s={18} /></span><span><small>Pinkish rider</small><b>{h.rider_name}</b></span>{telHref(h.rider_phone) && <a className="sl-btn ghost sm" href={telHref(h.rider_phone)}><Ico n="phone" s={15} />Call rider</a>}</div>
         : <p className="sl-mut"><Ico n="clock" s={14} /> {ops.mode === 'dropoff' ? 'Bring the parcel to the hub. Staff there will give you the code.' : 'Pinkish is assigning a rider. You will get a notification.'}</p>}
@@ -564,7 +588,7 @@ const SOrder = memo(function SOrder({ o, h, stage, ops, hoOn, img, shop, onPack,
       </form>
       <button type="button" className="sa-back" disabled={busy} onClick={() => run(() => onPack(o, false))}>Not packed yet? Undo</button>
     </div>}
-    {stage === 'handed' && <p className="sl-okline"><Ico n="check" s={16} />Handed to Pinkish{h?.picked_at ? ' · ' + when(h.picked_at) : ''}. We are delivering it.</p>}
+    {stage === 'handed' && <p className="sl-okline"><Ico n="check" s={16} />{o.ship?.ship_status === 'handed' ? `Handed to ${o.ship.courier || 'Pathao'} · ${o.ship.consignment_id}` : 'Handed to Pinkish'}{(o.ship?.handed_at || h?.picked_at) ? ' · ' + when(o.ship?.handed_at || h.picked_at) : ''}. We are delivering it.</p>}
     {stage === 'done' && <p className="sl-okline"><Ico n="wallet" s={16} />Delivered · your payout {taka(earn(o, ops))}</p>}
     {stage === 'cancel' && <p className="sl-mut">This order was cancelled. If you already packed it, keep the items in stock.</p>}
   </article>
@@ -583,7 +607,7 @@ function Orders({ orders, ho, hoOn, ops, shop, img, reload, say, err }) {
   const onConfirm = useCallback(async (o, c) => { await confirmPickup(o.id, c); await reload() }, [reload])
   const csv = () => {
     const c = v => { v = String(v ?? ''); if (/^[=+\-@\t\r|]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"' }
-    const out = [['Order', 'Date', 'Items', 'Status', 'Sales', 'Your payout'], ...rows.map(r => [r.o.order_no, r.o.created_at, (r.o.lines || []).map(l => `${l.name}${l.variant ? ' (' + l.variant + ')' : ''} x${l.qty}`).join('; '), STG[r.stage][0], r.o.subtotal, Math.round(earn(r.o, ops))])]
+    const out = [['Order', 'Date', 'Items', 'Status', 'Sales', 'Shop coupon', 'Courier', 'Your payout'], ...rows.map(r => [r.o.order_no, r.o.created_at, (r.o.lines || []).map(l => `${l.name}${l.variant ? ' (' + l.variant + ')' : ''} x${l.qty}`).join('; '), STG[r.stage][0], r.o.subtotal, r.o.shop_discount || 0, r.o.ship?.consignment_id ? (r.o.ship.courier || 'Pathao') + ' ' + r.o.ship.consignment_id : '', Math.round(earn(r.o, ops))])]
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + out.map(r => r.map(c).join(',')).join('\r\n')], { type: 'text/csv' })); a.download = `pinkish-orders-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   }
   if (orders === null) return <div className="sl-skel tall" />
@@ -595,7 +619,7 @@ function Orders({ orders, ho, hoOn, ops, shop, img, reload, say, err }) {
       <div className="sl-otabs" role="tablist" aria-label="Order status">{OTABS.map(k => <button key={k} role="tab" aria-selected={tab === k} className={'s-' + k + (tab === k ? ' on' : '')} onClick={() => setT(k)}><b>{cnt[k]}</b><span>{STG[k][0]}</span></button>)}</div>
       {orders.length > 0 && <div className="sl-tools"><label className="sl-search"><Ico n="search" s={18} /><input type="search" inputMode="search" enterKeyHint="search" placeholder="Search order number or product" aria-label="Search orders" value={q} onChange={e => setQ(e.target.value)} /></label><button className="sl-btn ghost sm" onClick={csv}><Ico n="dl" s={15} />CSV</button></div>}
       {!list.length ? <div className="sl-empty"><i><Ico n={tab === 'pack' ? 'pkg' : 'receipt'} s={34} /></i><b>{tab === 'pack' ? 'Nothing to pack' : 'Nothing here'}</b><p>{!orders.length ? 'New orders from customers will show up here. You get a notification too.' : tab === 'pack' ? 'You are all caught up. New orders appear here first.' : 'Orders move here as they progress.'}</p></div>
-        : list.slice(0, lim).map(r => <SOrder key={r.o.id} o={r.o} h={r.h} stage={r.stage} ops={ops} hoOn={hoOn} img={img} shop={shop} onPack={onPack} onConfirm={onConfirm} say={say} />)}
+        : list.slice(0, lim).map(r => <SOrder key={r.o.id} o={r.o} h={r.h} stage={r.stage} ops={ops} hoOn={hoOn} img={img} shop={shop} onPack={onPack} onConfirm={onConfirm} say={say} reload={reload} />)}
       {list.length > lim && <button className="sl-btn ghost" onClick={() => setLim(l => l + 20)}>Show more · {list.length - lim} left</button>}
     </>
   )
@@ -718,6 +742,42 @@ function PickupPin({ shop, onSaved }) {
     {edit && <div className="sl-acts"><button type="button" className="sl-btn" disabled={busy || !pt} onClick={save}>{busy ? 'Saving…' : 'Save pickup location'}</button><button type="button" className="sl-btn ghost sm" disabled={gps} onClick={locate}><Ico n="pin" s={15} />{gps ? 'Finding you…' : 'Use my location'}</button>{has && <button type="button" className="sl-btn ghost sm" onClick={() => { setPt({ lat: +shop.lat, lng: +shop.lng }); setEdit(false) }}>Cancel</button>}</div>}
   </div>
 }
+// Shop coupons: the shop pays the discount, only on its own items. Shown on the shop and product pages.
+const CF0 = { code: '', title: '', kind: 'percent', value: '', min_order: '', max_discount: '', max_uses: '', ends_at: '', is_public: true, active: true }
+const cDesc = c => (c.kind === 'percent' ? `${+c.value}% off${c.max_discount ? ' up to ' + taka(c.max_discount) : ''}` : taka(c.value) + ' off') + (+c.min_order > 0 ? ` on ${taka(c.min_order)}+` : '')
+function ShopCoupons({ shop }) {
+  const [list, setList] = useState(null), [f, setF] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(''), [ok, setOk] = useState('')
+  const load = useCallback(() => myCoupons(shop.id).then(setList).catch(x => { setErr(msg(x)); setList([]) }), [shop.id])
+  useEffect(() => { load() }, [load])
+  const set = k => e => setF(x => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  const save = async e => { e.preventDefault(); setBusy(true); setErr(''); setOk(''); try { await saveCoupon(shop, f, f.id ? f : null); setOk(f.id ? 'Coupon saved.' : `Coupon ${f.code.toUpperCase()} is live. Customers see it on your shop and product pages.`); setF(null); load() } catch (x) { setErr(msg(x)) } setBusy(false) }
+  const tog = async c => { try { await setCouponActive(c, !c.active); load() } catch (x) { setErr(msg(x)) } }
+  const del = async c => { if (!confirm(`Delete coupon ${c.code}?`)) return; try { await deleteCoupon(c); load() } catch (x) { setErr(msg(x)) } }
+  const now = Date.now(), state = c => !c.active ? ['Off', 'pending'] : c.ends_at && new Date(c.ends_at) < now ? ['Ended', 'rejected'] : c.max_uses && c.used_count >= c.max_uses ? ['Used up', 'rejected'] : ['Live', 'approved']
+  if (list === null) return <div className="sl-card sl-cps"><h2>Shop coupons</h2><p className="sl-mut">Loading…</p></div>
+  return <div className="sl-card sl-cps">
+    <div className="sl-head"><div><h2>Shop coupons</h2><p className="sl-mut">Bring customers back with a discount on your items. Your shop pays the discount; Pinkish commission is on what the customer pays.</p></div>{!f && <button type="button" className="sl-btn sm" onClick={() => { setF({ ...CF0 }); setOk('') }}>+ New coupon</button>}</div>
+    {err && <div className="sl-err" role="alert">{err}</div>}{ok && <div className="sl-ok" role="status">{ok}</div>}
+    {f && <form className="sl-cpf" onSubmit={save}>
+      <div className="sl-row"><Field label="Code (customers type this)"><input value={f.code} onChange={e => setF(x => ({ ...x, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20) }))} placeholder="EID50" disabled={!!f.id} required /></Field>
+        <Field label="Title (optional)"><input value={f.title || ''} onChange={set('title')} maxLength={60} placeholder="Eid special" /></Field></div>
+      <div className="sl-row"><Field label="Type"><select value={f.kind} onChange={set('kind')}><option value="percent">% off</option><option value="amount">৳ off</option></select></Field>
+        <Field label={f.kind === 'percent' ? 'Percent off' : 'Taka off'}><input type="number" inputMode="decimal" min="1" max={f.kind === 'percent' ? 90 : undefined} step="1" value={f.value} onChange={set('value')} required /></Field></div>
+      <div className="sl-row"><Field label="Minimum order of your items (৳)"><input type="number" inputMode="numeric" min="0" step="1" value={f.min_order ?? ''} onChange={set('min_order')} placeholder="0" /></Field>
+        {f.kind === 'percent' ? <Field label="Maximum discount (৳, optional)"><input type="number" inputMode="numeric" min="1" step="1" value={f.max_discount ?? ''} onChange={set('max_discount')} placeholder="No limit" /></Field>
+          : <Field label="How many uses in total (optional)"><input type="number" inputMode="numeric" min="1" step="1" value={f.max_uses ?? ''} onChange={set('max_uses')} placeholder="No limit" /></Field>}</div>
+      <div className="sl-row"><Field label="Ends (optional)"><input type="datetime-local" value={f.ends_at || ''} onChange={set('ends_at')} /></Field>
+        {f.kind === 'percent' && <Field label="How many uses in total (optional)"><input type="number" inputMode="numeric" min="1" step="1" value={f.max_uses ?? ''} onChange={set('max_uses')} placeholder="No limit" /></Field>}</div>
+      <label className="sl-f"><input type="checkbox" checked={f.is_public !== false} onChange={set('is_public')} /> Show it on my shop and product pages (otherwise only people you tell the code)</label>
+      <p className="sl-mut">Each customer can use it once. It only counts your items in the cart.</p>
+      <div className="sl-acts"><button className="sl-btn" disabled={busy}>{busy ? 'Saving…' : f.id ? 'Save coupon' : 'Create coupon'}</button><button type="button" className="sl-btn ghost" onClick={() => { setF(null); setErr('') }}>Cancel</button></div>
+    </form>}
+    {!list.length && !f ? <p className="sl-mut">No coupons yet.</p> : <ul className="sl-cpl-l">{list.map(c => { const [lb, cls] = state(c); return <li key={c.id}>
+      <span className="sl-cpc">{c.code}</span><span className="t"><b>{c.title || cDesc(c)}</b><small>{c.title ? cDesc(c) + ' · ' : ''}{c.used_count} used{c.max_uses ? ' of ' + c.max_uses : ''}{c.ends_at ? ' · ends ' + when(c.ends_at) : ''}{c.is_public ? '' : ' · private'}</small></span>
+      <span className={'sl-badge ' + cls}>{lb}</span>
+      <span className="sl-acts"><button type="button" className="sl-btn ghost sm" onClick={() => tog(c)}>{c.active ? 'Turn off' : 'Turn on'}</button><button type="button" className="sl-btn ghost sm" onClick={() => { setF({ ...CF0, ...c, value: String(c.value), min_order: c.min_order ? String(c.min_order) : '', max_discount: c.max_discount ? String(c.max_discount) : '', max_uses: c.max_uses ? String(c.max_uses) : '', ends_at: c.ends_at ? toLocalInput(c.ends_at) : '' }); setOk('') }}>Edit</button>{!c.used_count && <button type="button" className="sl-btn bad sm" onClick={() => del(c)}>Delete</button>}</span></li> })}</ul>}
+  </div>
+}
 function ShopSettings({ shop, onSaved }) {
   const [f, setF] = useState({ name: shop.name, description: shop.description || '', phone: shop.phone, address: shop.address, city: shop.city || '' })
   const [err, setErr] = useState(''), [ok, setOk] = useState(''), [busy, setBusy] = useState(false), [lbusy, setLbusy] = useState(false), [cbusy, setCbusy] = useState(false)
@@ -762,6 +822,7 @@ function ShopSettings({ shop, onSaved }) {
           <small className="sl-mut">Square image works best. Any picture works, we resize it for you.</small>
         </div>
       </div>
+      <ShopCoupons shop={shop} />
       <PickupPin shop={shop} onSaved={onSaved} />
       <form className="sl-card" onSubmit={go}>
         <h2>Shop details</h2>
@@ -795,11 +856,15 @@ function useSellerData(shop, say) {
   const [prods, setProds] = useState(() => PCACHE[shop.id] || null), [cats, setCats] = useState(() => CCACHE.v || []), [qs, setQs] = useState(() => MEM.qs ?? null), [saves, setSaves] = useState({}), [followers, setFollowers] = useState(null), [err, setErr] = useState('')
   const seen = useRef(null)
   const load = useCallback(async () => {
-    const [o, h, q] = await Promise.all([
+    const [o0, h, q, ex] = await Promise.all([
       sellerOrders().catch(x => { setErr(msg(x)); return null }),
       sellerHandovers().catch(() => MEM.ho ?? null),
       sellerQuestions().catch(() => null),
+      sellerExtras(),
     ])
+    // coupon discount on this shop's items + Pathao pickups, merged into each order
+    const xm = new Map((ex || []).map(x => [String(x.order_id), x]))
+    const o = o0 && (xm.size ? o0.map(r => { const x = xm.get(String(r.id)); return x ? { ...r, shop_discount: +x.discount || 0, ship: x.consignment_id ? x : null } : r }) : o0)
     if (o) {
       const ids = new Set(o.map(x => String(x.id)))
       if (seen.current) { const fresh = o.filter(x => !seen.current.has(String(x.id)) && x.status !== 4); if (fresh.length) { say(fresh.length === 1 ? `🛍️ New order #${fresh[0].order_no}. Pack it now.` : `🛍️ ${fresh.length} new orders`); navigator.vibrate?.([80, 60, 80]) } }
