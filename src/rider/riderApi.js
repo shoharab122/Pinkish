@@ -108,15 +108,18 @@ export async function applyRider(uid, f, doc) {
 }
 
 // ---------------- jobs ----------------
-export const getJobs = () => rpc('rider_jobs', undefined, 'Could not load your jobs. Pull down or tap Refresh.').then(d => d || {}) // never null: the app would spin forever
+// Several screens refresh on timers: calls made while one is still on its way share it, so a slow
+// connection never has a pile of identical requests in flight.
+const shared = fn => { let p = null; return () => p || (p = fn().finally(() => { p = null })) }
+export const getJobs = shared(() => rpc('rider_jobs', undefined, 'Could not load your jobs. Pull down or tap Refresh.').then(d => d || {})) // never null: the app would spin forever
 // Open jobs inside the 4 km Pinkish zone only (courier orders never show). Falls back to the old list until the SQL update runs.
-export async function getPool() {
+export const getPool = shared(async function getPoolNow() {
   need()
   let r = await timed(supabase.rpc('rider_open_jobs_zone'))
   if (r.error && SETUP.test(String(r.error.message))) r = await timed(supabase.rpc('rider_open_jobs'))
   if (r.error) throw fail(r.error, 'Could not load open jobs.')
   return Array.isArray(r.data) ? r.data : []
-}
+})
 // Shop pins for the rider's own job (empty until sellers set their pickup location)
 export async function pickupPoints(jid) {
   if (!supabase || !isId(jid)) return []

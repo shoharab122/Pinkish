@@ -5,7 +5,30 @@ export const RECOVERY_LINK = /type=recovery/.test(hashq)
 export const LINK_EXPIRED = /error_code=otp_expired|error_description=[^&]*expired/i.test(hashq)
 const url = import.meta.env.VITE_SUPABASE_URL, key = import.meta.env.VITE_SUPABASE_ANON_KEY
 // Only the public anon key is used here. NEVER put the service_role key or any payment secret in frontend code.
-export const supabase = url && key ? createClient(url, key) : null
+// Every request gets a time limit, so a weak mobile signal shows an error instead of spinning forever.
+// Only reads (GET/HEAD) are retried once after a network drop: a write (order, payment, coupon) is never sent twice.
+const T_READ = 20000, T_WRITE = 60000, T_UPLOAD = 180000
+const pkFetch = async (input, init = {}) => {
+  const u = typeof input === 'string' ? input : input?.url || ''
+  const method = String(init.method || input?.method || 'GET').toUpperCase(), read = method === 'GET' || method === 'HEAD'
+  const ms = /\/storage\/v1\//.test(u) && !read ? T_UPLOAD : read ? T_READ : T_WRITE
+  const once = () => {
+    // the caller's own abort signal (riderApi uses one) always wins
+    if (init.signal || typeof AbortController === 'undefined') return fetch(input, init)
+    const c = new AbortController(), t = setTimeout(() => c.abort(), ms)
+    return fetch(input, { ...init, signal: c.signal }).finally(() => clearTimeout(t))
+  }
+  try { return await once() } catch (e) {
+    if (!read || init.signal?.aborted || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw e
+    await new Promise(r => setTimeout(r, 600))
+    return once()
+  }
+}
+export const supabase = url && key ? createClient(url, key, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  global: { fetch: pkFetch },
+  realtime: { params: { eventsPerSecond: 5 } },
+}) : null
 // Offline/demo mode (no Supabase, localStorage only) is allowed ONLY in local development.
 // In a production build a missing config fails loudly instead of letting anyone "log in".
 const DEV = !!import.meta.env.DEV
@@ -411,6 +434,8 @@ export async function applyCoupon(code, items) {
   const list = (Array.isArray(items) ? items : []).map(i => ({ id: String(i.id), variant: i.variant || null, qty: i.qty }))
   const { data, error } = await supabase.rpc('apply_coupon', { p_code: c, p_items: list })
   if (error) throw new Error(couponErr(error))
+  // hardening v6 returns a refused code as { error } (so the server can count wrong guesses)
+  if (!data || data.error) throw new Error(couponErr({ message: data?.error || '' }))
   return data
 }
 export async function clearCoupon() {

@@ -10,8 +10,10 @@ let leafletP
 export const loadLeaflet = () => leafletP || (leafletP = new Promise((res, rej) => {
   if (typeof window === 'undefined') return rej(new Error('leaflet'))
   if (window.L) return res(window.L)
-  if (!document.querySelector('link[data-leaflet]')) { const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; css.dataset.leaflet = '1'; document.head.appendChild(css) }
+  if (!document.querySelector('link[data-leaflet]')) { const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; css.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='; css.crossOrigin = ''; css.dataset.leaflet = '1'; document.head.appendChild(css) }
   const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'; sc.async = true
+  // Subresource integrity: the browser refuses the file if the CDN copy was ever changed
+  sc.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo='; sc.crossOrigin = ''
   sc.onload = () => (window.L ? res(window.L) : rej(new Error('leaflet')))
   sc.onerror = () => { leafletP = null; sc.remove(); rej(new Error('leaflet')) }
   document.head.appendChild(sc)
@@ -180,8 +182,9 @@ export function usePoll(fn, ms, on, deps = []) {
   f.current = fn
   useEffect(() => {
     if (!on) { setV(null); return }
-    let live = true
-    const run = () => { if (document.hidden || navigator.onLine === false) return; Promise.resolve(f.current()).then(r => { if (live) setV(r ?? null) }, () => {}) }
+    let live = true, busy = false
+    // never start a new request while the last one is still on its way (slow networks would pile them up)
+    const run = () => { if (busy || document.hidden || navigator.onLine === false) return; busy = true; Promise.resolve(f.current()).then(r => { if (live) setV(r ?? null) }, () => {}).finally(() => { busy = false }) }
     run(); const t = setInterval(run, ms)
     const vis = () => { if (!document.hidden) run() }
     document.addEventListener('visibilitychange', vis)

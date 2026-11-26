@@ -108,8 +108,12 @@ function Img({ value, onChange, folder, say, onBusy, wide }) {
   return <div className={'img' + (wide ? ' wide' : '')}>{value ? <img src={value} alt="" /> : <span>No image</span>}<div><label className="bt g sm">{b ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}<input type="file" accept="image/*" hidden onChange={pick} /></label>{value && <button className="bt g sm" onClick={() => onChange('')}>Remove</button>}</div></div>
 }
 
+// Admin must never be shown inside another site's frame (clickjacking)
+const FRAMED = (() => { try { return window.top !== window.self } catch { return true } })()
+// Sign-out also removes the notification list kept on this device (it holds customer names and totals)
+const adminOut = () => { try { localStorage.removeItem('adm-notes') } catch { /* storage unavailable */ } return sb?.auth.signOut() }
 export default function Admin() {
-  const [st, setSt] = useState('loading'), [user, setUser] = useState(null)
+  const [st, setSt] = useState('loading'), [user, setUser] = useState(null), stRef = useRef('loading'), uidRef = useRef(null)
   useEffect(() => {
     document.title = 'Pinkish Admin'
     const m = document.createElement('meta'); m.name = 'robots'; m.content = 'noindex,nofollow'; document.head.appendChild(m)
@@ -119,19 +123,27 @@ export default function Admin() {
     document.documentElement.classList.add('adm-on')
     return () => { m.remove(); tc.remove(); if (vp && old != null) vp.content = old; document.documentElement.classList.remove('adm-on') }
   }, [])
-  const check = useCallback(async s => {
-    if (!s) { setUser(null); return setSt('login') }
-    const { data } = await sb.from('admins').select('user_id').eq('user_id', s.user.id).maybeSingle()
-    setUser(s.user); setSt(data ? 'ok' : 'denied')
+  const put = v => { stRef.current = v; setSt(v) }
+  const check = useCallback(async (s, ev) => {
+    if (!s) { try { localStorage.removeItem('adm-notes') } catch { /* storage unavailable */ } uidRef.current = null; setUser(null); return put('login') }
+    // hourly token refresh for the same admin: nothing to re-check, and no re-render of the whole panel
+    if (ev === 'TOKEN_REFRESHED' && uidRef.current === s.user.id && stRef.current === 'ok') return
+    let r
+    for (let a = 0; a < 3; a++) { r = await sb.from('admins').select('user_id').eq('user_id', s.user.id).maybeSingle(); if (!r.error) break; await new Promise(z => setTimeout(z, 800 * (a + 1))) }
+    if (uidRef.current && uidRef.current !== s.user.id) { try { localStorage.removeItem('adm-notes') } catch { /* storage unavailable */ } }
+    uidRef.current = s.user.id; setUser(s.user)
+    put(r.error ? 'neterr' : r.data ? 'ok' : 'denied')
   }, [])
   useEffect(() => {
-    if (!sb) return setSt('nosb')
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_e, s) => { setTimeout(() => check(s), 0) })
+    if (!sb) return put('nosb')
+    const { data: { subscription } } = sb.auth.onAuthStateChange((e, s) => { setTimeout(() => check(s, e), 0) })
     return () => subscription.unsubscribe()
   }, [check])
+  if (FRAMED) return <div className="adm"><div className="ctr"><div className="lg"><h1>Open the admin in its own window</h1><p className="mut">For your safety the admin panel does not open inside another site.</p></div></div></div>
   if (st === 'loading') return <div className="adm"><div className="ctr"><i className="spin" /></div></div>
+  if (st === 'neterr') return <div className="adm"><div className="ctr"><div className="lg"><h1>Connection problem</h1><p className="mut">Could not check your admin access. Check your internet and try again.</p><button className="bt" onClick={() => { put('loading'); sb.auth.getSession().then(({ data }) => check(data?.session)) }}>Try again</button></div></div></div>
   if (st === 'nosb') return <div className="adm"><div className="ctr"><div className="lg"><h1>Supabase not configured</h1><p className="mut">Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then rebuild.</p></div></div></div>
-  if (st === 'denied') return <div className="adm"><div className="ctr"><div className="lg"><h1>No admin access</h1><p className="mut">{user?.email} is not an admin account. Ask the store owner to add it.</p><button className="bt" onClick={() => sb.auth.signOut()}>Sign out</button></div></div></div>
+  if (st === 'denied') return <div className="adm"><div className="ctr"><div className="lg"><h1>No admin access</h1><p className="mut">{user?.email} is not an admin account. Ask the store owner to add it.</p><button className="bt" onClick={() => adminOut()}>Sign out</button></div></div></div>
   if (st === 'login') return <Login />
   return <Shell user={user} />
 }
@@ -257,7 +269,7 @@ function Shell({ user }) {
     setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error, returns: rr.data || [], retErr: !!rr.error, ho: hv.data || [], hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) }, riders: rd.data || [], ridersErr: !!rd.error, dl: dv.data || [], rops: { ...RO0, ...(ro.data?.value || {}) }, ch: chq.data || [], chErr: !!chq.error }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); dlSeen.current = new Map((dv.data || []).map(x => [x.id, x.status])); setLd(false)
   }, [say])
   useEffect(() => {
-    const later = () => { clearTimeout(lt.current); lt.current = setTimeout(load, 400) } // coalesce bursts of realtime events
+    const later = () => { clearTimeout(lt.current); lt.current = setTimeout(load, 1200) } // coalesce bursts of realtime events
     load()
     const ch = sb.channel('adm-orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, p => { const r = p.new || {}; say('🛍️ New order #' + r.order_no); push({ k: 'order', title: 'New order #' + r.order_no, sub: (r.address?.name || 'Customer') + ' · ' + taka(r.total), oid: r.id }); later() })
@@ -278,7 +290,7 @@ function Shell({ user }) {
   }, [load, say, push])
   const refresh = async () => { setRf(true); await load(); setRf(false) }
   useEffect(() => {
-    let t; const reset = () => { clearTimeout(t); t = setTimeout(() => sb.auth.signOut(), IDLE) }, ev = ['pointerdown', 'keydown', 'scroll', 'touchmove']
+    let t; const reset = () => { clearTimeout(t); t = setTimeout(() => adminOut(), IDLE) }, ev = ['pointerdown', 'keydown', 'scroll', 'touchmove']
     ev.forEach(e => addEventListener(e, reset, { passive: true, capture: true })); reset()
     return () => { clearTimeout(t); ev.forEach(e => removeEventListener(e, reset, { capture: true })) }
   }, [])
@@ -288,8 +300,8 @@ function Shell({ user }) {
   return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
     <div className="me"><span className="mav" aria-hidden="true">{ini(nm)}</span><b>{nm}</b><small>Store admin</small></div>
     <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k === 'notify' ? 'bell' : k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}{k === 'returns' && pret > 0 && <em>{pret}</em>}{k === 'riders' && pridr + fdl > 0 && <em>{pridr + fdl}</em>}</button>)}</div>
-    <div className="sp" /><button className="lo" onClick={() => sb.auth.signOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
-    <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => sb.auth.signOut()}><Ic n="out" s={20} /></button></div></header>
+    <div className="sp" /><button className="lo" onClick={() => adminOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
+    <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => adminOut()}><Ic n="out" s={20} /></button></div></header>
       <div className="scr">
       {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'promo' ? <Promos {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'riders' ? <Riders {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
     {nOpen && <Notifs orders={d.orders} shops={d.shops || []} rets={d.returns || []} ho={d.ho || []} onReturn={openReturn} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}

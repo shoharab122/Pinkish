@@ -1556,7 +1556,7 @@ const DeliveryCode = ({ o, st }) => {
   useEffect(() => {
     if (!live) return
     let on = true
-    const pull = () => api.supabase.rpc('my_delivery', { p_order: String(o.id) }).then(({ data, error }) => { if (on && !error) setD(data || null) }, () => {})
+    const pull = () => (document.hidden || navigator.onLine === false) ? null : api.supabase.rpc('my_delivery', { p_order: String(o.id) }).then(({ data, error }) => { if (on && !error) setD(data || null) }, () => {})
     pull(); const t = setInterval(pull, 20000)
     return () => { on = false; clearInterval(t) }
   }, [live, o.id])
@@ -1852,7 +1852,7 @@ export default function App() {
     const back = () => soon(true)
     const ch = sb.channel('store-live').on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => soon(false)).on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => soon(true)).subscribe()
     let bc; try { bc = new BroadcastChannel('pk-products'); bc.onmessage = () => { clearTimeout(t); load('p') } } catch { /* not supported */ }
-    document.addEventListener('visibilitychange', vis); window.addEventListener('focus', back); window.addEventListener('online', back); const poll = setInterval(() => { if (!document.hidden) soon(false) }, 30000)
+    document.addEventListener('visibilitychange', vis); window.addEventListener('focus', back); window.addEventListener('online', back); const poll = setInterval(() => { if (!document.hidden && navigator.onLine !== false) soon(false) }, 120000) // safety net only: live updates arrive through the channel above
     return () => { clearTimeout(t); clearInterval(poll); try { bc && bc.close() } catch { /* closed */ } document.removeEventListener('visibilitychange', vis); window.removeEventListener('focus', back); window.removeEventListener('online', back); sb.removeChannel(ch) }
   }, [load])
   useEffect(() => { const t = setTimeout(() => writeLS('ms_cart', cart), 250); return () => clearTimeout(t) }, [cart])
@@ -1912,6 +1912,7 @@ export default function App() {
     if (!o0?.order_no || !api.supabase) return
     let on = true, warned = false
     const pull = async () => {
+      if (document.hidden || navigator.onLine === false) return
       try {
         const { data, error } = await api.supabase.rpc('track_order', { p_order_no: o0.order_no, p_phone: o0.address?.phone || '' })
         if (error) { console.warn('track_order failed:', error.message); if (!warned) { warned = true; say('Live tracking is not set up yet') } }
@@ -2047,10 +2048,8 @@ export default function App() {
     setBusy(true)
     try {
       const o = await api.placeOrder({ user_id: user?.id, items: cart, total, delivery_fee: delivery.fee, address: { ...addr, lat: loc.lat, lng: loc.lng }, payment: PAYS[pay][0] })
-      // placeOrder falls back to this device only (guests / signed-out). Also send it to the store so the admin sees every order.
-      if (api.supabase && typeof o.id === 'string' && /^o\d{6,}$/.test(o.id)) {
-        try { const { id: _local, ...row } = o; await api.supabase.from('orders').insert({ ...row, user_id: realUid(user) }) } catch { /* kept locally */ }
-      }
+      // Orders are only ever created by place_order() on the server, which prices the cart itself.
+      // (The old "copy the local order into the database" step sent browser-made prices and totals, so it is gone.)
       setCart([]); setCoupon(null); setPromo(''); writeLS('pk_promo', '')
       collapse(() => { depth.current = 1; try { history.pushState({ ms: 1 }, '') } catch { /* history blocked */ } setDir('fwd'); setStack([{ s: 'home' }, { s: 'done', order: o }]) })
     } catch (e) { const m = e?.message || 'Could not place order. Please try again.'; if (/coupon/i.test(m)) setCoupon(null); say(m, 4000) }

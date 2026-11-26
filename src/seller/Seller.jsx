@@ -854,8 +854,10 @@ function Welcome({ shop, user }) {
 function useSellerData(shop, say) {
   const [orders, setOrders] = useState(() => MEM.orders ?? null), [ho, setHo] = useState(() => MEM.ho), [ops, setOps] = useState(() => MEM.ops || OPS0)
   const [prods, setProds] = useState(() => PCACHE[shop.id] || null), [cats, setCats] = useState(() => CCACHE.v || []), [qs, setQs] = useState(() => MEM.qs ?? null), [saves, setSaves] = useState({}), [followers, setFollowers] = useState(null), [err, setErr] = useState('')
-  const seen = useRef(null)
-  const load = useCallback(async () => {
+  const seen = useRef(null), inflight = useRef(null)
+  // calls made while a refresh is still on its way share it (timers, tab switches and buttons can overlap)
+  const load = useCallback(() => inflight.current || (inflight.current = loadNow().finally(() => { inflight.current = null })), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const loadNow = async () => {
     const [o0, h, q, ex] = await Promise.all([
       sellerOrders().catch(x => { setErr(msg(x)); return null }),
       sellerHandovers().catch(() => MEM.ho ?? null),
@@ -872,7 +874,7 @@ function useSellerData(shop, say) {
     } else setOrders(p => p ?? [])
     MEM.ho = h; setHo(h)
     if (q) { MEM.qs = q; setQs(q) } else setQs(p => p ?? [])
-  }, [say])
+  }
   const putProds = useCallback(fn => setProds(l => { const n = fn(l || []); PCACHE[shop.id] = n; return n }), [shop.id])
   const loadProds = useCallback(async () => {
     try { const [p, c] = await Promise.all([myProducts(shop.id), CCACHE.v || getCategoriesList()]); CCACHE.v = c; setCats(c); PCACHE[shop.id] = p; setProds(p) } catch (x) { setErr(msg(x)); setProds(l => l || []) }
