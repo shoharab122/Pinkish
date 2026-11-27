@@ -350,6 +350,27 @@ const share = async (p, say) => {
   try { if (navigator.share) { await navigator.share({ title: p.name, text: `${p.name} · ${taka(p.price)} on Pinkish`, url }); return } } catch (e) { if (e?.name === 'AbortError') return }
   try { await navigator.clipboard.writeText(url); say('Product link copied. Share it to bring customers to your Pinkish page.') } catch { say(url) }
 }
+const PTile = memo(function PTile({ p, sold, saved, act, restock }) {
+  const on = p.is_active !== false, deal = dealLive(p)
+  return <div className={'sl-prod' + (on ? '' : ' off')}>
+    <div className="sl-pimg">
+      {p.image_url ? <img src={p.image_url} alt="" width="400" height="300" loading="lazy" decoding="async" /> : <div className="sl-ph">{p.emoji || <Ico n="bag" s={40} />}</div>}
+      <span className={'sl-badge ' + (on ? 'approved' : 'pending')}>{on ? 'Live' : 'Hidden'}</span>
+      <button className="sl-pshare" aria-label={'Share ' + p.name} onClick={() => act.share(p)}><Ico n="share" s={16} /></button>
+    </div>
+    <div className="b"><div className="n">{p.name}</div>
+      <div className="sl-price">{taka(p.price)}{deal && <s className="sl-old">{taka(p.old_price)}</s>}</div>
+      {deal && <div className="sl-dealtag">⚡ Deal until {when(p.deal_ends_at)}</div>}
+      <div className="sl-pm"><span><Ico n="cart" s={13} />{sold} sold</span>{saved > 0 && <span><Ico n="heart" s={13} />{saved} saved</span>}</div>
+      <StockStep p={p} onSave={restock} />
+      <div className="sl-acts">
+        <button className="sl-btn ghost sm" onClick={() => act.edit(p)}>Edit</button>
+        <button className="sl-btn ghost sm" onClick={() => act.toggle(p)}>{on ? 'Hide' : 'Show'}</button>
+        <button className="sl-btn ghost sm" aria-label={'Duplicate ' + p.name} onClick={() => act.copy(p)}><Ico n="copy" s={15} /></button>
+        <button className="sl-btn bad sm" aria-label={'Delete ' + p.name} onClick={() => act.del(p)}>Delete</button>
+      </div></div>
+  </div>
+})
 const PF = [['all', 'All'], ['live', 'Live'], ['hidden', 'Hidden'], ['low', 'Low stock'], ['deal', 'On deal']]
 const PS = { new: ['Newest', (a, b) => new Date(b.created_at) - new Date(a.created_at)], sold: ['Best selling', null], stock: ['Lowest stock', (a, b) => (a.stock ?? 0) - (b.stock ?? 0)], price: ['Price', (a, b) => a.price - b.price] }
 function Products({ shop, list, put, cats, reload, sold, saves, say }) {
@@ -358,6 +379,8 @@ function Products({ shop, list, put, cats, reload, sold, saves, say }) {
   useEffect(() => { setLim(24) }, [dq, pf, ps])
   const del = async p => { if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return; try { await deleteProduct(shop, p.id); put(l => l.filter(x => x.id !== p.id)); say('Product deleted') } catch (x) { setErr(msg(x)) } }
   const toggle = async p => { try { const n = await saveProduct(shop, { ...p, price: p.price, stock: p.stock ?? 0, is_active: !(p.is_active !== false) }, null, p); put(l => l.map(x => x.id === p.id ? n : x)); say(n.is_active !== false ? 'Live in the store' : 'Hidden from the store') } catch (x) { setErr(msg(x)) } }
+  const fns = useRef(null); fns.current = { del, toggle, say }
+  const act = useMemo(() => ({ edit: p => setEdit({ p }), copy: p => setEdit({ copy: p }), del: p => fns.current.del(p), toggle: p => fns.current.toggle(p), share: p => share(p, fns.current.say) }), [])
   const restock = useCallback(async (p, n) => { try { const r = await setStock(shop, p.id, n); put(l => l.map(x => x.id === p.id ? r : x)); say(`Stock saved: ${n}`) } catch (x) { setErr(msg(x)) } }, [shop, put, say])
   const saved = n => { put(l => (l.some(x => x.id === n.id) ? l.map(x => (x.id === n.id ? n : x)) : [n, ...l])); setEdit(null); setErr(''); say(n.is_active !== false ? 'Saved. It is live in the store now.' : 'Saved. It is hidden from the store.'); reload() }
   const cnt = useMemo(() => { const c = { all: 0, live: 0, hidden: 0, low: 0, deal: 0 }; (list || []).forEach(p => { c.all++; p.is_active !== false ? c.live++ : c.hidden++; if ((p.stock ?? 0) <= 5) c.low++; if (dealLive(p)) c.deal++ }); return c }, [list])
@@ -382,25 +405,7 @@ function Products({ shop, list, put, cats, reload, sold, saves, say }) {
       </div>}
       {list?.length > 0 && <div className="sl-seg" role="tablist" aria-label="Filter products">{PF.map(([k, l]) => <button key={k} role="tab" aria-selected={pf === k} className={pf === k ? 'on' : ''} onClick={() => setPf(k)}>{l}<em>{cnt[k]}</em></button>)}</div>}
       {list === null ? <div className="sl-grid">{[0, 1, 2].map(i => <div key={i} className="sl-skel" />)}</div> : !list.length ? <div className="sl-empty"><i><Ico n="bag" s={34} /></i><b>No products yet</b><p>Add your first product and it appears in the store instantly.</p><button className="sl-btn sm" onClick={() => setEdit({})}>+ Add product</button></div> : !shown.length ? <p className="sl-mut">No products match.</p> : (
-        <><div className="sl-grid">{shown.slice(0, lim).map(p => (
-          <div className={'sl-prod' + (p.is_active !== false ? '' : ' off')} key={p.id}>
-            <div className="sl-pimg">
-              {p.image_url ? <img src={p.image_url} alt="" width="400" height="300" loading="lazy" decoding="async" /> : <div className="sl-ph">{p.emoji || <Ico n="bag" s={40} />}</div>}
-              <span className={'sl-badge ' + (p.is_active !== false ? 'approved' : 'pending')}>{p.is_active !== false ? 'Live' : 'Hidden'}</span>
-              <button className="sl-pshare" aria-label={'Share ' + p.name} onClick={() => share(p, say)}><Ico n="share" s={16} /></button>
-            </div>
-            <div className="b"><div className="n">{p.name}</div>
-              <div className="sl-price">{taka(p.price)}{dealLive(p) && <s className="sl-old">{taka(p.old_price)}</s>}</div>
-              {dealLive(p) && <div className="sl-dealtag">⚡ Deal until {when(p.deal_ends_at)}</div>}
-              <div className="sl-pm"><span><Ico n="cart" s={13} />{sold[p.name] || 0} sold</span>{saves[String(p.id)] > 0 && <span><Ico n="heart" s={13} />{saves[String(p.id)]} saved</span>}</div>
-              <StockStep p={p} onSave={restock} />
-              <div className="sl-acts">
-                <button className="sl-btn ghost sm" onClick={() => setEdit({ p })}>Edit</button>
-                <button className="sl-btn ghost sm" onClick={() => toggle(p)}>{p.is_active !== false ? 'Hide' : 'Show'}</button>
-                <button className="sl-btn ghost sm" aria-label={'Duplicate ' + p.name} onClick={() => setEdit({ copy: p })}><Ico n="copy" s={15} /></button>
-                <button className="sl-btn bad sm" aria-label={'Delete ' + p.name} onClick={() => del(p)}>Delete</button>
-              </div></div>
-          </div>))}</div>
+        <><div className="sl-grid">{shown.slice(0, lim).map(p => <PTile key={p.id} p={p} sold={sold[p.name] || 0} saved={saves[String(p.id)] || 0} act={act} restock={restock} />)}</div>
         {shown.length > lim && <button className="sl-btn ghost" onClick={() => setLim(l => l + 24)}>Show more · {shown.length - lim} left</button>}</>
       )}
     </>
@@ -854,7 +859,9 @@ function Welcome({ shop, user }) {
 function useSellerData(shop, say) {
   const [orders, setOrders] = useState(() => MEM.orders ?? null), [ho, setHo] = useState(() => MEM.ho), [ops, setOps] = useState(() => MEM.ops || OPS0)
   const [prods, setProds] = useState(() => PCACHE[shop.id] || null), [cats, setCats] = useState(() => CCACHE.v || []), [qs, setQs] = useState(() => MEM.qs ?? null), [saves, setSaves] = useState({}), [followers, setFollowers] = useState(null), [err, setErr] = useState('')
-  const seen = useRef(null), inflight = useRef(null)
+  const seen = useRef(null), inflight = useRef(null), sig = useRef({})
+  // true when the value is the same as last time (then the screen is not redrawn)
+  const same = (k, v) => { let g; try { g = JSON.stringify(v) } catch { return false } if (sig.current[k] === g) return true; sig.current[k] = g; return false }
   // calls made while a refresh is still on its way share it (timers, tab switches and buttons can overlap)
   const load = useCallback(() => inflight.current || (inflight.current = loadNow().finally(() => { inflight.current = null })), []) // eslint-disable-line react-hooks/exhaustive-deps
   const loadNow = async () => {
@@ -870,10 +877,10 @@ function useSellerData(shop, say) {
     if (o) {
       const ids = new Set(o.map(x => String(x.id)))
       if (seen.current) { const fresh = o.filter(x => !seen.current.has(String(x.id)) && x.status !== 4); if (fresh.length) { say(fresh.length === 1 ? `🛍️ New order #${fresh[0].order_no}. Pack it now.` : `🛍️ ${fresh.length} new orders`); navigator.vibrate?.([80, 60, 80]) } }
-      seen.current = ids; MEM.orders = o; setOrders(o); setErr('')
+      seen.current = ids; MEM.orders = o; if (!same('o', o)) setOrders(o); setErr('')
     } else setOrders(p => p ?? [])
-    MEM.ho = h; setHo(h)
-    if (q) { MEM.qs = q; setQs(q) } else setQs(p => p ?? [])
+    MEM.ho = h; if (!same('h', h)) setHo(h)
+    if (q) { MEM.qs = q; if (!same('q', q)) setQs(q) } else setQs(p => p ?? [])
   }
   const putProds = useCallback(fn => setProds(l => { const n = fn(l || []); PCACHE[shop.id] = n; return n }), [shop.id])
   const loadProds = useCallback(async () => {
@@ -896,9 +903,20 @@ function useSellerData(shop, say) {
   return { orders, ho, hoOn: Array.isArray(ho), ops, prods, putProds, loadProds, cats, qs, saves, followers, err, load, sold, img, toPack, qOpen: (qs || []).filter(q => !q.answer).length }
 }
 
+// The toast keeps its own state, so showing "Stock saved" redraws only this bubble, not the whole dashboard.
+function Toast({ api: r }) {
+  const [m, setM] = useState(''), t = useRef(0)
+  useEffect(() => {
+    const o = r.current
+    o.fn = msg => { clearTimeout(t.current); setM(msg); t.current = setTimeout(() => setM(''), 3200) }
+    if (o.pend != null) { const x = o.pend; o.pend = null; o.fn(x) }
+    return () => { clearTimeout(t.current); o.fn = null }
+  }, [r])
+  return m ? <div className="sl-toast" role="status">{m}</div> : null
+}
 function Dashboard({ shop, user, setShop, logout }) {
-  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('sl_tab') || 'overview' } catch { return 'overview' } }), [toast, setToast] = useState(''), tt = useRef(0), scr = useRef(null)
-  const say = useCallback(m => { setToast(m); clearTimeout(tt.current); tt.current = setTimeout(() => setToast(''), 3200) }, [])
+  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('sl_tab') || 'overview' } catch { return 'overview' } }), toastR = useRef({}), scr = useRef(null)
+  const say = useCallback(m => { const o = toastR.current; if (o.fn) o.fn(m); else o.pend = m }, [])
   const D = useSellerData(shop, say), online = useOnline()
   const [retN, setRetN] = useState(() => (MEM.returns || []).filter(needsYou).length)
   useEffect(() => {
@@ -933,7 +951,7 @@ function Dashboard({ shop, user, setShop, logout }) {
         </div></div>
       </main>
     </div>
-    {toast && <div className="sl-toast" role="status">{toast}</div>}</div>
+    <Toast api={toastR} /></div>
   )
 }
 
