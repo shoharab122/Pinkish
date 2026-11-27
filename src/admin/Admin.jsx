@@ -246,11 +246,20 @@ function Notifs({ orders, shops, rets = [], ho = [], onShop, onReturn, notes, on
 }
 
 const readNotes = () => { try { const a = JSON.parse(localStorage.getItem('adm-notes') || '[]'); return Array.isArray(a) ? a.slice(0, 40) : [] } catch { return [] } }
-const stab = (m, rows) => rows.map(r => { const s = JSON.stringify(r), h = m.get(r.id); if (h && h.s === s) return h.r; m.set(r.id, { s, r }); return r })
+// Unchanged rows keep their old object (memoised cards skip redrawing). The cache is rebuilt each load, so deleted rows do not pile up.
+const stab = (c, k, rows) => {
+  const old = c[k] || new Map(), m = new Map()
+  const out = rows.map(r => { const id = r?.id ?? r?.user_id; if (id == null) return r; const s = JSON.stringify(r), h = old.get(id); if (h && h.s === s) { m.set(id, h); return h.r } m.set(id, { s, r }); return r })
+  c[k] = m; return out
+}
+// the same list as last time (same rows in the same order) keeps the old array, so screens that use it are not redrawn
+const keepList = (a, b) => Array.isArray(a) && a.length === b.length && a.every((x, i) => x === b[i]) ? a : b
+const sameJson = (a, b) => { try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false } }
 
 function Shell({ user }) {
-  const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false, shops: [], shopsErr: false, returns: [], retErr: false, ho: [], hoErr: false, ops: OPS0, riders: [], ridersErr: false, dl: [], rops: RO0 }), [toast, setToast] = useState(''), [ld, setLd] = useState(true), [rf, setRf] = useState(false), tt = useRef(0), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({ o: new Map(), p: new Map() })
-  const say = useCallback(m => { setToast(m); clearTimeout(tt.current); tt.current = setTimeout(() => setToast(''), 2400) }, [])
+  const [tab, setTab] = useState(() => { const h = location.hash.slice(1); return NAV.some(n => n[0] === h) ? h : 'dash' }), [d, setD] = useState({ orders: [], products: [], cats: [], wish: [], wishErr: false, shops: [], shopsErr: false, returns: [], retErr: false, ho: [], hoErr: false, ops: OPS0, riders: [], ridersErr: false, dl: [], rops: RO0 }), [ld, setLd] = useState(true), [rf, setRf] = useState(false), lt = useRef(0), [notes, setNotes] = useState(readNotes), [nOpen, setNOpen] = useState(false), [focus, setFocus] = useState(null), cache = useRef({}), toastR = useRef({})
+  // the toast owns its own state: a message redraws only the bubble, not the whole panel
+  const say = useCallback(m => { const o = toastR.current; if (o.fn) o.fn(m); else o.pend = m }, [])
   const ridersRef = useRef([]); ridersRef.current = d.riders || []
   const push = useCallback(n => { setNotes(a => [{ id: Date.now() + Math.random(), t: Date.now(), read: false, ...n }, ...a].slice(0, 40)); if (n.k !== 'wish') navigator.vibrate?.(60) }, [])
   const readAll = useCallback(() => setNotes(a => a.some(n => !n.read) ? a.map(n => n.read ? n : { ...n, read: true }) : a), [])
@@ -262,11 +271,14 @@ function Shell({ user }) {
   const openReturn = useCallback(id => { setRfocus(id); setNOpen(false); setTab('returns'); history.replaceState(null, '', '#returns') }, [])
   const clearRfocus = useCallback(() => setRfocus(null), [])
   useEffect(() => { try { localStorage.setItem('adm-notes', JSON.stringify(notes)) } catch { /* storage unavailable */ } }, [notes])
-  const go = t => { setTab(t); history.replaceState(null, '', '#' + t); document.querySelector('.scr')?.scrollTo?.(0, 0) }
+  const go = useCallback(t => { setTab(t); history.replaceState(null, '', '#' + t); document.querySelector('.scr')?.scrollTo?.(0, 0) }, [])
   const load = useCallback(async () => {
     const [o, p, c, w, sp, rr, hv, so, rd, dv, ro, chq] = await Promise.all([sb.from('orders').select('*').in('payment_status', ['unpaid', 'verifying', 'paid']).order('created_at', { ascending: false }).limit(500), sb.from('products').select('*').order('created_at', { ascending: false }), sb.from('categories').select('*').order('created_at'), sb.from('wishlists').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('shops').select('*').order('created_at', { ascending: false }), sb.from('return_requests').select('*').order('created_at', { ascending: false }).limit(500), sb.from('seller_handovers').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'seller_ops').maybeSingle(), sb.from('riders').select('*').order('created_at', { ascending: false }), sb.from('deliveries').select('*').order('created_at', { ascending: false }).limit(1000), sb.from('site_settings').select('value').eq('key', 'rider_ops').maybeSingle(), sb.from('courier_handoffs').select('*').order('booked_at', { ascending: false }).limit(1000)])
     const er = o.error || p.error || c.error; if (er) say(er.message)
-    setD({ orders: stab(cache.current.o, o.data || []), products: stab(cache.current.p, p.data || []), cats: c.data || [], wish: w.data || [], wishErr: !!w.error, shops: sp.data || [], shopsErr: !!sp.error, returns: rr.data || [], retErr: !!rr.error, ho: hv.data || [], hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) }, riders: rd.data || [], ridersErr: !!rd.error, dl: dv.data || [], rops: { ...RO0, ...(ro.data?.value || {}) }, ch: chq.data || [], chErr: !!chq.error }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); dlSeen.current = new Map((dv.data || []).map(x => [x.id, x.status])); setLd(false)
+    const C = cache.current, L = (k, r) => stab(C, k, r || [])
+    const next = { orders: L('o', o.data), products: L('p', p.data), cats: L('c', c.data), wish: L('w', w.data), wishErr: !!w.error, shops: L('s', sp.data), shopsErr: !!sp.error, returns: L('r', rr.data), retErr: !!rr.error, ho: L('h', hv.data), hoErr: !!hv.error, ops: { ...OPS0, ...(so.data?.value || {}) }, riders: L('rd', rd.data), ridersErr: !!rd.error, dl: L('dl', dv.data), rops: { ...RO0, ...(ro.data?.value || {}) }, ch: L('ch', chq.data), chErr: !!chq.error }
+    // every live event reloads: keep each unchanged list / setting as the same object, and skip the redraw when nothing changed
+    setD(prev => { let diff = false; const out = {}; for (const k in next) { const a = prev[k], b = next[k]; out[k] = Array.isArray(b) ? keepList(a, b) : b !== null && typeof b === 'object' ? (sameJson(a, b) ? a : b) : b; if (out[k] !== a) diff = true } return diff ? out : prev }); hoSeen.current = new Map((hv.data || []).map(h => [h.id, h.status])); dlSeen.current = new Map((dv.data || []).map(x => [x.id, x.status])); setLd(false)
   }, [say])
   useEffect(() => {
     const later = () => { clearTimeout(lt.current); lt.current = setTimeout(load, 1200) } // coalesce bursts of realtime events
@@ -290,22 +302,39 @@ function Shell({ user }) {
   }, [load, say, push])
   const refresh = async () => { setRf(true); await load(); setRf(false) }
   useEffect(() => {
-    let t; const reset = () => { clearTimeout(t); t = setTimeout(() => adminOut(), IDLE) }, ev = ['pointerdown', 'keydown', 'scroll', 'touchmove']
-    ev.forEach(e => addEventListener(e, reset, { passive: true, capture: true })); reset()
-    return () => { clearTimeout(t); ev.forEach(e => removeEventListener(e, reset, { capture: true })) }
+    // activity only stores a time stamp (scrolling used to restart a timer on every frame); one timer checks it
+    let t, last = Date.now(); const touch = () => { last = Date.now() }, ev = ['pointerdown', 'keydown', 'scroll', 'touchmove']
+    const tick = () => { const left = IDLE - (Date.now() - last); if (left <= 0) adminOut(); else t = setTimeout(tick, left) }
+    ev.forEach(e => addEventListener(e, touch, { passive: true, capture: true })); t = setTimeout(tick, IDLE)
+    return () => { clearTimeout(t); ev.forEach(e => removeEventListener(e, touch, { capture: true })) }
   }, [])
-  const pend = d.orders.filter(o => !o.status).length, pshop = (d.shops || []).filter(s => s.status === 'pending').length, pret = (d.returns || []).filter(r => r.status === 'requested').length, prider = (d.ho || []).filter(h => h.status === 'packed' && !h.rider_name).length, pridr = (d.riders || []).filter(r => r.status === 'pending').length, fdl = (d.dl || []).filter(x => x.status === 'failed').length, todo = d.orders.filter(o => !o.status || o.payment_status === 'verifying').length + pshop + pret + prider + pridr + fdl, unread = notes.filter(n => !n.read).length, title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
+  const { pend, pshop, pret, pridr, fdl, todo } = useMemo(() => {
+    const pend = d.orders.filter(o => !o.status).length, pshop = (d.shops || []).filter(s => s.status === 'pending').length, pret = (d.returns || []).filter(r => r.status === 'requested').length, prider = (d.ho || []).filter(h => h.status === 'packed' && !h.rider_name).length, pridr = (d.riders || []).filter(r => r.status === 'pending').length, fdl = (d.dl || []).filter(x => x.status === 'failed').length
+    return { pend, pshop, pret, pridr, fdl, todo: d.orders.filter(o => !o.status || o.payment_status === 'verifying').length + pshop + pret + prider + pridr + fdl }
+  }, [d.orders, d.shops, d.returns, d.ho, d.riders, d.dl])
+  const unread = useMemo(() => notes.filter(n => !n.read).length, [notes]), title = NAV.find(n => n[0] === tab)?.[1] || 'Overview'
   const nm = user.user_metadata?.full_name || (user.email || 'admin').split('@')[0]
-  const p = { d, reload: load, say, go, focus, clearFocus, openOrder, openReturn, openPickups }
+  // same object while nothing in it changes, so the memoised tab screens skip redraws (new notifications, the bell…)
+  const p = useMemo(() => ({ d, reload: load, say, go, focus, clearFocus, openOrder, openReturn, openPickups }), [d, load, say, go, focus, clearFocus, openOrder, openReturn, openPickups])
   return <div className="adm"><div className="shell"><nav className="sb" aria-label="Admin sections"><div className="brand"><span className="bm"><img src="/logo-mark.webp?v=2" width="26" height="22" alt="" decoding="async" /></span><span className="bp">Pink</span><span className="bi">ish</span></div>
     <div className="me"><span className="mav" aria-hidden="true">{ini(nm)}</span><b>{nm}</b><small>Store admin</small></div>
     <div className="nv">{NAV.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><span className="ic" aria-hidden="true"><Ic n={k === 'notify' ? 'bell' : k} /></span><span className="lb">{l}</span>{k === 'orders' && pend > 0 && <em>{pend}</em>}{k === 'shops' && pshop > 0 && <em>{pshop}</em>}{k === 'returns' && pret > 0 && <em>{pret}</em>}{k === 'riders' && pridr + fdl > 0 && <em>{pridr + fdl}</em>}</button>)}</div>
     <div className="sp" /><button className="lo" onClick={() => adminOut()}><i aria-hidden="true"><Ic n="out" s={15} /></i>Log out</button></nav>
     <main className="mn"><header className="top"><h1>{title}</h1><div className="ta"><button className={'ib2 bell' + (todo ? ' has' : '')} aria-label={todo ? todo + ' items need attention' : 'Notifications'} aria-haspopup="dialog" onClick={() => setNOpen(true)}><Ic n="bell" s={21} />{todo > 0 ? <i>{todo > 99 ? '99+' : todo}</i> : unread > 0 && <i className="dot" />}</button><button className={'ib2' + (rf ? ' spinning' : '')} aria-label="Refresh" onClick={refresh}><Ic n="refresh" s={20} /></button><button className="ib2 mo" aria-label="Sign out" onClick={() => adminOut()}><Ic n="out" s={20} /></button></div></header>
       <div className="scr">
-      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <Dash {...p} /> : tab === 'orders' ? <Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <Wish {...p} /> : tab === 'products' ? <Products {...p} /> : tab === 'cats' ? <Cats {...p} /> : tab === 'notify' ? <Notify {...p} /> : tab === 'promo' ? <Promos {...p} /> : tab === 'shops' ? <Shops {...p} /> : tab === 'riders' ? <Riders {...p} /> : tab === 'hero' ? <Hero say={say} d={d} /> : <Dash {...p} />}</div></main></div>
+      {ld ? <div className="ctr"><i className="spin" /></div> : tab === 'dash' ? <V.Dash {...p} /> : tab === 'orders' ? <V.Orders {...p} pre={opre} clearPre={clearPre} /> : tab === 'returns' ? <V.Returns {...p} focus={rfocus} clearFocus={clearRfocus} /> : tab === 'wish' ? <V.Wish {...p} /> : tab === 'products' ? <V.Products {...p} /> : tab === 'cats' ? <V.Cats {...p} /> : tab === 'notify' ? <V.Notify {...p} /> : tab === 'promo' ? <V.Promos {...p} /> : tab === 'shops' ? <V.Shops {...p} /> : tab === 'riders' ? <V.Riders {...p} /> : tab === 'hero' ? <V.Hero say={say} d={d} /> : <V.Dash {...p} />}</div></main></div>
     {nOpen && <Notifs orders={d.orders} shops={d.shops || []} rets={d.returns || []} ho={d.ho || []} onReturn={openReturn} onShop={() => { setNOpen(false); go('shops') }} notes={notes} onClose={() => setNOpen(false)} onOrder={openOrder} onWish={() => { setNOpen(false); go('wish') }} onRead={readAll} onClear={() => setNotes([])} />}
-    {toast && <div className="toast" role="status">{toast}</div>}</div>
+    <Toast api={toastR} /></div>
+}
+function Toast({ api: r }) {
+  const [m, setM] = useState(''), t = useRef(0)
+  useEffect(() => {
+    const o = r.current
+    o.fn = msg => { clearTimeout(t.current); setM(msg); t.current = setTimeout(() => setM(''), 2400) }
+    if (o.pend != null) { const x = o.pend; o.pend = null; o.fn(x) }
+    return () => { clearTimeout(t.current); o.fn = null }
+  }, [r])
+  return m ? <div className="toast" role="status">{m}</div> : null
 }
 
 const sh = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace('.0', '') + 'm' : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.0', '') + 'k' : String(Math.round(n))
@@ -359,8 +388,8 @@ function Dash({ d, go, openPickups }) {
     const all = [...m.values()].sort((x, y) => y.q - x.q), tq = all.reduce((s, x) => s + x.q, 0) || 1
     return { rev: orders.reduce((a, o) => a + (+o.total || 0), 0), r7: sum(T - 6 * D, T + D), p7: sum(T - 13 * D, T - 6 * D), today: cnt(T, T + D), yest: cnt(T - D, T), c4, best: all.slice(0, 4).map(x => ({ ...x, p: Math.round(x.q / tq * 100) })) }
   }, [orders])
-  const low = products.filter(x => x.stock != null && x.stock <= 5), pend = S.c4[0]
-  const K = [['Revenue', S.rev, taka, pct(S.r7, S.p7), 'rev', 'Last 7 days vs the 7 before'], ['Orders today', S.today, undefined, pct(S.today, S.yest), 'bag', 'Today vs yesterday'], ['Avg. order', orders.length ? S.rev / orders.length : 0, taka, null, 'avg'], ['Live products', products.filter(x => x.is_active !== false).length, undefined, null, 'products']]
+  const { low, liveN } = useMemo(() => ({ low: products.filter(x => x.stock != null && x.stock <= 5), liveN: products.filter(x => x.is_active !== false).length }), [products]), pend = S.c4[0]
+  const K = [['Revenue', S.rev, taka, pct(S.r7, S.p7), 'rev', 'Last 7 days vs the 7 before'], ['Orders today', S.today, undefined, pct(S.today, S.yest), 'bag', 'Today vs yesterday'], ['Avg. order', orders.length ? S.rev / orders.length : 0, taka, null, 'avg'], ['Live products', liveN, undefined, null, 'products']]
   return <div className="pg dg">
     <div className="kps">{K.map(([l, v, f, t, ic, tip], i) => <div className={'kpi k' + i} key={l}><div className="kl"><span className="ki"><Ic n={ic} s={19} /></span>{t != null && <i className={'tr ' + (t >= 0 ? 'up' : 'dn')} title={tip}>{t >= 0 ? '↑' : '↓'} {Math.abs(t)}%</i>}</div><b><Count to={v} f={f} /></b><span className="kn">{l}</span></div>)}</div>
     <div className="promo"><div><small>Needs attention</small><h2><em><Count to={pend} /></em> order{pend === 1 ? '' : 's'} waiting</h2><p>{pend ? 'Start processing to keep customers happy.' : 'You are all caught up. Nice work!'}</p><button className="bt sm" onClick={() => go('orders')}>{pend ? 'Review now' : 'View orders'}</button></div>
@@ -1388,3 +1417,6 @@ function Hero({ say, d }) {
     {dirty && <div className="hx-bar" role="region" aria-label="Unsaved changes"><span><i />Unsaved changes</span><button type="button" className="bt g sm" disabled={busy} onClick={discard}>Discard</button><button type="button" className="bt sm" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save & publish'}</button></div>}
   </div>
 }
+
+// Memoised tab screens: a screen redraws only when its own data or handlers change (not on every toast, notification or bell update)
+const V = { Dash: memo(Dash), Orders: memo(Orders), Returns: memo(Returns), Wish: memo(Wish), Products: memo(Products), Cats: memo(Cats), Notify: memo(Notify), Promos: memo(Promos), Shops: memo(Shops), Riders: memo(Riders), Hero: memo(Hero) }
