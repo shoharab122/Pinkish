@@ -190,7 +190,7 @@ function Login() {
 
 const first = o => (o.address?.name || 'there').trim().split(/\s+/)[0]
 const WA = [
-  ['Confirm', 'check', o => `Hi ${first(o)}, thank you for shopping with Pinkish! 💗 Your order #${o.order_no} (${taka(o.total)}) is confirmed. We'll pack it discreetly and keep you updated.`],
+  ['Confirm', 'check', o => `Hi ${first(o)}, thank you for shopping with Pinkish! 💗 Your order #${o.order_no} (${taka(o.total)}) is confirmed. We'll pack it with care and keep you updated.`],
   ['Payment', 'rev', o => `Hi ${first(o)}, to confirm order #${o.order_no} please send ${taka(o.total)} via bKash and reply with the Transaction ID. Thank you!`],
   ['On the way', 'truck', o => `Hi ${first(o)}, your Pinkish order #${o.order_no} is out for delivery 🚚 ${o.payment_status === 'paid' ? 'Our rider will call you when nearby.' : 'Please keep ' + taka(o.total) + ' ready. Our rider will call you.'}`],
   ['Delivered', 'check', o => `Hi ${first(o)}, your order #${o.order_no} has been delivered. Thank you for choosing Pinkish! 💗 We'd love to hear your feedback.`],
@@ -211,12 +211,12 @@ function Invoice({ o, onClose }) {
     <div className="invp-bar"><button className="invp-b" onClick={onClose}>← Back</button><div>{o.address?.phone && <a className="invp-b wa" href={wa(o.address.phone, invText(o))} target="_blank" rel="noopener noreferrer">WhatsApp</a>}<button className="invp-b pr" onClick={() => window.print()}>Print / Save PDF</button></div></div>
     <div className="invp-scroll"><article className="invp-sheet">
       {paid && <span className="stp">PAID</span>}
-      <header className="ih"><div><div className="lk" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="44" height="44" alt="" decoding="async" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div><small>Discreet delivery across Chattogram</small></div><div className="it"><h2>INVOICE</h2><b>#{o.order_no}</b></div></header>
+      <header className="ih"><div><div className="lk" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="44" height="44" alt="" decoding="async" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div><small>The marketplace for her · Chattogram</small></div><div className="it"><h2>INVOICE</h2><b>#{o.order_no}</b></div></header>
       <div className="im"><div><span>Date</span><b>{fmt(o.created_at)}</b></div><div><span>Order status</span><b>{STEPS[o.status || 0]}</b></div><div><span>Payment method</span><b>{o.payment || '—'}</b></div><div><span>Payment status</span><b className={'bg ' + (paid ? 'ok' : o.payment_status === 'verifying' ? 'w' : '')}>{payLabel(o)}</b></div>{trx && o.payment === 'bKash' && <div><span>bKash TrxID</span><b>{trx}</b></div>}</div>
       <div className="bd"><span className="bl">Bill to</span><p><b>{o.address?.name || 'Customer'}</b></p>{o.address?.phone && <p>{o.address.phone}</p>}<p>{o.address?.address || '—'}</p>{o.address?.note && <p className="nt2">Note: {o.address.note}</p>}</div>
       <table><thead><tr><th>Item</th><th className="r">Qty</th><th className="r">Amount</th></tr></thead><tbody>{its.map((i, ix) => <tr key={i.key || ix}><td>{i.name}<small>{i.variant ? i.variant + ' · ' : ''}{taka(i.price)} each</small></td><td className="r">{i.qty}</td><td className="r">{taka(i.price * i.qty)}</td></tr>)}</tbody></table>
       <div className="tot"><div><span>Subtotal</span><span>{taka(sub)}</span></div>{disc > 0.5 && <div><span>Discount</span><span>−{taka(disc)}</span></div>}{fee != null && <div><span>Delivery</span><span>{taka(fee)}</span></div>}<div className="g"><span>Total</span><span>{taka(o.total)}</span></div></div>
-      <footer className="ft">Thank you for shopping with Pinkish 💗<br />Your order is packed discreetly.</footer>
+      <footer className="ft">Thank you for shopping with Pinkish 💗<br />Your order was packed with care.</footer>
     </article></div></div>, document.body)
 }
 
@@ -1074,7 +1074,7 @@ function Riders({ d: { riders = [], dl = [], orders = [], ridersErr, rops = RO0 
   </div>
 }
 
-const blank = { name: '', brand: '', tag: '', category_id: '', price: '', stock: '', emoji: '', image_url: '', is_active: true, variants: [{ label: 'Standard', mult: 1 }], features: '100% original product\nDiscreet packaging' }
+const blank = { name: '', brand: '', tag: '', category_id: '', price: '', stock: '', emoji: '', image_url: '', is_active: true, variants: [{ label: 'Standard', mult: 1 }], features: '100% original product\nPacked with care' }
 const PRESET = ['1 pc', '3 pcs', '5 pcs', '10 pcs', '20 pcs']
 const stockTxt = s => s == null || s === '' ? 'Unlimited' : s + ' in stock'
 
@@ -1207,7 +1207,7 @@ const heroBg = x => {
 const SPEEDS = [3, 4, 5, 6, 8, 10]
 const LAYOUTS = [['side', 'Beside text'], ['cover', 'Behind text'], ['full', 'Picture only']]
 const SLIDE0 = { chip: '', lines: '', sub: '', emoji: '', image: '', on: true, cta: 'Shop Now', link: '', bg: 'purple', c1: '#2d0b4a', c2: '#c2377f', layout: 'side', tone: 'light' }
-const DEF = [{ ...SLIDE0, chip: 'Limited Offer', lines: 'Privacy. Confidence.\nComfort. Wellness.', emoji: '🛡️' }, { ...SLIDE0, chip: 'Delivery from ৳40', lines: 'Discreet delivery\nacross Chattogram', emoji: '🚚' }, { ...SLIDE0, chip: 'Use code SHIELD10', lines: 'Get 10% off\nyour first order', emoji: '🎁' }]
+const DEF = [{ ...SLIDE0, chip: 'The marketplace for her', lines: 'Beauty. Fashion.\nSelf-care. Gifts.', emoji: '🛡️' }, { ...SLIDE0, chip: 'Delivery from ৳40', lines: 'Fast delivery\nacross Chattogram', emoji: '🚚' }, { ...SLIDE0, chip: 'Use code SHIELD10', lines: 'Get 10% off\nyour first order', emoji: '🎁' }]
 const isLogo = v => v === '🛡️' || v === '🛡'
 let hk = 0
 const NONE = []
@@ -1283,7 +1283,7 @@ const SlideEditor = memo(function SlideEditor({ x, i, n, ar, open, cats, prods, 
             : <><p className="mut hhint">Best size: 2400 × 1000 px. No picture? An emoji is shown instead.</p><F l="Emoji"><input className="in sm" maxLength={8} value={x.emoji} onChange={e => set('emoji', e.target.value)} /></F></>}
         </fieldset>
         {showText && <fieldset className="hfs"><legend><Hi n="text" s={16} />Text</legend>
-          <F l="Headline · one line per row" err={!x.lines?.trim() && x.on !== false ? 'Add a headline or hide this slide' : ''}><textarea className="in" rows="2" value={x.lines} onChange={e => set('lines', e.target.value)} placeholder={'Discreet delivery\nacross Chattogram'} /></F>
+          <F l="Headline · one line per row" err={!x.lines?.trim() && x.on !== false ? 'Add a headline or hide this slide' : ''}><textarea className="in" rows="2" value={x.lines} onChange={e => set('lines', e.target.value)} placeholder={'Fast delivery\nacross Chattogram'} /></F>
           <div className="fg"><F l="Small text (optional)"><input className="in" maxLength={90} value={x.sub} onChange={e => set('sub', e.target.value)} /></F><F l="Badge above headline (optional)"><input className="in" maxLength={30} value={x.chip} onChange={e => set('chip', e.target.value)} /></F></div>
         </fieldset>}
         <fieldset className="hfs"><legend><Hi n="link" s={16} />Button &amp; link</legend>
