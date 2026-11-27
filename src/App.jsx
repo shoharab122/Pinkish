@@ -19,7 +19,7 @@ const NAV = [['home', 'home', 'Home'], ['categories', 'grid', 'Categories'], ['c
 const TABS = NAV.map(n => n[0])
 const STEPS = ['Order Placed', 'Processing', 'Out for Delivery', 'Delivered']
 const PAYS = [['Cash on Delivery', 'Pay when you receive', '💵'], ['bKash', 'Send money, then enter your TrxID', '🌸'], ['Nagad', 'Pay with Nagad', '🟠'], ['Debit/Credit Card', 'Visa, Mastercard', '💳']]
-const OFFERS = [['Limited Offer', 'Privacy. Confidence.|Comfort. Wellness.', '🛡️'], ['Delivery from ৳40', 'Discreet delivery|across Bangladesh', '🚚'], ['Use code SHIELD10', 'Get 10% off|your first order', '🎁']]
+const OFFERS = [['The marketplace for her', 'Beauty. Fashion.|Self-care. Gifts.', '🛡️'], ['Delivery from ৳40', 'Fast delivery|across Bangladesh', '🚚'], ['Use code SHIELD10', 'Get 10% off|your first order', '🎁']]
 const SORTS = { pop: ['Popular', (a, b) => (b.reviews || 0) - (a.reviews || 0)], new: ['Newest', (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)], lo: ['Price: Low → High', (a, b) => a.price - b.price], hi: ['Price: High → Low', (a, b) => b.price - a.price], rate: ['Top rated', (a, b) => b.rating - a.rating] }
 const RIPPLE = '.nav button,.oc,.nt-i,.store.link,.wl-skip,.wl-bars button,.bshop,.cc,.btn,.fab,.add,.cat,.card,.pay,.menu,.ib,.tabs button,.chips button,.var button,.heart,.qty button,.promo button,.social'
 const NOMOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1403,7 +1403,7 @@ const shareProduct = async (p, say) => {
   copyText(url, say, 'Link copied. Paste it anywhere to share.')
 }
 // Every order goes through Pinkish: sellers hand items to our rider, we pack and deliver. No direct seller contact.
-const Fulfil = memo(({ shop }) => <div className="ffb" role="note"><span className="ffb-i"><Icon n="truck" /></span><div><b>{shop ? 'Sold by ' + (shop.name || 'a verified seller') + ' · ' : ''}Delivered by Pinkish</b><small>Order only on Pinkish. We collect from the seller, pack discreetly and deliver to you, with returns protected.</small></div></div>)
+const Fulfil = memo(({ shop }) => <div className="ffb" role="note"><span className="ffb-i"><Icon n="truck" /></span><div><b>{shop ? 'Sold by ' + (shop.name || 'a verified seller') + ' · ' : ''}Delivered by Pinkish</b><small>Order only on Pinkish. We collect from the seller, pack it with care and deliver to you, with returns protected.</small></div></div>)
 
 // --- search: one normalised index, all words must match (name, brand, tag, category and shop) ---
 // typo tolerant engine in src/lib/search.js: "lipstik", "parfume", "t shirt" all find the right products
@@ -1640,42 +1640,196 @@ const Profile = memo(({ user, admin, count, wishCount, place, hasAddr, tab, go, 
   </div>
 })
 
-// ---------- Welcome (first visit): one clean screen, like a modern marketplace ----------
-// Real products from the cached catalogue make the hero; no slides, no timers, CSS-only motion.
-const WEL_PTS = [['truck', 'Delivery', 'from ৳40'], ['card', 'Cash or bKash', 'on delivery'], ['shield', 'Verified', 'sellers']]
-function Welcome({ prods = NONE, cats = NONE, onStart, onLogin }) {
+// ---------- Welcome (first visit) ----------
+// One light screen: brand plum, a hand-drawn bag mascot, two clear buttons.
+// No product pictures, no timers, no network: the doodle pattern is a single cached SVG tile and all motion is CSS.
+const BagArt = () => <svg className="wl-art" viewBox="0 0 220 200" role="img" aria-label="Smiling Pinkish shopping bag" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+  <path pathLength="1" className="d" fill="#4a1580" d="M50 70Q47 68 51 67L171 65Q176 65 176 70L186 169Q187 176 180 176L43 178Q36 178 37 171Z" />
+  <path pathLength="1" className="d wl-sk" d="M54 74L170 71L181 172L45 174Z" />
+  <path pathLength="1" className="d" d="M51 68L61 86L163 84L175 66" />
+  <path pathLength="1" className="d" d="M83 72C80 30 141 27 138 69" />
+  <path pathLength="1" className="d wl-sk" d="M90 71C89 41 132 38 131 69" />
+  <circle cx="96" cy="126" r="3.6" fill="currentColor" stroke="none" />
+  <circle cx="126" cy="126" r="3.6" fill="currentColor" stroke="none" />
+  <path pathLength="1" className="d" d="M103 139Q111 147 119 139" />
+  <ellipse cx="86" cy="137" rx="7" ry="3.5" fill="currentColor" stroke="none" opacity=".3" />
+  <ellipse cx="136" cy="137" rx="7" ry="3.5" fill="currentColor" stroke="none" opacity=".3" />
+  <path pathLength="1" className="d" d="M137 62L151 78" strokeWidth="2.4" />
+  <path className="wl-hrt" d="M156 98C146 92 142 86 146 81C149 77 154 79 155 83C156 79 161 77 164 81C168 86 164 92 156 98Z" fill="currentColor" stroke="none" />
+  <path className="wl-tw" d="M28 52v14M21 59h14M196 36v10M191 41h10M200 128v8M196 132h8" strokeWidth="2.6" />
+</svg>
+function Welcome({ onStart, onLogin, onSignup }) {
   const [out, setOut] = useState(false)
-  // four best-looking products with a picture (highest rated first) for the mosaic
-  const pics = useMemo(() => prods.filter(p => p.image_url && p.is_active !== false && stockOf(p) !== 0).sort((a, b) => (b.rating || 0) - (a.rating || 0) || (b.reviews || 0) - (a.reviews || 0)).slice(0, 4), [prods])
-  const chips = useMemo(() => cats.slice(0, 8), [cats])
-  useEffect(() => { warm(['/logo-mark.webp?v=2']) }, [])
-  const leave = then => { if (out) return; writeLS('pk_wel', 1); if (lite()) return then(); setOut(true); setTimeout(then, 220) }
+  // phone status bar takes the welcome colour, and goes back when the screen closes
+  useEffect(() => {
+    let m = document.querySelector('meta[name="theme-color"]'); const had = !!m, old = m?.getAttribute('content')
+    if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m) }
+    m.setAttribute('content', '#3d1070')
+    return () => { if (had) m.setAttribute('content', old || ''); else m.remove() }
+  }, [])
+  const leave = then => { if (out) return; writeLS('pk_wel', 1); if (lite()) return then(); setOut(true); setTimeout(then, 200) }
   return <div className={'wl' + (out ? ' out' : '')}>
-    <header className="wl-top">
-      <span className="wl-logo"><img src="/logo-mark.webp?v=2" width="30" height="30" alt="" decoding="async" draggable="false" /><b className="wm"><span className="bp">Pink</span><span className="bi">ish</span></b></span>
-      <button type="button" className="wl-skip" onClick={() => leave(onStart)}>Skip</button>
-    </header>
-
-    <div className="wl-body">
-      <div className="wl-hero">
-        <span className="wl-tag"><i />Chattogram's marketplace for her</span>
-        {pics.length >= 3
-          ? <div className={'wl-mos n' + pics.length} aria-hidden="true">{pics.map((p, k) => <span key={p.id}><img src={p.image_url} alt="" width="160" height="160" loading="eager" fetchpriority={k === 0 ? 'high' : undefined} decoding="async" draggable="false" />{k === 0 && api.dealLive(p) && <em>-{api.dealPct(p)}%</em>}</span>)}</div>
-          : <div className="wl-art" aria-hidden="true"><ShopArt /></div>}
-      </div>
-
-      <h1>Everything you love,<em>delivered discreetly.</em></h1>
-      <p className="wl-sub">Beauty, fashion and self-care from verified local shops. Order in seconds, pay when it arrives.</p>
-
-      {chips.length > 0 && <div className="wl-cats" aria-label="Popular categories">{chips.map(c => <button type="button" key={c.id} onClick={() => leave(onStart)}><span><CatIcon c={c} /></span>{c.name}</button>)}</div>}
-
-      <ul className="wl-pts">{WEL_PTS.map(([ic, a, b]) => <li key={a}><i><Icon n={ic} /></i><span><b>{a}</b><small>{b}</small></span></li>)}</ul>
+    <button type="button" className="wl-skip" onClick={() => leave(onStart)}>Skip</button>
+    <div className="wl-c">
+      <h1>Welcome to<b><span className="wl-p">Pink</span>ish</b></h1>
+      <p className="wl-sub">The marketplace for her</p>
+      <BagArt />
+      <ul className="wl-tags" aria-label="What you can shop"><li>Beauty</li><li>Fashion</li><li>Self-care</li><li>Gifts</li></ul>
     </div>
-
     <div className="wl-cta">
-      <button type="button" className="btn wl-go" onClick={() => leave(onStart)}>Start shopping<Icon n="chev" /></button>
-      <p className="wl-in">Already have an account? <button type="button" onClick={() => leave(onLogin)}>Log in</button></p>
+      <button type="button" className="wl-b" onClick={() => leave(onStart)}>Get started <Icon n="chev" /></button>
+      <button type="button" className="wl-b o" onClick={() => leave(onSignup)}>Create an account</button>
+      <p className="wl-g">Already have an account? <button type="button" onClick={() => leave(onLogin)}>Log in</button></p>
     </div>
+  </div>
+}
+
+// ---------------- Login / sign-up screen (soft wave hero + white sheet, marketplace for her) ----------------
+const PA_CSS = `
+.pa{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;background:#fbf6ff;color:var(--ink,#2a1a3a);isolation:isolate;scrollbar-width:none}
+.pa::-webkit-scrollbar{display:none}
+.pa-hero{position:relative;flex:none;height:clamp(230px,36dvh,320px);overflow:hidden;padding:calc(14px + env(safe-area-inset-top)) 18px 0;
+  background:radial-gradient(80% 70% at 15% 10%,#ffc2dc 0,#0000 60%),radial-gradient(70% 70% at 90% 25%,#d9b8ff 0,#0000 62%),radial-gradient(90% 80% at 50% 110%,#ff8fbd 0,#0000 60%),linear-gradient(160deg,#ffe1ee,#f3d9ff 55%,#e8c8ff)}
+.pa-waves{position:absolute;left:-30%;top:-10%;width:160%;height:130%;pointer-events:none;color:#fff}
+.pa-waves g{transform-origin:50% 50%}
+.pa-waves .w1{animation:paW1 16s ease-in-out infinite alternate;opacity:.75}
+.pa-waves .w2{animation:paW2 22s ease-in-out infinite alternate;opacity:.45;color:#b26ad8}
+@keyframes paW1{to{transform:translate3d(-7%,4%,0) rotate(-4deg) scale(1.06)}}
+@keyframes paW2{to{transform:translate3d(6%,-3%,0) rotate(5deg) scale(1.1)}}
+.pa-top{position:relative;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pa-back{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:8px 12px 8px 8px;border-radius:99px;font-size:13.5px;font-weight:600;color:#4a1668;background:#ffffff8c;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 6px 16px -8px #8e2a8c66;transition:transform .3s var(--spring,ease)}
+.pa-back:active{transform:scale(.94)}
+.pa-back .ico{transform:rotate(180deg);width:17px;height:17px}
+.pa-brand{display:inline-flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border-radius:99px;background:#ffffffb3;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 8px 20px -10px #8e2a8c88}
+.pa-brand img{width:30px;height:30px;border-radius:50%;background:#fff;object-fit:contain;padding:3px}
+.pa-brand b{font-weight:800;font-size:15px;letter-spacing:-.2px}.pa-brand .bp{color:#e0457b}.pa-brand .bi{color:#1d0f2b}
+.pa-float{position:absolute;inset:0;z-index:2;pointer-events:none}
+.pa-float span{position:absolute;display:grid;place-items:center;width:var(--s,46px);height:var(--s,46px);border-radius:16px;color:#8e2a8c;background:#ffffffb8;border:1px solid #fff;
+  box-shadow:0 14px 26px -12px #8e2a8c88,inset 0 1px 0 #fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  animation:paIn .8s var(--spring,ease) both,paBob var(--d,6s) ease-in-out infinite alternate;animation-delay:var(--dl,0s),calc(var(--dl,0s) + .8s)}
+.pa-float svg{width:52%;height:52%}
+.pa-float span.pk{color:#fff;background:linear-gradient(135deg,#ff8fbd,#e0457b);border-color:#ffffff99}
+@keyframes paIn{from{opacity:0;transform:translateY(20px) scale(.6) rotate(var(--r,0deg))}to{opacity:1;transform:translateY(0) scale(1) rotate(var(--r,0deg))}}
+@keyframes paBob{from{transform:translateY(0) rotate(var(--r,0deg))}to{transform:translateY(-12px) rotate(calc(var(--r,0deg) * -1))}}
+.pa-spark{position:absolute;z-index:2;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 12px 3px #fff;animation:paTw 2.6s ease-in-out infinite;pointer-events:none}
+@keyframes paTw{0%,100%{opacity:.15;transform:scale(.5)}50%{opacity:1;transform:scale(1)}}
+.pa-sheet{position:relative;z-index:4;flex:1 0 auto;margin-top:-34px;padding:28px 22px calc(22px + env(safe-area-inset-bottom));border-radius:34px 34px 0 0;background:#fff;
+  box-shadow:0 -20px 40px -24px #8e2a8c66;animation:paUp .7s cubic-bezier(.2,.9,.25,1) both}
+.pa-sheet::before{content:'';position:absolute;top:10px;left:50%;width:42px;height:4px;margin-left:-21px;border-radius:9px;background:#efe4f6}
+@keyframes paUp{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
+.pa-in{max-width:400px;margin:0 auto}
+.pa-h{text-align:center;margin-bottom:20px}
+.pa-h h2{margin:0;font:800 clamp(24px,7vw,28px)/1.15 'Zilla Slab','Inter',system-ui,sans-serif;letter-spacing:-.3px;color:#1d0f2b}
+.pa-h p{margin:8px auto 0;max-width:290px;font-size:13.5px;line-height:1.5;color:#8b8197}
+.pa-h p b{color:#4a1668}
+.pa-st>*{animation:paRise .5s cubic-bezier(.2,.9,.25,1) both;animation-delay:calc(var(--i,0) * 60ms + .15s)}
+@keyframes paRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.pa form.shake{animation:shake .45s}
+.pa-f{position:relative;display:flex;align-items:center;gap:10px;min-height:54px;margin-bottom:12px;padding:0 6px 0 16px;border-radius:18px;background:#fff;border:1.5px solid #ece3f3;box-shadow:0 6px 16px -14px #8e2a8c;transition:border-color .25s,box-shadow .25s,transform .25s}
+.pa-f:focus-within{border-color:#c48ee8;box-shadow:0 0 0 4px #e0457b14,0 10px 22px -14px #8e2a8c;transform:translateY(-1px)}
+.pa-f>.ico{flex:none;width:18px;height:18px;color:#b9a8c9;transition:color .25s}
+.pa-f:focus-within>.ico{color:#e0457b}
+.pa-f input{flex:1;min-width:0;border:0;outline:0;background:none;padding:15px 0;font:500 16px/1.2 'Inter',system-ui,sans-serif;color:#2a1a3a}
+.pa-f input::placeholder{color:#b3a7c0;font-weight:400}
+.pa-f input:-webkit-autofill{-webkit-text-fill-color:#2a1a3a;box-shadow:0 0 0 60px #fff inset}
+.pa-eye{all:unset;cursor:pointer;flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#b3a7c0}
+.pa-eye:hover{color:#8e2a8c}.pa-eye .ico{width:19px;height:19px}
+.pa-row{display:flex;justify-content:flex-end;margin:-2px 0 16px}
+.pa-link{all:unset;cursor:pointer;font-size:13px;font-weight:700;color:#8e2a8c;padding:4px 2px;border-radius:6px}
+.pa-link:hover{text-decoration:underline;text-underline-offset:3px}
+.pa-link:focus-visible,.pa-back:focus-visible,.pa-go:focus-visible,.pa-gg:focus-visible,.pa-eye:focus-visible{outline:2px solid #8e2a8c;outline-offset:2px}
+.pa-msg{margin:0 0 14px;padding:12px 14px;border-radius:16px;background:#fbf4ff;border:1px solid #efe2f7;font-size:13px;color:#6b5b7b;line-height:1.5}
+.pa-go{all:unset;box-sizing:border-box;cursor:pointer;position:relative;overflow:hidden;width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:99px;
+  font-weight:800;font-size:16px;color:#fff;letter-spacing:.2px;text-shadow:0 1px 2px #8e2a8c55;
+  background:linear-gradient(110deg,#ff8fb8,#e0457b 45%,#a95fe0);background-size:180% 100%;
+  box-shadow:0 16px 30px -12px #e0457baa,inset 0 1.5px 0 #ffffff77,inset 0 -8px 14px #8e2a8c33;transition:transform .35s var(--spring,ease),background-position .6s,box-shadow .3s}
+.pa-go::after{content:'';position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,#0000,#ffffff66,#0000);transform:skewX(-20deg);animation:paShine 3.4s ease-in-out infinite 1.2s}
+@keyframes paShine{0%,60%{left:-60%}100%{left:140%}}
+.pa-go:hover:not(:disabled){background-position:100% 0}
+.pa-go:active:not(:disabled){transform:scale(.97)}
+.pa-go:disabled{opacity:.75;cursor:default}
+.pa-go .ico{width:18px;height:18px}
+.pa-or{display:flex;align-items:center;gap:12px;margin:22px 0 14px;font-size:12.5px;color:#a79bb5}
+.pa-or::before,.pa-or::after{content:'';flex:1;height:1px;background:#efe6f5}
+.pa-gg{all:unset;box-sizing:border-box;cursor:pointer;width:100%;min-height:52px;display:flex;align-items:center;justify-content:center;gap:10px;border-radius:99px;background:#fff;border:1.5px solid #ece3f3;font-weight:700;font-size:15px;color:#2a1a3a;box-shadow:0 8px 18px -14px #4a1668;transition:transform .3s var(--spring,ease),border-color .2s}
+.pa-gg:hover{border-color:#d8c4e8}.pa-gg:active{transform:scale(.97)}
+.pa-gg .ico{width:20px;height:20px}
+.pa-sw{text-align:center;margin:20px 0 0;font-size:13.5px;color:#8b8197}
+.pa-sw .pa-link{font-size:13.5px;color:#e0457b}
+.pa-trust{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin:18px 0 0;padding:0;list-style:none}
+.pa-trust li{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:99px;background:#fbf4ff;color:#7a6a8a;font-size:11.5px;font-weight:600}
+.pa-trust .ico{width:13px;height:13px;color:#e0457b}
+@media(max-height:680px){.pa-hero{height:200px}.pa-h p{display:none}.pa-h{margin-bottom:14px}}
+@media(min-width:700px){.pa-sheet{padding-top:34px}}
+@media(prefers-reduced-motion:reduce){.pa-waves g,.pa-float span,.pa-spark,.pa-go::after{animation:none!important}}
+`
+const paCss = () => { if (typeof document === 'undefined' || document.getElementById('pa-css')) return; const s = document.createElement('style'); s.id = 'pa-css'; s.textContent = PA_CSS; document.head.appendChild(s) }
+// soft flowing contour lines (like silk), drawn once
+const PA_LINES = (shift, n) => Array.from({ length: n }, (_, i) => { const y = 20 + i * 11, a = 38 + i * 1.6; return `M-40 ${y + shift} C 110 ${y - a} 230 ${y + a + 30} 400 ${y + 6} S 640 ${y - a} 760 ${y + 18}` })
+const PA_W1 = PA_LINES(0, 26), PA_W2 = PA_LINES(14, 22)
+const PA_ITEMS = [
+  ['beauty', '8%', '58%', '52px', '-8deg', '0s', '5.5s'], ['bag', '74%', '44%', '58px', '7deg', '.12s', '6.5s', 'pk'],
+  ['jewelry', '42%', '58%', '42px', '5deg', '.24s', '5s'], ['shoes', '86%', '64%', '40px', '-6deg', '.36s', '7s'],
+  ['clothes', '26%', '30%', '38px', '9deg', '.48s', '6s', 'pk'],
+]
+const PA_HEART = <path d="M12 20.5s-7.8-4.7-9.6-9.7C1.2 7.4 3.1 4.2 6.4 4.2c2 0 3.5 1 5.6 3 2.1-2 3.6-3 5.6-3 3.3 0 5.2 3.2 4 6.6-1.8 5-9.6 9.7-9.6 9.7z" />
+const PA_TXT = {
+  login: ['Welcome back', <>Ready for something pretty? <b>Your favourites are waiting.</b></>],
+  signup: ['Create your account', <>Beauty, fashion, self-care and gifts from <b>verified sellers</b>, delivered to you.</>],
+  forgot: ['Reset your password', <>Enter your account email and we will send you a <b>reset link</b>.</>],
+  reset: ['Set a new password', <>Choose a new password for your <b>Pinkish</b> account.</>],
+}
+function AuthScreen({ mode, setMode, form, setForm, showPw, setShowPw, shake, busy, onSubmit, onClose, onGoogle }) {
+  paCss()
+  // phone status bar matches the soft pink hero while this screen is open
+  useEffect(() => {
+    let m = document.querySelector('meta[name="theme-color"]'); const had = !!m, old = m?.getAttribute('content')
+    if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m) }
+    m.setAttribute('content', '#ffe1ee')
+    return () => { if (had) m.setAttribute('content', old || ''); else m.remove() }
+  }, [])
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
+  const [h, sub] = PA_TXT[mode] || PA_TXT.login
+  const inUp = mode === 'login' || mode === 'signup'
+  let i = 0
+  const st = () => ({ '--i': i++ })
+  return <div className="pa">
+    <div className="pa-hero">
+      <svg className="pa-waves" viewBox="0 0 720 340" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <g className="w1" fill="none" stroke="currentColor" strokeWidth="1.1">{PA_W1.map((d, k) => <path key={k} d={d} />)}</g>
+        <g className="w2" fill="none" stroke="currentColor" strokeWidth=".9">{PA_W2.map((d, k) => <path key={k} d={d} />)}</g>
+      </svg>
+      <div className="pa-float" aria-hidden="true">
+        {PA_ITEMS.map(([k, x, y, s, r, dl, d, pk]) => <span key={k} className={pk || ''} style={{ left: x, top: y, '--s': s, '--r': r, '--dl': dl, '--d': d }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{CAT_SVG[k] || PA_HEART}</svg></span>)}
+        <span style={{ left: '56%', top: '30%', '--s': '34px', '--r': '-10deg', '--dl': '.6s', '--d': '4.5s', color: '#e0457b' }}><svg viewBox="0 0 24 24" fill="currentColor" stroke="none">{PA_HEART}</svg></span>
+      </div>
+      <i className="pa-spark" style={{ left: '30%', top: '36%' }} /><i className="pa-spark" style={{ left: '64%', top: '62%', animationDelay: '.9s' }} /><i className="pa-spark" style={{ left: '90%', top: '30%', animationDelay: '1.6s' }} />
+      <header className="pa-top">
+        <button type="button" className="pa-back" onClick={onClose}><Icon n="chev" />Back</button>
+        <span className="pa-brand" aria-label="Pinkish"><img src="/logo-mark.webp?v=2" width="30" height="30" alt="" decoding="async" draggable="false" /><b><span className="bp">Pink</span><span className="bi">ish</span></b></span>
+      </header>
+    </div>
+    <div className="pa-sheet"><div className="pa-in">
+      <form className={'pa-st' + (shake ? ' shake' : '')} onSubmit={onSubmit} noValidate key={mode}>
+        <div className="pa-h" style={st()}><h2>{h}</h2><p>{sub}</p></div>
+        {mode === 'signup' && <label className="pa-f" style={st()}><Icon n="user" /><input placeholder="Enter full name" aria-label="Full name" autoComplete="name" enterKeyHint="next" value={form.name} onChange={set('name')} /></label>}
+        {mode === 'signup' && <label className="pa-f" style={st()}><Icon n="phone" /><input placeholder="Phone number (01XXXXXXXXX)" aria-label="Phone number" type="tel" inputMode="tel" autoComplete="tel" enterKeyHint="next" value={form.phone} onChange={set('phone')} /></label>}
+        {mode !== 'reset' && <label className="pa-f" style={st()}><Icon n="mail" /><input placeholder="Enter email" aria-label="Email address" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" enterKeyHint={mode === 'forgot' ? 'go' : 'next'} value={form.id} onChange={set('id')} /></label>}
+        {mode !== 'forgot' && <label className="pa-f" style={st()}><Icon n="lock" /><input placeholder={mode === 'reset' ? 'New password' : 'Password'} aria-label="Password" type={showPw ? 'text' : 'password'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} enterKeyHint={mode === 'login' ? 'go' : 'next'} value={form.pw} onChange={set('pw')} />
+          <button type="button" className="pa-eye" aria-label={showPw ? 'Hide password' : 'Show password'} onClick={() => setShowPw(v => !v)}><Icon n={showPw ? 'eyeoff' : 'eye'} /></button></label>}
+        {(mode === 'signup' || mode === 'reset') && <label className="pa-f" style={st()}><Icon n="lock" /><input placeholder="Confirm password" aria-label="Confirm password" type={showPw ? 'text' : 'password'} autoComplete="new-password" enterKeyHint="go" value={form.pw2} onChange={set('pw2')} /></label>}
+        {mode === 'login' ? <div className="pa-row" style={st()}><button type="button" className="pa-link" onClick={() => setMode('forgot')}>Forgot password?</button></div> : <div style={{ height: 6 }} />}
+        <div style={st()}><button className="pa-go" type="submit" disabled={busy}>{busy ? <i className="spin" /> : <>{{ login: 'Log In', signup: 'Get Started', forgot: 'Send Reset Link', reset: 'Update Password' }[mode]}<Icon n="chev" /></>}</button></div>
+        {inUp && <div style={st()}>
+          <div className="pa-or"><span>{mode === 'login' ? 'Sign in with' : 'Sign up with'}</span></div>
+          <button type="button" className="pa-gg" onClick={onGoogle}><GoogleG />Continue with Google</button>
+        </div>}
+        <p className="pa-sw" style={st()}>{mode === 'forgot' ? <>Remembered it? <button type="button" className="pa-link" onClick={() => setMode('login')}>Back to login</button></>
+          : mode === 'reset' ? null
+          : <>{mode === 'login' ? "Don't have an account?" : 'Already have an account?'} <button type="button" className="pa-link" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>{mode === 'login' ? 'Sign Up' : 'Log In'}</button></>}</p>
+        <ul className="pa-trust" style={st()}><li><Icon n="shield" />Verified sellers</li><li><Icon n="truck" />Delivery from ৳40</li><li><Icon n="lock" />Private &amp; secure</li></ul>
+      </form>
+    </div></div>
   </div>
 }
 
@@ -1880,7 +2034,7 @@ export default function App() {
   useEffect(() => {
     if (cur.s !== 'splash') return
     let on = true
-    Promise.all([safe(() => api.restoreUser()), new Promise(r => setTimeout(r, user ? 250 : 800))]).then(([u]) => { if (!on) return; if (recov.current || api.LINK_EXPIRED) return tab('auth'); if (u) setUser(u); let r = ''; try { r = sessionStorage.getItem('pk_after') || ''; sessionStorage.removeItem('pk_after') } catch { /* storage unavailable */ } if (r === 'checkout' && (u || user)) { tab('cart'); say('You are logged in. Continue to checkout.', 3000) } else if (!u && !user && !DEEP && !readLS('pk_wel', 0)) { setDir('fade'); setStack([{ s: 'ob' }]) } else tab('home') })
+    Promise.all([safe(() => api.restoreUser()), new Promise(r => setTimeout(r, user ? 250 : 450))]).then(([u]) => { if (!on) return; if (recov.current || api.LINK_EXPIRED) return tab('auth'); if (u) setUser(u); let r = ''; try { r = sessionStorage.getItem('pk_after') || ''; sessionStorage.removeItem('pk_after') } catch { /* storage unavailable */ } if (r === 'checkout' && (u || user)) { tab('cart'); say('You are logged in. Continue to checkout.', 3000) } else if (!u && !user && !DEEP && !readLS('pk_wel', 0)) { setDir('fade'); setStack([{ s: 'ob' }]) } else tab('home') })
     return () => { on = false }
   }, [])
   useEffect(() => { if (s === 'orders' || s === 'tracking') safe(() => api.getOrders(user?.id), null).then(o => { if (o) setOrders(o) }) }, [s, user])
@@ -2077,35 +2231,12 @@ export default function App() {
   const adminDo = async (fn, ok) => { if (!admin) return; try { await fn(); await load(); say(ok) } catch (e) { say(e?.message || 'Something went wrong. Try again.') } }
 
   let body
-  if (s === 'splash') return <div className="app"><div className="splash"><div className="lgcard"><div className="lk col" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="84" height="84" alt="" decoding="async" fetchpriority="high" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div></div><div>Privacy. Confidence. Comfort. Wellness.</div><div className="sbar"><i /></div></div></div>
+  if (s === 'splash') return <div className="app"><div className="splash"><div className="lgcard"><div className="lk col" aria-label="Pinkish"><img className="bmk" src="/logo-mark.webp?v=2" width="84" height="84" alt="" decoding="async" fetchpriority="high" /><span className="wm"><span className="bp">Pink</span><span className="bi">ish</span></span></div></div><div>The marketplace for her</div><div className="sbar"><i /></div></div></div>
 
-  if (s === 'ob') body = <Welcome prods={prods} cats={cats} onStart={() => tab('home')} onLogin={() => { tab('home'); goLogin() }} />
+  if (s === 'ob') body = <Welcome onStart={() => tab('home')} onLogin={() => { tab('home'); goLogin() }} onSignup={() => { tab('home'); pending.current = null; setMode('signup'); go('auth') }} />
 
-  if (s === 'auth') body = <div className="auth">
-    <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
-    <header className="abar"><span className="am"><img src="/logo-mark.webp?v=2" width="34" height="34" alt="" decoding="async" draggable="false" /></span><div className="an"><h1><span className="bn"><span className="bp">Pink</span><span className="bi">ish</span></span></h1><small>Privacy. Confidence. Comfort. Wellness.</small></div><span className="ap"><Icon n="lock" />Private</span><button type="button" className="a-x" aria-label="Close" onClick={closeAuth}>✕</button></header>
-    <div className="auth-in">
-      <form className={'auth-card glass' + (shake ? ' shake' : '')} onSubmit={login} noValidate>
-        {(mode === 'login' || mode === 'signup') && <div className="ah"><h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2><p>{mode === 'login' ? 'Log in to continue shopping privately.' : 'Join Pinkish for discreet delivery across Bangladesh.'}</p></div>}
-        {(mode === 'login' || mode === 'signup') && <div className="tabs" data-i={mode === 'login' ? 0 : 1}>{['login', 'signup'].map(m => <button type="button" key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'login' ? 'Login' : 'Sign Up'}</button>)}</div>}
-        {mode === 'forgot' && <p className="msg"><b>Reset your password</b><br />Enter your account email and we will send you a reset link.</p>}
-        {mode === 'reset' && <p className="msg"><b>Set a new password</b><br />Choose a new password for your account.</p>}
-        {mode === 'signup' && <label className="fld"><span className="fi"><Icon n="user" /></span><input placeholder="Full name" aria-label="Full name" autoComplete="name" enterKeyHint="next" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></label>}
-        {mode === 'signup' && <label className="fld"><span className="fi"><Icon n="phone" /></span><input placeholder="Phone number (01XXXXXXXXX)" aria-label="Phone number" type="tel" inputMode="tel" autoComplete="tel" enterKeyHint="next" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></label>}
-        {mode !== 'reset' && <label className="fld"><span className="fi"><Icon n="mail" /></span><input placeholder="Email address" aria-label="Email address" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" enterKeyHint={mode === 'forgot' ? 'go' : 'next'} value={form.id} onChange={e => setForm(f => ({ ...f, id: e.target.value }))} /></label>}
-        {mode !== 'forgot' && <label className="fld"><span className="fi"><Icon n="lock" /></span><input placeholder={mode === 'reset' ? 'New password' : 'Password'} aria-label="Password" type={showPw ? 'text' : 'password'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} enterKeyHint={mode === 'login' ? 'go' : 'next'} value={form.pw} onChange={e => setForm(f => ({ ...f, pw: e.target.value }))} />
-          <button type="button" className="eye" aria-label={showPw ? 'Hide password' : 'Show password'} onClick={() => setShowPw(v => !v)}><Icon n={showPw ? 'eyeoff' : 'eye'} /></button></label>}
-        {(mode === 'signup' || mode === 'reset') && <label className="fld"><span className="fi"><Icon n="lock" /></span><input placeholder="Confirm password" aria-label="Confirm password" type={showPw ? 'text' : 'password'} autoComplete="new-password" enterKeyHint="go" value={form.pw2} onChange={e => setForm(f => ({ ...f, pw2: e.target.value }))} /></label>}
-        {mode === 'login' && <div className="forgot"><button type="button" onClick={() => setMode('forgot')}>Forgot password?</button></div>}
-        <button className="btn" type="submit" disabled={busy}>{busy ? <i className="spin" /> : { login: 'Login', signup: 'Create Account', forgot: 'Send Reset Link', reset: 'Update Password' }[mode]}</button>
-        {(mode === 'login' || mode === 'signup') && <>
-          <div className="or"><span>or continue with</span></div>
-          <div className="socials" style={{ gridTemplateColumns: '1fr' }}><button type="button" className="btn o social" onClick={() => { try { sessionStorage.setItem('pk_after', pending.current || '') } catch { /* storage unavailable */ } api.signInWithGoogle().catch(e => bad(e?.message || 'Google login failed')) }}><GoogleG />Google</button></div>
-        </>}
-      </form>
-      {mode !== 'reset' && <p className="sw">{mode === 'forgot' ? <>Remembered it? <button type="button" onClick={() => setMode('login')}>Back to login</button></> : <>{mode === 'login' ? 'New here?' : 'Already have an account?'} <button type="button" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>{mode === 'login' ? 'Create an account' : 'Login'}</button></>}</p>}
-      <p className="trust"><Icon n="lock" />Private by design · Discreet delivery</p>
-    </div></div>
+  if (s === 'auth') body = <AuthScreen mode={mode} setMode={setMode} form={form} setForm={setForm} showPw={showPw} setShowPw={setShowPw} shake={shake} busy={busy} onSubmit={login} onClose={closeAuth}
+    onGoogle={() => { try { sessionStorage.setItem('pk_after', pending.current || '') } catch { /* storage unavailable */ } api.signInWithGoogle().catch(e => bad(e?.message || 'Google login failed')) }} />
 
   if (s === 'home') body = <div className="scr hm">
     <div className="hstick">
@@ -2149,7 +2280,7 @@ export default function App() {
 
   if (s === 'cart') body = <><Hdr title={`My Cart (${count})`} back={back} right={cart.length > 0 && <button className="ib" aria-label="Clear cart" onClick={() => { setCart([]); dropCoupon() }}>🗑️</button>} /><div className="scr narrow">
     {!cart.length ? <div className="emp"><div className="emp-i"><CartArt /></div><h3>Your cart is empty</h3><p>Browse our categories and add something you like.</p><button className="btn" onClick={() => tab('categories')}>Start shopping</button></div> : <><Steps n={0} />
-      <div className="frb"><span>🚚</span><div><b>Discreet delivery across Bangladesh</b><small>৳{+dcfg.inner_fee} near {HUB.name} · ৳{+dcfg.city_fee} Chattogram city · ৳{+dcfg.outside_fee} rest of Bangladesh{+dcfg.free_over > 0 ? ` · free over ৳${+dcfg.free_over}` : ''}</small></div></div>
+      <div className="frb"><span>🚚</span><div><b>Fast delivery across Bangladesh</b><small>৳{+dcfg.inner_fee} near {HUB.name} · ৳{+dcfg.city_fee} Chattogram city · ৳{+dcfg.outside_fee} rest of Bangladesh{+dcfg.free_over > 0 ? ` · free over ৳${+dcfg.free_over}` : ''}</small></div></div>
       {delivery.pinned && +dcfg.free_over > 0 && (dcfg.free_zones || []).includes(delivery.zone) && <div className={'fdb' + (delivery.free ? ' on' : '')} role="status"><div><b>{delivery.free ? '🎉 Free delivery unlocked' : `Add ৳${delivery.freeLeft} more for free delivery`}</b><small>Cash on Delivery orders over ৳{+dcfg.free_over}</small></div><i><em style={{ width: Math.min(100, (subtotal - disc) / dcfg.free_over * 100) + '%' }} /></i></div>}
       {cart.map(i => <CartItem key={i.key} i={i} qty={qty} />)}
       {coupon ? <div className="cpn on"><span>🎟️</span><div><b>{coupon.code} applied</b><small>{coupon.free_delivery ? 'Free delivery' : `−৳${Math.round(coupon.discount)}`}{coupon.shop_id ? ' · on ' + shopName(coupon.shop_id, shops) + ' items' : ''} · Cash on Delivery</small></div><button type="button" onClick={dropCoupon}>Remove</button></div>
@@ -2163,7 +2294,7 @@ export default function App() {
     {[['name', 'Full Name', 'name'], ['phone', 'Phone Number (+8801XXXXXXXXX)', 'tel'], ['address', 'House, Road, Area, City / District', 'street-address'], ['note', 'Delivery Instructions (Optional)', 'off']].map(([k, l, ac]) => <input key={k} className="inp" placeholder={l} autoComplete={ac} inputMode={k === 'phone' ? 'tel' : undefined} value={addr[k]} onChange={e => setAddr(a => ({ ...a, [k]: e.target.value }))} />)}
     <DeliveryCard d={delivery} />
     {!delivery.pinned ? <button type="button" className="btn o" onClick={() => go('address')}>📍 Pin your delivery location</button> : <button type="button" className="lk-chg" onClick={() => go('address')}>Change delivery location</button>}
-    <div className="note">🔒 Your order will be delivered in discreet packaging.</div>
+    <div className="note">📦 Packed with care and delivered by Pinkish.</div>
     <button className="btn" onClick={() => delivery.fee == null ? say(OUT_MSG, 3500) : !delivery.pinned ? (say(PIN_MSG, 3000), go('address')) : !addr.name.trim() ? say('Enter your full name') : addr.phone.replace(/\D/g, '').length < 10 ? say('Enter a valid phone number (at least 10 digits)') : !addr.address.trim() ? say('Enter your delivery address') : go('payment')}>Continue to Payment</button></div></>
 
   if (s === 'payment') body = <><Hdr title="Payment Method" back={back} /><div className="scr narrow"><Steps n={2} /><div className="mini"><span>{count} item{count === 1 ? '' : 's'} · {delivery.fee != null ? `Delivery ${delivery.free ? 'free' : '৳' + delivery.fee} · ${ZONE[delivery.zone]?.name || ''}` : 'Outside delivery area'}</span><b><Money v={total} /></b></div>
@@ -2408,7 +2539,7 @@ function LoginSheet({ why, onLogin, onSignup, onGoogle, onClose }) {
   return <div className="gt-bg" onClick={onClose}><div ref={ref} className={'gt ' + mode} style={dy ? { transform: `translateY(${dy}px)` } : undefined} role="dialog" aria-modal="true" aria-label={t} onClick={e => e.stopPropagation()} onTouchStart={ts} onTouchMove={tm} onTouchEnd={te} onTouchCancel={te}>
     <span className="gt-bar" aria-hidden="true" /><button type="button" className="gt-x" aria-label="Close" onClick={onClose}>✕</button>
     <span className="gt-ic"><Icon n="lock" /></span><h3>{t}</h3><p>{d}</p>
-    <div className="gt-pts" aria-hidden="true"><span><i><Icon n="shield" /></i>Discreet packaging</span><span><i><Icon n="truck" /></i>Fast delivery</span><span><i><Icon n="box" /></i>Track orders</span></div>
+    <div className="gt-pts" aria-hidden="true"><span><i><Icon n="shield" /></i>Verified sellers</span><span><i><Icon n="truck" /></i>Fast delivery</span><span><i><Icon n="box" /></i>Track orders</span></div>
     <button type="button" className="btn gg" onClick={onGoogle}><GoogleG />Continue with Google</button>
     <div className="gt-or"><span>or</span></div>
     <button type="button" className="btn" onClick={onLogin}>Log in with email</button>
@@ -2479,7 +2610,7 @@ function ProductScreen({ p, back, addToCart, count, go, liked, like, prods = [],
       {p.shop_id && <Fulfil shop={shop?.id ? shop : null} />}
       <div className="opt"><div className="opt-l">{multi && <><span>Select option</span><div className="var">{p.variants.map(x => <button key={x.label} className={v?.label === x.label ? 'on' : ''} onClick={() => setV(x)}>{x.label}</button>)}</div></>}</div>
         <div className="opt-r"><span>QTY</span><div className="qty"><button aria-label="Decrease" onClick={() => setN(x => Math.max(1, x - 1))}>−</button><span className="qn">{n}</span><button aria-label="Increase" onClick={more}>+</button></div></div></div>
-      <div className="dsc"><h5>Description</h5><ul className="ck">{(p.features || []).map(f => <li key={f}>{f}</li>)}</ul></div></div></div>
+      <div className="dsc"><h5>Description</h5><ul className="ck">{(p.features || []).filter(f => !/discre/i.test(f)).map(f => <li key={f}>{f}</li>)}</ul></div></div></div>
       {also.length > 0 && <Rail title="Customers also bought" list={also} add={addToCart} open={open} wish={wish} like={like} />}
       {p.shop_id && <QA p={p} user={user} say={say} login={login} />}
       {moreShop.length > 0 && <Rail title={'More from ' + (shopObj?.name || 'this shop')} action={shopObj?.id && <a onClick={() => go('shop', { shop: shopObj })}>View shop</a>} list={moreShop} add={addToCart} open={open} wish={wish} like={like} />}
@@ -2535,57 +2666,60 @@ html.lite .toast{background:#2a1a3a;color:#fff}
 @media(prefers-reduced-motion:reduce){.nv-blob{transition:opacity .2s}.fly{display:none}}
 `
 
-/* ===== Welcome screen: light, simple, marketplace style ===== */
+/* ===== Welcome screen: brand plum, doodle pattern, hand-drawn mascot ===== */
+const DOODLE = (() => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" stroke="#c77dff" stroke-opacity=".17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M28 48h16v20H28zM31 48V36h10v12M31 36v-8l10-6v14"/>
+<path d="M110 52C96 42 92 34 98 28c5-5 12-1 12 4 0-5 7-9 12-4 6 6 2 14-12 24z"/>
+<path d="M168 40h40l-4 26h-32zM178 40v-6a10 10 0 0 1 20 0v6"/>
+<path d="M22 112h28v30H22zM31 112v-8h10v8M28 104v-8h16v8M28 126h16"/>
+<path d="M84 142h8l3-14c10 4 24 10 38 10 4 0 4 6 0 6H84zM92 142l2-16"/>
+<circle cx="200" cy="120" r="4"/><circle cx="200" cy="111" r="5"/><circle cx="209" cy="118" r="5"/><circle cx="205" cy="128" r="5"/><circle cx="195" cy="128" r="5"/><circle cx="191" cy="118" r="5"/><path d="M200 133v18M200 145c-6 0-9-4-9-4"/>
+<path d="M32 172l6-8h12l6 8-4 6 10 30H26l10-30z"/>
+<circle cx="116" cy="204" r="10"/><path d="M110 192l6-8 6 8z"/>
+<path d="M176 158v14M169 165h14"/>
+<path d="M192 200h18v18h-18zM196 200v-14h10v14"/>
+<path d="M68 90c-4-3-5-5-3-7s4 0 3 2c0-2 2-4 4-2s1 4-4 7z"/><path d="M146 92v8M142 96h8"/><circle cx="160" cy="214" r="1.6"/><circle cx="70" cy="226" r="1.6"/>
+</svg>`
+  return 'url("data:image/svg+xml,' + encodeURIComponent(svg.replace(/\n/g, '')) + '")'
+})()
 const WEL_CSS = `
-.wl{flex:1;min-height:0;position:relative;overflow:hidden;display:flex;flex-direction:column;color:var(--ink,#2a1a3a);
-  padding:calc(12px + env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));
-  background:radial-gradient(90% 45% at 100% 0,#ffd9e8 0,#ffd9e800 70%),radial-gradient(80% 40% at 0 8%,#eadcff 0,#eadcff00 70%),#fbf7fd}
-.wl>*{width:100%;max-width:440px;margin-inline:auto}
-.wl-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none}
-.wl-logo{display:flex;align-items:center;gap:8px;min-width:0}
-.wl-logo img{width:30px;height:30px;object-fit:contain;display:block}
-.wl-logo .wm{font-size:21px}
-.wl-skip{min-height:38px;padding:0 16px;border-radius:999px;font-size:14px;font-weight:600;color:var(--p1);background:#fff;border:1px solid #eee3f5;box-shadow:0 4px 12px -8px #4a166855}
-.wl-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;display:flex;flex-direction:column;padding:14px 0 6px}
-.wl-body::-webkit-scrollbar{display:none}
-.wl-hero{position:relative;border-radius:28px;padding:16px;background:linear-gradient(135deg,#4a1668,#8e2a8c 55%,#e0457b);box-shadow:0 22px 40px -22px #8e2a8ccc;overflow:hidden;flex:none;animation:up .5s var(--out) both}
-.wl-hero::after{content:'';position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,#ffffff2e,#fff0 70%);pointer-events:none}
-.wl-tag{position:relative;z-index:1;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:#ffffff26;border:1px solid #ffffff3d;color:#fff;font-size:12px;font-weight:600}
-.wl-tag i{width:7px;height:7px;border-radius:50%;background:#7dffb4;box-shadow:0 0 0 3px #7dffb433}
-.wl-mos{position:relative;z-index:1;display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px;height:clamp(170px,30vh,250px)}
-.wl-mos span{position:relative;border-radius:20px;overflow:hidden;background:#fff;box-shadow:0 10px 22px -12px #1a063a99;animation:up .5s var(--out) both}
-.wl-mos span:nth-child(2){animation-delay:.06s}.wl-mos span:nth-child(3){animation-delay:.12s}.wl-mos span:nth-child(4){animation-delay:.18s}
-.wl-mos.n3 span:first-child{grid-row:span 2}
-.wl-mos img{width:100%;height:100%;object-fit:cover;display:block}
-.wl-mos em{position:absolute;left:8px;top:8px;padding:3px 8px;border-radius:999px;background:#ff3358;color:#fff;font:700 11px/1.3 system-ui,sans-serif;font-style:normal}
-.wl-art{position:relative;z-index:1;height:clamp(160px,28vh,230px);display:grid;place-items:center;margin-top:10px}
-.wl-art>*{height:100%;width:auto;max-width:100%;animation:flt 4s ease-in-out infinite}
-.wl h1{display:grid;margin:20px 0 0;font-size:clamp(25px,4.2vh,31px);line-height:1.12;font-weight:800;letter-spacing:-.5px;color:var(--p1);animation:up .5s var(--out) .06s both}
-.wl h1 em{font-style:normal;background:linear-gradient(90deg,#8e2a8c,#e0457b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.wl-sub{margin:8px 0 0;font-size:14.5px;line-height:1.5;color:#6f6380;animation:up .5s var(--out) .1s both}
-.wl-cats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:16px -18px 0;padding:2px 18px;flex:none;animation:up .5s var(--out) .14s both}
-.wl-cats::-webkit-scrollbar{display:none}
-.wl-cats button{flex:none;display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 14px 0 6px;border-radius:999px;background:#fff;border:1px solid #eee3f5;font-size:13px;font-weight:600;color:var(--p1);white-space:nowrap;transition:transform .2s}
-.wl-cats button:active{transform:scale(.95)}
-.wl-cats span{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#f6effb;color:var(--p2);font-size:15px;overflow:hidden}
-.wl-cats span img{width:20px;height:20px;object-fit:contain}
-.wl-cats .cico{width:16px;height:16px}
-.wl-pts{list-style:none;padding:0;margin:14px 0 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:none;animation:up .5s var(--out) .18s both}
-.wl-pts li{display:flex;align-items:center;gap:8px;padding:10px;border-radius:16px;background:#fff;border:1px solid #f0e7f6;min-width:0}
-.wl-pts i{flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#fde7f0;color:var(--p3)}
-.wl-pts .ico{width:16px;height:16px}
-.wl-pts span{min-width:0;display:grid;line-height:1.2}
-.wl-pts b{font-size:12px;color:var(--p1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wl-pts small{font-size:11px;color:#8b8197;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wl-cta{flex:none;display:grid;gap:6px;padding-top:12px;animation:up .5s var(--out) .2s both}
-.btn.wl-go{min-height:56px;font-size:16.5px;display:flex;align-items:center;justify-content:center;gap:8px}
-.wl-go .ico{width:18px;height:18px}
-.wl-in{text-align:center;font-size:13.5px;color:#6f6380;margin:0}
-.wl-in button{color:var(--p2);font-weight:800;padding:8px 4px}
-.wl.out>*{animation:wlOut .22s ease both}
+.wl{flex:1;min-height:0;min-height:100dvh;position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff;text-align:center;
+  padding:calc(18px + env(safe-area-inset-top)) max(22px,env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(22px,env(safe-area-inset-left));
+  background:${DOODLE} center/240px 240px repeat,radial-gradient(120% 70% at 50% 30%,#5a1a86 0,#3d1070 55%,#2a0a52 100%);background-color:#3d1070}
+.wl>*{width:100%;max-width:400px}
+.wl-skip{position:absolute;right:max(16px,env(safe-area-inset-right));top:calc(14px + env(safe-area-inset-top));width:auto;min-height:36px;padding:0 16px;border-radius:999px;font-size:13.5px;font-weight:600;color:#ffd3e6;background:#ffffff14;border:1px solid #ffffff26;cursor:pointer;touch-action:manipulation;z-index:2}
+.wl-c{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:28px}
+.wl h1{display:grid;margin:0;font-size:clamp(30px,5.2vh,40px);line-height:1.12;font-weight:400;letter-spacing:-.4px;color:#fff;animation:up .5s var(--out) both}
+.wl h1 b{font-weight:800;letter-spacing:-.8px}
+.wl-p{color:#ff8fbd}
+.wl-sub{margin:6px 0 0;font-size:15px;font-weight:500;color:#e7d3f6;animation:up .5s var(--out) .06s both}
+.wl-art{display:block;width:min(64vw,240px);height:auto;max-height:30vh;margin:clamp(14px,4vh,34px) 0 clamp(10px,2.4vh,20px);color:#ff8fbd;overflow:visible;filter:drop-shadow(0 0 18px #ff8fbd40);animation:flt 4.5s ease-in-out .9s infinite;will-change:transform}
+.wl-art .d{stroke-dasharray:1;stroke-dashoffset:1;animation:wlDraw 1s var(--out) .1s forwards}
+.wl-art .wl-sk{opacity:.5;animation-delay:.35s!important}
+.wl-hrt{transform-origin:155px 88px;animation:wlBeat 1.8s ease-in-out 1.1s infinite}
+.wl-tw{animation:wlTw 2.4s ease-in-out infinite}
+@keyframes wlDraw{to{stroke-dashoffset:0}}
+@keyframes wlBeat{0%,60%,100%{transform:scale(1)}30%{transform:scale(1.18)}}
+@keyframes wlTw{50%{opacity:.35}}
+.wl-tags{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;animation:up .5s var(--out) .12s both}
+.wl-tags li{padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;color:#ffd3e6;background:#4a1580e6;border:1px solid #ff8fbd40}
+.wl-cta{flex:none;display:grid;gap:12px;padding-top:18px;animation:up .5s var(--out) .16s both}
+.wl-q{margin:0 0 2px;font-size:16px;font-weight:700;color:#fff}
+.wl-b{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:54px;border-radius:999px;font-size:16px;font-weight:700;cursor:pointer;touch-action:manipulation;color:#2d0b4a;border:0;
+  background:linear-gradient(120deg,#ffb3d2,#ff8fbd 45%,#ff5a85);box-shadow:0 12px 26px -10px #ff3358aa,inset 0 1.5px 0 #ffffffa0;transition:transform .2s var(--spring),filter .2s}
+.wl-b.o{color:#ffd3e6;background:#3d1070e6;border:1.6px solid #ff8fbd;box-shadow:none}
+.wl-b:active{transform:scale(.97)}
+@media(hover:hover){.wl-b:hover{filter:brightness(1.06)}.wl-b.o:hover{background:#ff8fbd1f}}
+.wl-b:focus-visible,.wl-g button:focus-visible,.wl-skip:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.wl-b .ico{width:18px;height:18px}
+.wl-g{margin:2px 0 0;font-size:14px;color:#e7d3f6}
+.wl-g button{min-height:40px;padding:0 4px;color:#ff8fbd;font-weight:800;cursor:pointer;touch-action:manipulation}
+.wl.out>*{animation:wlOut .2s ease both}
 @keyframes wlOut{to{opacity:0;transform:translateY(-6px)}}
-@media(max-height:640px){.wl-pts{display:none}.wl-mos,.wl-art{height:150px}.wl h1{margin-top:14px}}
-@media(max-width:360px){.wl-pts li{flex-direction:column;text-align:center;padding:8px 4px}.wl-pts b,.wl-pts small{white-space:normal}}
-@media(min-width:900px){.wl{padding-top:28px;padding-bottom:28px}.wl>*{max-width:480px}}
-@media(prefers-reduced-motion:reduce){.wl *,.wl.out>*{animation:none!important}}
+@media(max-height:620px){.wl-tags{display:none}.wl-art{max-height:24vh}.wl-c{padding-top:22px}}
+@media(min-width:900px){.wl>*{max-width:420px}}
+html.lite .wl-art,html.lite .wl-hrt,html.lite .wl-tw{animation:none;filter:none}
+html.lite .wl-art .d{animation:none;stroke-dashoffset:0}
+@media(prefers-reduced-motion:reduce){.wl *,.wl.out>*{animation:none!important}.wl-art .d{stroke-dashoffset:0}}
 `
