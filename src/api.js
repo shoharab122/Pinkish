@@ -72,7 +72,7 @@ export async function getProducts() {
   return DEV ? ls('ms_prods', []) : null
 }
 export async function addProduct(p) {
-  const row = { variants: [{ label: 'Standard', mult: 1 }], features: ['100% original product', 'Discreet packaging'], rating: null, reviews: 0, is_active: true, ...p }
+  const row = { variants: [{ label: 'Standard', mult: 1 }], features: ['100% original product', 'Packed with care'], rating: null, reviews: 0, is_active: true, ...p }
   if (supabase) { const { data, error } = await supabase.from('products').insert(row).select().single(); if (error) throw error; return data }
   if (!DEV) throw new Error(NEEDS_SETUP)
   const n = { id: 'u' + Date.now(), emoji: '🛍️', ...row }; sv('ms_prods', [...ls('ms_prods', []), n]); return n
