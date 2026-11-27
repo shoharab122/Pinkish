@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import './rider.css'
 import { signIn, signUp, signOut, onAuthChange, resetPassword, signInWithGoogle, supabase, onNotification } from '../api.js'
@@ -622,12 +622,12 @@ function JobView({ j, ops, pos, onBack, reload, say }) {
 /* =====================================================================
    Screens
    ===================================================================== */
+const ORDER = { out: 0, accepted: 1, assigned: 2 }
 const HIST = { delivered: ['Delivered', 'out', 'check'], failed: ['Not delivered', 'bad', 'alert'] }
-function Jobs({ data, onOpen, goFind, goEarn, q }) {
+const Jobs = memo(function Jobs({ data, onOpen, goFind, goEarn, q }) {
   const { active = [], stats = {}, ops = {}, me = {}, history = [] } = data
-  const order = { out: 0, accepted: 1, assigned: 2 }
   const k = q.trim().toLowerCase().replace(/^#/, '')
-  const list = [...active].filter(j => !k || `${j.order_no} ${j.customer?.address || ''} ${fromName(j)}`.toLowerCase().includes(k)).sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3))
+  const list = useMemo(() => active.filter(j => !k || `${j.order_no} ${j.customer?.address || ''} ${fromName(j)}`.toLowerCase().includes(k)).sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3)), [active, k])
   const [cur, ...rest] = list
   const today = <div className="rx-today"><div><small>Today</small><b><Num v={stats.today} f={int} /></b><span>delivered</span></div><div><small>Earned today</small><b><Num v={stats.today_fee} /></b><span>fees</span></div><div className={stats.cash > 0 ? 'cash' : ''}><small>Cash with you</small><b><Num v={stats.cash} /></b><span>give to Pinkish</span></div></div>
   if (k) return <>
@@ -649,9 +649,9 @@ function Jobs({ data, onOpen, goFind, goEarn, q }) {
       </div> })}</div>
     </>}
   </>
-}
+})
 
-function Find({ data, say, reload, onOpen }) {
+const Find = memo(function Find({ data, say, reload, onOpen }) {
   const [rows, setRows] = useState(null), [busy, setBusy] = useState(''), [err, setErr] = useState('')
   const on = data.me?.on_duty
   const load = useCallback(() => getPool().then(r => { setRows(r); setErr('') }, x => { setErr(msg(x)); setRows(p => p || []) }), [])
@@ -670,9 +670,9 @@ function Find({ data, say, reload, onOpen }) {
         <button className="rx-btn wide sm" disabled={!on || busy === o.order_id} onClick={() => take(o)}>{busy === o.order_id ? 'Taking…' : 'Take this job'}</button>
       </div>)}</div>}
   </>
-}
+})
 
-function Earn({ data }) {
+const Earn = memo(function Earn({ data }) {
   const { stats = {}, history = [], ops = {} } = data, [lim, setLim] = useState(30)
   return <>
     <div className="rx-earn"><small>Last 7 days</small><b><Num v={stats.week_fee} /></b><span>{stats.week || 0} deliveries</span></div>
@@ -685,10 +685,10 @@ function Earn({ data }) {
       <span className="rx-hv">{h.status === 'delivered' && <b>+{taka(h.fee)}</b>}{h.cash > 0 && <small className={h.settled ? 'ok' : 'due'}>{taka(h.cash)} cash {h.settled ? '✓' : 'due'}</small>}</span>
     </div>)}{history.length > lim && <button className="rx-btn wide ghost" onClick={() => setLim(l => l + 30)}>Show more · {history.length - lim} left</button>}</div>}
   </>
-}
+})
 
 // Profile tab (bottom bar)
-function Me({ data, user, logout }) {
+const Me = memo(function Me({ data, user, logout }) {
   const { me = {}, ops = {}, stats = {} } = data
   return <div className="rx-prof">
     <div>
@@ -709,17 +709,20 @@ function Me({ data, user, logout }) {
       <button className="rx-btn wide dark" onClick={logout}><Ico n="out" s={18} />Sign out</button>
     </div>
   </div>
-}
+})
 
 /* =====================================================================
    Main app (verified riders)
    ===================================================================== */
 function RiderApp({ user, logout }) {
   const [data, setData] = useState(null), [err, setErr] = useState(''), [tab, setTab] = useState('jobs'), [open, setOpen] = useState(null), [duty, setDutyBusy] = useState(false), [q, setQ] = useState(''), [spin, setSpin] = useState(false)
-  const [toast, say] = useToast(), online = useOnline(), seen = useRef(null), scr = useRef(null)
+  const [toast, say] = useToast(), online = useOnline(), seen = useRef(null), scr = useRef(null), sig = useRef('')
   const load = useCallback(async () => {
     try {
-      const d = await getJobs(); setData(d); setErr('')
+      // the list refreshes every 20 s: when nothing changed, the screen is not redrawn at all
+      const d = await getJobs(), sg = JSON.stringify(d)
+      if (sg !== sig.current) { sig.current = sg; setData(d) }
+      setErr('')
       const ids = new Set((d.active || []).map(j => j.id))
       if (seen.current) { const fresh = (d.active || []).filter(j => !seen.current.has(j.id) && j.status === 'assigned'); if (fresh.length) { say(fresh.length === 1 ? `🛵 New job #${fresh[0].order_no}` : `🛵 ${fresh.length} new jobs`); navigator.vibrate?.([120, 80, 120, 80, 200]) } }
       seen.current = ids
@@ -736,19 +739,23 @@ function RiderApp({ user, logout }) {
   const onDuty = !!data?.me?.on_duty
   // Live location, only while online (on duty): shown on your job map and shared with Pinkish.
   // Every 12 s while a parcel is out for delivery (the customer watches you on their map), every 30 s otherwise.
-  const [pos, setPos] = useState(null), outRef = useRef(false)
+  // The position is only drawn on a job's map, so the home screen is not redrawn every few seconds while online
+  // (the latest fix is kept aside and shown the moment a job opens).
+  const [pos, setPos] = useState(null), outRef = useRef(false), posR = useRef(null), openR = useRef(null)
   outRef.current = (data?.active || []).some(j => j.status === 'out')
+  openR.current = open
   useEffect(() => {
-    if (!onDuty || !navigator.geolocation) { setPos(null); return }
+    if (!onDuty || !navigator.geolocation) { posR.current = null; setPos(null); return }
     let shown = 0
     const id = navigator.geolocation.watchPosition(p => {
       const { latitude: lat, longitude: lng, accuracy } = p.coords, n = Date.now()
       if (accuracy > 300) return // a rough network fix would make the map jump around
-      if (n - shown > 3000) { shown = n; setPos({ lat, lng, acc: accuracy }) }
+      if (n - shown > 3000) { shown = n; posR.current = { lat, lng, acc: accuracy }; if (openR.current) setPos(posR.current) }
       ping(lat, lng, outRef.current ? 12000 : 30000)
     }, () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })
     return () => navigator.geolocation.clearWatch(id)
   }, [onDuty])
+  useLayoutEffect(() => { if (open) setPos(posR.current) }, [open]) // before paint: the map never shows an old position
   const toggle = async () => {
     if (!online) return say('No internet. Connect first, then go online.')
     if (onDuty && (data?.active || []).some(j => j.status === 'out') && !confirm('You have a parcel out for delivery. Go offline anyway?')) return
@@ -760,6 +767,10 @@ function RiderApp({ user, logout }) {
   const go = t => { const a = TABS.indexOf(tab), b = TABS.indexOf(t), fn = () => { setTab(t); setOpen(null); top() }; if (t === tab && !open) return fn(); swap(open ? 'back' : b < a ? 'prev' : 'next', fn) }
   const openJob = useCallback(id => swap('fwd', () => { setOpen(id); top() }), [])
   const closeJob = useCallback(() => swap('back', () => { setOpen(null); top() }), [])
+  // stable handlers so the memoised tab screens below skip redraws they do not need
+  const goR = useRef(go); goR.current = go
+  const goFind = useCallback(() => goR.current('find'), []), goEarn = useCallback(() => goR.current('earn'), [])
+  const openFromFind = useCallback(id => swap('fwd', () => { setTab('jobs'); setOpen(id); top() }), []) // eslint-disable-line react-hooks/exhaustive-deps
   const refresh = async () => { if (spin) return; setSpin(true); await load(); setSpin(false) }
   const job = open && data?.active?.find(j => j.id === open)
   useEffect(() => { if (open && data && !job) setOpen(null) }, [open, data, job])
@@ -769,7 +780,6 @@ function RiderApp({ user, logout }) {
   const name = first(data?.me?.name)
   if (!data) return err ? <div className="rx-page narrow center-v"><div className="rx-card center"><span className="rx-big bad"><Ico n="alert" s={34} /></span><p>{err}</p><button className="rx-btn" onClick={load}>Try again</button><button className="rx-link" onClick={logout}>Log out</button></div></div> : <SkelHome />
   const navB = (k, l, ic, n) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}><Ico n={ic} s={22} /><span>{l}</span>{n > 0 && <em>{n}</em>}</button>
-  const TITLE = { find: ['Open jobs', 'Inside the ' + RIDER_KM + ' km Pinkish zone'], earn: ['Earnings', 'Fees and cash for the last 30 days'], me: ['Profile', 'Your rider account'] }
   const area = data.me?.area
   return <div className={'rx-app' + (job ? ' full' : '')}>
     {!online && <div className="rx-offline">No internet. Showing your last update.</div>}
@@ -794,8 +804,8 @@ function RiderApp({ user, logout }) {
       <main className="rx-scr" ref={scr}>
         {err && <div className="rx-err">{err}</div>}
         <div className="rx-pane" key={tab}>
-          {tab === 'jobs' && <Jobs data={data} onOpen={openJob} goFind={() => go('find')} goEarn={() => go('earn')} q={q} />}
-          {tab === 'find' && <Find data={data} say={say} reload={load} onOpen={id => swap('fwd', () => { setTab('jobs'); setOpen(id); top() })} />}
+          {tab === 'jobs' && <Jobs data={data} onOpen={openJob} goFind={goFind} goEarn={goEarn} q={q} />}
+          {tab === 'find' && <Find data={data} say={say} reload={load} onOpen={openFromFind} />}
           {tab === 'earn' && <Earn data={data} />}
           {tab === 'me' && <Me data={data} user={user} logout={logout} />}
         </div>
@@ -812,6 +822,7 @@ function RiderApp({ user, logout }) {
   </div>
 }
 const TABS = ['jobs', 'find', 'earn', 'me']
+const TITLE = { find: ['Open jobs', 'Inside the ' + RIDER_KM + ' km Pinkish zone'], earn: ['Earnings', 'Fees and cash for the last 30 days'], me: ['Profile', 'Your rider account'] }
 // first load: the home layout appears at once as a shimmering outline (feels faster than a spinner)
 const SkelHome = () => <div className="rx-app" aria-busy="true" aria-label="Loading">
   <div className="rx-home">
